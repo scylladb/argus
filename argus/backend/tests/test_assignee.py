@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import time
 import uuid
 from unittest.mock import patch
@@ -9,6 +9,8 @@ from argus.backend.tests.conftest import g
 
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.web import ArgusTest, User, UserRoles
+from argus.backend.plugins.core import JENKINS_LOOKUP_TIMEOUT_SECONDS
+from argus.backend.plugins.generic.model import GenericRun
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.service.testrun import TestRunService
 
@@ -23,6 +25,13 @@ def jenkins_returns(requested_by_user: str | None):
     with patch(JENKINS_TARGET) as service_class:
         service_class.return_value.get_requested_by_user.return_value = requested_by_user
         yield service_class.return_value.get_requested_by_user
+
+
+@pytest.fixture(autouse=True)
+def jenkins_service():
+    with patch(JENKINS_TARGET) as service_class:
+        service_class.return_value.get_requested_by_user.return_value = None
+        yield service_class
 
 
 @pytest.fixture
@@ -97,23 +106,35 @@ def sct_run_for_assignee(submit_sct_run, fake_test):
 
 
 @pytest.fixture
-def planned_investigator(make_user, fake_test):
-    """Put a user on investigation duty for the fake test through a release plan and remove the plan afterwards"""
+def make_plan(fake_test):
+    plans: list[ArgusReleasePlan] = []
+
+    def _make_plan(owner: User, assignee_id: uuid.UUID | None = None, **plan_fields) -> ArgusReleasePlan:
+        plan = ArgusReleasePlan(
+            name=f"assignee_plan_{uuid.uuid4().hex[:8]}",
+            description="assignee test plan",
+            owner=owner.id,
+            target_version=f"1.0.0-{uuid.uuid4().hex[:8]}",
+            release_id=fake_test.release_id,
+            tests=[fake_test.id],
+            assignee_mapping={fake_test.id: assignee_id or owner.id},
+            **plan_fields,
+        )
+        plan.save()
+        plans.append(plan)
+        return plan
+
+    yield _make_plan
+
+    for plan in plans:
+        plan.delete()
+
+
+@pytest.fixture
+def planned_investigator(make_user, make_plan):
     investigator = make_user("investigator")
-    plan = ArgusReleasePlan(
-        name=f"assignee_plan_{uuid.uuid4().hex[:8]}",
-        description="assignee test plan",
-        owner=investigator.id,
-        target_version=f"1.0.0-{uuid.uuid4().hex[:8]}",
-        release_id=fake_test.release_id,
-        tests=[fake_test.id],
-        assignee_mapping={fake_test.id: investigator.id},
-    )
-    plan.save()
-
-    yield investigator
-
-    plan.delete()
+    make_plan(owner=investigator)
+    return investigator
 
 
 def test_unassign_testrun(api_client, sct_run_for_assignee, test_user):
@@ -193,14 +214,15 @@ def test_run_auto_assigned_to_triggerer(submit_sct_run, make_user):
     assert run.assignee == triggerer.id, "run should be assigned to the person who triggered it"
 
 
-def test_run_unassigned_when_triggerer_unknown(submit_sct_run):
+def test_run_unassigned_when_triggerer_unknown(submit_sct_run, fake_test):
     """A run stays unassigned when started_by matches no Argus user and Jenkins returns nothing."""
-    with jenkins_returns(None):
+    with jenkins_returns(None) as mock_jenkins:
         run_id = submit_sct_run(started_by="ghost_user_that_does_not_exist",
-                                job_url="http://example.com/job/unknown")
+                                job_url=f"http://example.com/job/{fake_test.build_system_id}/98/")
 
     run = SCTTestRun.get(id=uuid.UUID(run_id))
     assert run.assignee is None, "run should remain unassigned when started_by user does not exist"
+    mock_jenkins.assert_called_once_with(build_id=fake_test.build_system_id, build_number=98)
 
 
 def test_investigation_assignee_takes_priority_over_triggerer(submit_sct_run, make_user, planned_investigator):
@@ -266,3 +288,97 @@ def test_started_by_takes_priority_over_jenkins_fallback(submit_sct_run, make_us
     run = SCTTestRun.get(id=uuid.UUID(run_id))
     assert run.assignee == triggerer.id, "run should be assigned to the started_by user"
     mock_jenkins.assert_not_called()
+
+
+@pytest.mark.parametrize("plan_fields", [
+    pytest.param({"completed": True}, id="completed"),
+    pytest.param({"ends_at": datetime.now(UTC) - timedelta(days=1)}, id="expired"),
+])
+def test_inactive_plan_does_not_take_priority_over_triggerer(submit_sct_run, make_user, make_plan, plan_fields):
+    make_plan(owner=make_user("former_investigator"), **plan_fields)
+    triggerer = make_user("triggerer_after_plan")
+
+    run_id = submit_sct_run(started_by=triggerer.username, job_url="http://example.com/job/inactive-plan")
+
+    run = SCTTestRun.get(id=uuid.UUID(run_id))
+    assert run.assignee == triggerer.id, "an inactive plan should not take the run from the triggerer"
+
+
+def test_plan_with_future_end_still_takes_priority(submit_sct_run, make_user, make_plan):
+    investigator = make_user("future_investigator")
+    make_plan(owner=investigator, ends_at=datetime.now(UTC) + timedelta(days=1))
+    triggerer = make_user("triggerer_future_plan")
+
+    run_id = submit_sct_run(started_by=triggerer.username, job_url="http://example.com/job/future-plan")
+
+    run = SCTTestRun.get(id=uuid.UUID(run_id))
+    assert run.assignee == investigator.id, "an active plan should keep priority over the triggerer"
+
+
+def test_plan_assignee_missing_from_argus_falls_back_to_triggerer(submit_sct_run, make_user, make_plan):
+    make_plan(owner=make_user("plan_owner"), assignee_id=uuid.uuid4())
+    triggerer = make_user("triggerer_stale_plan")
+
+    run_id = submit_sct_run(started_by=triggerer.username, job_url="http://example.com/job/stale-plan")
+
+    run = SCTTestRun.get(id=uuid.UUID(run_id))
+    assert run.assignee == triggerer.id, "a missing plan assignee should fall back to the triggerer"
+
+
+def test_jenkins_fallback_skips_ambiguous_local_part(submit_sct_run, make_user, fake_test):
+    first = make_user("same_local")
+    local_part = first.email.split("@")[0]
+    second = make_user("other_domain")
+    second.email = f"{local_part}@partner.example.com"
+    second.save()
+
+    with jenkins_returns(local_part):
+        run_id = submit_sct_run(
+            started_by="ghost_user_not_in_argus",
+            job_url=f"http://example.com/job/{fake_test.build_system_id}/103/",
+        )
+
+    run = SCTTestRun.get(id=uuid.UUID(run_id))
+    assert run.assignee is None, "an ambiguous REQUESTED_BY_USER should leave the run unassigned"
+
+
+def test_jenkins_fallback_matches_email_outside_scylladb_domain(submit_sct_run, make_user, fake_test):
+    partner = make_user("partner_user")
+    partner.email = f"{partner.username}@partner.example.com"
+    partner.save()
+
+    with jenkins_returns(partner.username):
+        run_id = submit_sct_run(
+            started_by="ghost_user_not_in_argus",
+            job_url=f"http://example.com/job/{fake_test.build_system_id}/104/",
+        )
+
+    run = SCTTestRun.get(id=uuid.UUID(run_id))
+    assert run.assignee == partner.id, "the Jenkins fallback should match a unique local part on any domain"
+
+
+def test_jenkins_lookup_uses_short_timeout(submit_sct_run, fake_test, jenkins_service):
+    submit_sct_run(started_by="ghost_user_not_in_argus",
+                   job_url=f"http://example.com/job/{fake_test.build_system_id}/105/")
+
+    jenkins_service.assert_called_once_with(timeout=JENKINS_LOOKUP_TIMEOUT_SECONDS)
+
+
+def test_assignee_lookup_failure_leaves_run_unassigned(submit_sct_run):
+    with patch.object(User, "exists_by_name", side_effect=RuntimeError("read timeout")):
+        run_id = submit_sct_run(started_by="anyone", job_url="http://example.com/job/lookup-failure")
+
+    run = SCTTestRun.get(id=uuid.UUID(run_id))
+    assert run.assignee is None, "an assignee lookup failure should not fail the submission"
+
+
+def test_non_jenkins_plugin_does_not_query_jenkins(make_user, jenkins_service):
+    run = GenericRun.model_construct(
+        id=uuid.uuid4(),
+        build_id=f"generic_{uuid.uuid4().hex[:8]}",
+        build_job_url="http://example.com/job/generic/7/",
+        build_number=7,
+    )
+
+    assert run.get_assignee("ghost_user_not_in_argus") is None
+    jenkins_service.assert_not_called()

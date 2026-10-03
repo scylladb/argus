@@ -121,6 +121,15 @@ class User(Document):
             pass
         return None
 
+    @classmethod
+    def exists_by_id(cls, user_id: UUID) -> bool:
+        return cls.find(id=user_id).count() > 0
+
+    @classmethod
+    def find_unique_by_email_local_part(cls, local_part: str) -> Optional['User']:
+        matches = [user for user in cls.find().all() if user.email and user.email.split("@")[0] == local_part]
+        return matches[0] if len(matches) == 1 else None
+
     def __str__(self):
         return f"User('{self.id}','{self.username}')"
 

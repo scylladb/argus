@@ -159,6 +159,7 @@ class SCTResource(Document):
 
 class SCTTestRun(PluginModelBase):
     _plugin_name: ClassVar[str] = "scylla-cluster-tests"
+    _resolves_assignee_from_jenkins: ClassVar[bool] = True
 
     class Settings:
         name = "sct_test_run"

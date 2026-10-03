@@ -63,11 +63,12 @@ class JenkinsService:
         }
     }
 
-    def __init__(self) -> None:
+    def __init__(self, timeout: float = jenkins.DEFAULT_TIMEOUT) -> None:
         config = Config.load_yaml_config()
         self._jenkins = jenkins.Jenkins(url=config["JENKINS_URL"],
                                         username=config["JENKINS_USER"],
-                                        password=config["JENKINS_API_TOKEN"])
+                                        password=config["JENKINS_API_TOKEN"],
+                                        timeout=timeout)
 
     @staticmethod
     def _extract_choice_parameters(config: ET.Element) -> dict[str, list[str]]:

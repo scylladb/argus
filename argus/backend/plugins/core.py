@@ -24,11 +24,11 @@ from argus.backend.models.web import (
     User,
 )
 from argus.backend.service.jenkins_service import JenkinsService
-from argus.backend.util.common import chunk, get_build_number
+from argus.backend.util.common import chunk
 from argus.common.enums import TestInvestigationStatus, TestStatus
 
 LOGGER = logging.getLogger(__name__)
-JENKINS_USER_EMAIL_DOMAIN = "scylladb.com"
+JENKINS_LOOKUP_TIMEOUT_SECONDS = 5
 
 
 class PluginModelBase(Document):
@@ -36,6 +36,7 @@ class PluginModelBase(Document):
         __abstract__ = True
 
     _plugin_name: ClassVar[str] = "unknown"
+    _resolves_assignee_from_jenkins: ClassVar[bool] = False
     # Metadata
     build_id: Annotated[str, PrimaryKey()]
     start_time: Annotated[datetime, ClusteringKey(order="DESC")] = Field(
@@ -78,60 +79,67 @@ class PluginModelBase(Document):
         associated_test: ArgusTest = ArgusTest.get(build_system_id=self.build_id)
         associated_release: ArgusRelease = ArgusRelease.get(id=associated_test.release_id)
 
-        plans: list[ArgusReleasePlan] = list(ArgusReleasePlan.find(release_id=associated_release.id))
+        plans = [plan for plan in ArgusReleasePlan.find(release_id=associated_release.id) if self._is_plan_active(plan)]
 
         if version:
             plans = [plan for plan in plans if plan.target_version == version]
 
         for plan in plans:
             if associated_test.group_id in plan.groups:
-                return plan.assignee_mapping.get(associated_test.group_id, plan.owner)
-            if associated_test.id in plan.tests:
-                return plan.assignee_mapping.get(associated_test.id, plan.owner)
+                planned_assignee = plan.assignee_mapping.get(associated_test.group_id, plan.owner)
+            elif associated_test.id in plan.tests:
+                planned_assignee = plan.assignee_mapping.get(associated_test.id, plan.owner)
+            else:
+                continue
+            if User.exists_by_id(planned_assignee):
+                return planned_assignee
+            LOGGER.warning("Plan %s assigns test %s to missing user %s", plan.id, associated_test.id, planned_assignee)
 
         # FIXME: Legacy fallback until we fully migrate to new plans
         return self._legacy_get_scheduled_assignee(associated_test=associated_test, associated_release=associated_release)
 
+    @staticmethod
+    def _is_plan_active(plan: ArgusReleasePlan) -> bool:
+        if plan.completed:
+            return False
+        if plan.ends_at is None:
+            return True
+        ends_at = plan.ends_at if plan.ends_at.tzinfo else plan.ends_at.replace(tzinfo=UTC)
+        return ends_at > datetime.now(UTC)
+
     def get_assignee(self, started_by: str | None = None) -> UUID | None:
         try:
-            investigation_assignee = self.get_assignment()
-            if investigation_assignee:
+            return self._resolve_assignee(started_by)
+        except Exception:  # noqa: BLE001
+            LOGGER.warning("Could not resolve the assignee for a run of %s, leaving it unassigned",
+                           self.build_id, exc_info=True)
+            return None
+
+    def _resolve_assignee(self, started_by: str | None) -> UUID | None:
+        try:
+            if investigation_assignee := self.get_assignment():
                 return investigation_assignee
         except DocumentNotFound:
             pass
 
-        if started_by:
-            trigger_user = User.exists_by_name(started_by)
-            if trigger_user:
-                return trigger_user.id
+        if started_by and (trigger_user := User.exists_by_name(started_by)):
+            return trigger_user.id
 
-        jenkins_username = self._get_jenkins_requested_by_user()
-        if jenkins_username:
-            jenkins_user = User.exists_by_email(f"{jenkins_username}@{JENKINS_USER_EMAIL_DOMAIN}")
-            if jenkins_user:
-                return jenkins_user.id
+        if not self._resolves_assignee_from_jenkins:
+            return None
+
+        if (requested_by_user := self._get_jenkins_requested_by_user()) and (
+                jenkins_user := User.find_unique_by_email_local_part(requested_by_user)):
+            return jenkins_user.id
 
         return None
 
     def _get_jenkins_requested_by_user(self) -> str | None:
-        if not self.build_job_url or not self.build_id:
+        if not self.build_id or not self.build_number:
             return None
 
-        build_number = get_build_number(self.build_job_url)
-        if not build_number:
-            return None
-
-        try:
-            service = JenkinsService()
-            return service.get_requested_by_user(build_id=self.build_id, build_number=build_number)
-        except Exception:  # noqa: BLE001
-            LOGGER.warning(
-                "Could not fetch REQUESTED_BY_USER from Jenkins for build %s #%s",
-                self.build_id,
-                build_number,
-                exc_info=True,
-            )
-            return None
+        service = JenkinsService(timeout=JENKINS_LOOKUP_TIMEOUT_SECONDS)
+        return service.get_requested_by_user(build_id=self.build_id, build_number=self.build_number)
 
     def _legacy_get_scheduled_assignee(self, associated_test: ArgusTest, associated_release: ArgusRelease) -> UUID:
         """Legacy scheduling removed - schedules no longer exist."""
