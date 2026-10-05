@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 from urllib.parse import urlparse
 from uuid import UUID
 from jira import JIRA
+from jira.resources import User as JiraUser
 
 from argus.backend.models.jira import JiraIssue
 from coodie.exceptions import DocumentNotFound
@@ -52,6 +53,11 @@ class JiraService:
     def derive_label_id(self, label: str):
         return int(sha1(label.encode()).hexdigest()[:8], base=16)
 
+    @staticmethod
+    def assignee_identity(assignee: JiraUser | None) -> str | None:
+        # Jira Cloud omits emailAddress when the user hides it, so fall back to displayName.
+        return getattr(assignee, "emailAddress", None) or getattr(assignee, "displayName", None)
+
     async def refresh_stale_issues(self):
         try:
             last_ran = await RuntimeStore.get(key=self.LAST_RAN_KEY)
@@ -75,10 +81,8 @@ class JiraService:
                 LOGGER.debug("Updating %s...", issue.key)
                 local_issue.summary = issue.fields.summary
                 local_issue.state = issue.fields.status.name.lower()
-                if assignee := issue.fields.assignee:
-                    local_issue.assignees = [assignee.emailAddress]
-                else:
-                    local_issue.assignees = []
+                identity = self.assignee_identity(issue.fields.assignee)
+                local_issue.assignees = [identity] if identity else []
                 local_issue.labels = [
                     IssueLabel(id=self.derive_label_id(label), name=label, color="000", description="")
                     for label in issue.fields.labels
@@ -124,8 +128,8 @@ class JiraService:
                 l.description = ""
                 issue.labels.append(l)
 
-            if assignee := remote_issue.fields.assignee:
-                issue.assignees = [assignee.emailAddress]
+            if identity := self.assignee_identity(remote_issue.fields.assignee):
+                issue.assignees = [identity]
 
             await issue.save()
 
