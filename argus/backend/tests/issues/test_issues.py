@@ -91,7 +91,7 @@ def fake_github_assignee(login: str) -> SimpleNamespace:
 
 
 def fake_remote_jira_issue(key: str, status: str = "To Do", summary: str = "Remote Jira Issue",
-                           labels: list[str] | None = None, assignee_email: str | None = None) -> SimpleNamespace:
+                           labels: list[str] | None = None, assignee: SimpleNamespace | None = None) -> SimpleNamespace:
     """Mimics the subset of ``jira.Issue`` that JiraService reads."""
     project, _ = key.split("-")
     return SimpleNamespace(
@@ -102,7 +102,7 @@ def fake_remote_jira_issue(key: str, status: str = "To Do", summary: str = "Remo
             status=SimpleNamespace(name=status),
             project=SimpleNamespace(key=project),
             labels=labels if labels is not None else [],
-            assignee=SimpleNamespace(emailAddress=assignee_email) if assignee_email else None,
+            assignee=assignee,
         ),
     )
 
@@ -248,7 +248,7 @@ async def test_submit_unknown_jira_issue_fetches_from_remote(run: SCTTestRun, mo
     url = f"{JIRA_SERVER}/browse/{key}"
     mocked_issue_service.jira.jira.issue.return_value = fake_remote_jira_issue(
         key, status="In Progress", summary="Compaction stalls", labels=["regression", "compaction"],
-        assignee_email="dev@scylladb.com",
+        assignee=SimpleNamespace(emailAddress="dev@scylladb.com"),
     )
 
     result = await mocked_issue_service.submit(issue_url=url, test_id=run.test_id, run_id=run.id, user=logged_in_user)
@@ -285,12 +285,24 @@ async def test_submit_unknown_jira_issue_fetches_from_remote(run: SCTTestRun, mo
 async def test_submit_jira_issue_without_assignee_stores_empty_assignees(run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):
     key = f"FROBNICATOR-{int(time.time_ns() % 10**9)}"
     url = f"{JIRA_SERVER}/browse/{key}"
-    mocked_issue_service.jira.jira.issue.return_value = fake_remote_jira_issue(key, assignee_email=None)
+    mocked_issue_service.jira.jira.issue.return_value = fake_remote_jira_issue(key, assignee=None)
 
     result = await mocked_issue_service.submit(issue_url=url, test_id=run.test_id, run_id=run.id, user=logged_in_user)
 
     assert result["assignees"] == []
     assert result["labels"] == []
+
+
+async def test_submit_jira_issue_with_hidden_assignee_email_falls_back_to_display_name(run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):
+    key = f"FROBNICATOR-{int(time.time_ns() % 10**9)}"
+    url = f"{JIRA_SERVER}/browse/{key}"
+    mocked_issue_service.jira.jira.issue.return_value = fake_remote_jira_issue(
+        key, assignee=SimpleNamespace(displayName="Hidden Dev"))
+
+    result = await mocked_issue_service.submit(issue_url=url, test_id=run.test_id, run_id=run.id, user=logged_in_user)
+
+    assert result["assignees"] == ["Hidden Dev"]
+    assert len(await IssueLink.find(run_id=run.id).all()) == 1
 
 
 async def test_submit_same_issue_twice_reuses_issue_and_adds_second_link(
@@ -480,12 +492,14 @@ async def test_refresh_stale_jira_issues_updates_state_from_remote(run: SCTTestR
     key = f"FROBNICATOR-{int(time.time_ns() % 10**9)}"
     url = f"{JIRA_SERVER}/browse/{key}"
     mocked_issue_service.jira.jira.issue.return_value = fake_remote_jira_issue(
-        key, status="To Do", summary="Node crash", labels=["bug"], assignee_email="a@scylladb.com")
+        key, status="To Do", summary="Node crash", labels=["bug"],
+        assignee=SimpleNamespace(emailAddress="a@scylladb.com"))
     submitted = await mocked_issue_service.submit(issue_url=url, test_id=run.test_id, run_id=run.id, user=logged_in_user)
     assert submitted["state"] == "to do"
 
     mocked_issue_service.jira.jira.search_issues.return_value = [
-        fake_remote_jira_issue(key, status="Done", summary="Node crash (resolved)", labels=["bug", "fixed"], assignee_email="b@scylladb.com"),
+        fake_remote_jira_issue(key, status="Done", summary="Node crash (resolved)", labels=["bug", "fixed"],
+                                assignee=SimpleNamespace(emailAddress="b@scylladb.com")),
         fake_remote_jira_issue("FROBNICATOR-1", status="Done", summary="Unrelated issue Argus never linked"),
     ]
     before_refresh = datetime.now(UTC).replace(microsecond=0)
@@ -517,15 +531,33 @@ async def test_refresh_stale_jira_issues_updates_state_from_remote(run: SCTTestR
 async def test_refresh_stale_jira_issues_clears_assignee_when_unassigned(run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):
     key = f"FROBNICATOR-{int(time.time_ns() % 10**9)}"
     url = f"{JIRA_SERVER}/browse/{key}"
-    mocked_issue_service.jira.jira.issue.return_value = fake_remote_jira_issue(key, assignee_email="a@scylladb.com")
+    mocked_issue_service.jira.jira.issue.return_value = fake_remote_jira_issue(
+        key, assignee=SimpleNamespace(emailAddress="a@scylladb.com"))
     submitted = await mocked_issue_service.submit(issue_url=url, test_id=run.test_id, run_id=run.id, user=logged_in_user)
     assert (await JiraIssue.get(id=submitted["id"])).assignees == ["a@scylladb.com"]
 
-    mocked_issue_service.jira.jira.search_issues.return_value = [fake_remote_jira_issue(key, assignee_email=None)]
+    mocked_issue_service.jira.jira.search_issues.return_value = [fake_remote_jira_issue(key, assignee=None)]
 
     await mocked_issue_service.jira.refresh_stale_issues()
 
     assert (await JiraIssue.get(id=submitted["id"])).assignees == []
+
+
+async def test_refresh_stale_jira_issues_stores_empty_assignees_when_assignee_has_no_identity(run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):
+    key = f"FROBNICATOR-{int(time.time_ns() % 10**9)}"
+    url = f"{JIRA_SERVER}/browse/{key}"
+    mocked_issue_service.jira.jira.issue.return_value = fake_remote_jira_issue(
+        key, status="To Do", assignee=SimpleNamespace(emailAddress="a@scylladb.com"))
+    submitted = await mocked_issue_service.submit(issue_url=url, test_id=run.test_id, run_id=run.id, user=logged_in_user)
+    mocked_issue_service.jira.jira.search_issues.return_value = [
+        fake_remote_jira_issue(key, status="Done", assignee=SimpleNamespace(accountId="abc123")),
+    ]
+
+    await mocked_issue_service.jira.refresh_stale_issues()
+
+    refreshed: JiraIssue = await JiraIssue.get(id=submitted["id"])
+    assert refreshed.state == "done"
+    assert refreshed.assignees == []
 
 
 async def test_refresh_only_touches_its_own_backend(run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):
