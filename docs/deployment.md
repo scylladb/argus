@@ -8,6 +8,13 @@ from the inventory, runs the schema sync, and manages nginx, the service, the
 argusAI worker, the maintenance timers and log rotation. Nothing is built on a
 host.
 
+The nginx virtual host is `roles/argus/templates/argus.nginx.conf.j2` there.
+It carries the static-asset cache headers that `tasks/ARGUS-245/rca.md`
+selected: content-hashed chunks in `/s/dist/` as immutable, the other
+`/s/dist/` files with `no-cache`, the rest of `/s/` for ten minutes. The
+reference copy the RCA names, `docs/config/argus.nginx.conf`, was removed
+with the other hand-deployment files.
+
 This repository publishes the bundle on every `v*` tag, from
 [`.github/workflows/release.yml`](../.github/workflows/release.yml):
 `argus-<version>-linux-{x86_64,aarch64}.tar.zst`, each with a sha256 beside
