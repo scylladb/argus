@@ -106,8 +106,20 @@ echo "==> Dependencies"
 # against pyproject.toml and fails when an extra gained a package nobody ran
 # `uv lock` for — the bundle would otherwise ship without it and the import
 # would fail on the production host, past the self-check's top-level modules.
-uv export --locked --no-dev --no-emit-project --extra web-backend --extra ai \
+#
+# The default `health` group comes along: it carries qatools-health, which the
+# health process the gunicorn master starts imports. It is a path source in
+# this repository, locked as editable, and an editable install into lib/ is a
+# link back to this checkout — a path that exists here and on no host.
+# --no-editable exports it as a plain path, which uv builds and installs into
+# lib/ like any other dependency.
+uv export --locked --no-dev --no-editable --no-emit-project --extra web-backend --extra ai \
     --format requirements.txt -o "$DIST/requirements.txt"
+if grep -q '^-e ' "$DIST/requirements.txt"; then
+    echo "error: the export still carries an editable requirement:" >&2
+    grep '^-e ' "$DIST/requirements.txt" >&2
+    exit 1
+fi
 # --target, not the interpreter's own site-packages: uv refuses to write into a
 # Python it manages. The .pth below puts this directory back on sys.path.
 uv pip install --python "$BUNDLE_PYTHON" --target "$BUNDLE/lib" \
@@ -222,9 +234,15 @@ mv "$BUNDLE" "$RELOCATED"
 import sys
 import argus_backend, argusAI.event_similarity_processor_v2
 import cassandra, coodie, chromadb, gunicorn, uvicorn
+# What the gunicorn master runs as the health process, and the package it
+# imports. A link back to the build checkout would resolve here only if this
+# tree had not moved, which is why the check runs from the relocated path.
+import argus.backend.service.health.__main__, qatools_health
+assert '$RELOCATED' in qatools_health.__file__, qatools_health.__file__
 print('python           :', sys.version.split()[0])
 print('argus_backend    :', argus_backend.__file__)
 print('argusAI worker   :', argusAI.event_similarity_processor_v2.__file__)
+print('qatools_health   :', qatools_health.__file__)
 "
     [ -f "$RELOCATED/public/dist/main.bundle.js" ] || { echo "error: the built frontend is not in the bundle" >&2; exit 1; }
     [ -f "$RELOCATED/templates/base.html.j2" ] || { echo "error: the templates are not in the bundle" >&2; exit 1; }

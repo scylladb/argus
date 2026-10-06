@@ -186,6 +186,7 @@ None.
 | The runner's `yarn build` and the container's tree disagree on a path | The script copies `public/dist` in and refuses to run without `main.bundle.js` |
 | A tag is pushed from a tree whose lock was not resolved for 3.13, or whose `pyproject.toml` gained a dependency nobody locked | `uv export --locked` fails rather than resolving anew or exporting a lock that no longer matches the project |
 | A `workflow_dispatch` version is mistyped (`v1.2.3`) or carries shell metacharacters | The version job reads the input from the environment and rejects anything but `x.y.z` with an optional pre-release suffix |
+| A path dependency locked as editable (`qatools-health`, through the default `health` group) installs into `lib/` as a link back to the build checkout | `uv export --no-editable`, a refusal to go on if an `-e` line survives, and a self-check that imports `qatools_health` and the health entry module from the relocated tree |
 
 ## Deferred work
 
