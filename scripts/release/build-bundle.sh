@@ -127,6 +127,13 @@ uv pip install --python "$BUNDLE_PYTHON" --target "$BUNDLE/lib" \
 # The console scripts uv wrote carry the build interpreter's absolute path in
 # their shebang. The shims below replace them.
 rm -rf "$BUNDLE/lib/bin"
+# The project itself is the tree, not a distribution (--no-emit-project), so
+# importlib.metadata finds no argus-alm, and the health process reports an
+# empty version. A metadata-only dist-info names the release; it lists no
+# files because the package lives at the tree root, where the .pth puts it.
+mkdir -p "$BUNDLE/lib/argus_alm-${VERSION}.dist-info"
+printf 'Metadata-Version: 2.1\nName: argus-alm\nVersion: %s\n' "$VERSION" \
+    > "$BUNDLE/lib/argus_alm-${VERSION}.dist-info/METADATA"
 
 echo "==> Path wiring"
 SITE="$BUNDLE/python/lib/python${PYTHON_VERSION}/site-packages"
@@ -239,6 +246,10 @@ import cassandra, coodie, chromadb, gunicorn, uvicorn
 # tree had not moved, which is why the check runs from the relocated path.
 import argus.backend.service.health.__main__, qatools_health
 assert '$RELOCATED' in qatools_health.__file__, qatools_health.__file__
+# The version the health process reports, read the way it reads it.
+from argus.backend.service.health.runner import argus_version
+assert argus_version() == '$VERSION', repr(argus_version())
+print('health version   :', argus_version())
 print('python           :', sys.version.split()[0])
 print('argus_backend    :', argus_backend.__file__)
 print('argusAI worker   :', argusAI.event_similarity_processor_v2.__file__)
