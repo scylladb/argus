@@ -56,6 +56,147 @@ Check the current CLI configuration:
 argus config list
 ```
 
+## Replaying a run
+
+An SCT run writes each Argus call it makes to a replay log
+(`argus_replay_log_<run_id>_<ts>.jsonl`). `argus run replay` sends these logs
+to Argus, and the server applies the calls again. Use it to put a local or
+minicloud run into a shared Argus, or to recover a run after an outage.
+
+Replay the logs of one run from an SCT results directory:
+
+```bash
+argus run replay --dir ~/sct-results/latest --run-id <run_id>
+```
+
+Replay an archive or single files:
+
+```bash
+argus run replay --file argus-replay-baseline.tar.zst
+argus run replay --file argus_replay_log_<run_id>_<ts>.jsonl.zst
+```
+
+### Where a local run goes
+
+A local or minicloud run has no Jenkins job. When the logs hold one such
+run, the replay files it under your user by default:
+
+```
+local-runs/<your Argus username>/<job>
+```
+
+`<job>` is the name of the first SCT config file of the run. For example,
+`test-cases/longevity/longevity-100gb-4h.yaml` gives
+`local-runs/jdoe/longevity-100gb-4h`. Each replay of the same test adds the
+next build: `#1`, `#2`, and so on. To find your local runs in Argus, open the
+`local-runs` release and then the group with your username, or search for
+`local-runs/<your username>`.
+
+The replay creates the release, the group and the test when they do not
+exist. It also gives the run a new run ID, makes you its starter and
+assignee, and records the original run, as for `--build-id` below. A Jenkins
+run keeps its recorded job path and run ID, so a replay after an outage
+restores the original run.
+
+To replay a local run as recorded, with its original run ID, give
+`--keep-run`. Use it to finish a local run that reached Argus only in part.
+
+### Replay into your own build path
+
+To put the runs under a build path of your choice, give `--build-id`. It
+works for local and Jenkins runs, and it replaces the `local-runs` default:
+
+```bash
+argus run replay --file argus-replay-baseline.tar.zst \
+  --build-id scylla-staging/jdoe/my-argus-local-run
+```
+
+The path has two or more names. The first name is the release, the last
+name is the test and the job name, and the names between them make the
+group. The release must exist in Argus. Only the `local-runs` default creates
+its release. The CLI checks the form of the path before it uploads the logs.
+
+Each run under the path gets a build number, like a build of a Jenkins job.
+The first replay into a path is `#1`, the next one is `#2`, and so on. To
+choose the number, end the path with `#<n>`:
+
+```bash
+argus run replay --file argus-replay-baseline.tar.zst \
+  --build-id scylla-staging/jdoe/my-argus-local-run#10
+```
+
+The number must be free under the path. A number that a failed replay
+reserved, and that no run holds, becomes free again after ten minutes. When the logs hold more than one
+run, the runs take `n`, `n+1`, and so on.
+
+With `--build-id`, the replay:
+
+1. Gives each run in the logs a new run ID. Each replay makes a new run, also
+   when the original run exists.
+2. Files the run under the path, with the next free build number.
+3. Makes your Argus user the starter and the assignee of the run.
+4. Keeps the logs of the run. The log links point to the original S3 objects.
+5. Records the original run ID on the new run. The run page shows
+   "Replayed from" with a link to the original run.
+
+When the group or the test of the path does not exist, the run fails with an
+error that names the missing parts. Add `--create-missing-tests` to create
+them. A replay never creates a release for `--build-id`.
+
+Turn off a step that you do not want:
+
+| Flag | Effect |
+| ---- | ------ |
+| `--as-me=false` | Keep the recorded starter and the scheduled assignee. |
+| `--backfill-logs=false` | Attach only the logs that the replay log records. |
+
+`--as-me` also works without `--build-id`. It then makes you the assignee of
+the runs that the logs name, and writes the change to the run activity. The
+runs keep their original run IDs and their recorded starter.
+
+### Finish a replay that failed
+
+When a replay into a build path fails part way, run it again with `--resume`
+and the run ID of the new run. The replay then writes into that run in place
+of a new one. Give the same `--build-id` as the first replay, or none for a
+local run in `local-runs`:
+
+```bash
+argus run replay --file argus-replay-baseline.tar.zst \
+  --build-id scylla-staging/jdoe/my-argus-local-run \
+  --resume 7f3e2a6c-5b1d-4c8e-9a0f-2d4b6c8e0a1f
+```
+
+The logs must hold one run, and the run you resume must be the copy of that
+run under the same `--build-id`. The run keeps its build number. The server applies every record again. An
+event or a resource that the first replay wrote is written to the same row.
+
+### Output
+
+The summary counts the records. One line per run follows, with its link in
+Argus:
+
+```
+Replay summary: total=83 processed=83 succeeded=83 failed=0 skipped=0 backfilled_logs=2
+Run 91c226dc-a057-4ad4-a0b8-bf8bc73031b9 -> 7f3e2a6c-5b1d-4c8e-9a0f-2d4b6c8e0a1f (scylla-staging/jdoe/my-argus-local-run#1): https://argus.scylladb.com/tests/scylla-cluster-tests/7f3e2a6c-5b1d-4c8e-9a0f-2d4b6c8e0a1f
+```
+
+The first ID is the run ID in the log, and the second ID is the run ID in
+Argus. The build follows in parentheses. Without `--build-id` the two IDs are
+the same, and the line shows one ID.
+A table of errors follows when a record fails. `--report json` writes the
+summary and the links as JSON.
+
+Run with `--dry-run` first to check the logs and the build path. A dry run
+applies nothing and shows no links. It shows the build each run would get:
+
+```
+Run 91c226dc-a057-4ad4-a0b8-bf8bc73031b9 would replay as (scylla-staging/jdoe/my-argus-local-run#2)
+```
+
+Use `--target-url` to replay into another Argus instance. The CLI must already
+hold credentials for that instance.
+
 ## Authentication
 
 **This is where most people get stuck.** Read this section before running any command.

@@ -11,6 +11,19 @@ type ReplayIngestSummary struct {
 	SkippedNoReplay int                 `json:"skipped_no_replay"`
 	BackfilledLogs  int                 `json:"backfilled_logs"`
 	Errors          []ReplayIngestError `json:"errors"`
+	Runs            []ReplayRun         `json:"runs"`
+}
+
+// ReplayRun is one run that the replay addressed. ID is the run ID after the
+// server gave it any new one, and SourceID is the ID the log recorded.
+// BuildID and BuildNumber name the build of a run that a replay with a build
+// ID made, and are empty otherwise.
+type ReplayRun struct {
+	Type        string `json:"type"`
+	ID          string `json:"id"`
+	SourceID    string `json:"source_id"`
+	BuildID     string `json:"build_id"`
+	BuildNumber *int   `json:"build_number"`
 }
 
 // ReplayIngestError describes one record that the server could not replay.

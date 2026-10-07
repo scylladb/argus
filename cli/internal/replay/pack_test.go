@@ -24,6 +24,7 @@ func writeFile(t *testing.T, dir, name, content string) string {
 }
 
 func TestPackRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 
 	a := writeFile(t, dir, "argus_replay_log_run-A_1.jsonl",
@@ -85,6 +86,7 @@ func TestPackRoundTrip(t *testing.T) {
 }
 
 func TestPackRejectsBadJSON(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := writeFile(t, dir, "argus_replay_log_bad_1.jsonl",
 		`{"ts":1,"ok":true}`+"\n"+
@@ -105,6 +107,7 @@ func TestPackRejectsBadJSON(t *testing.T) {
 }
 
 func TestPackEmptyInputs(t *testing.T) {
+	t.Parallel()
 	if err := Pack(nil, io.Discard); !errors.Is(err, ErrNoFiles) {
 		t.Errorf("nil files: expected ErrNoFiles, got %v", err)
 	}
@@ -114,6 +117,7 @@ func TestPackEmptyInputs(t *testing.T) {
 }
 
 func TestPackTarEntryBasenameOnly(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	nested := filepath.Join(dir, "sub", "dir")
 	if err := os.MkdirAll(nested, 0o755); err != nil {
