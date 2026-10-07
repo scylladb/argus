@@ -14,12 +14,15 @@ used to reject obvious mismatches at the door.
 """
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, Body, Depends, Query, Request
 
 from argus.backend.error_handlers import APIException
 from argus.backend.models.web import User
 from argus.backend.service.replay_service import ReplayService
 from argus.backend.service.user import api_current_user
+from argus.backend.util.config import Config
 from argus.backend.util.encoders import APIResponse
 
 router = APIRouter(prefix="/replay")
@@ -56,8 +59,12 @@ class EmptyRequest(APIException):
 @router.post("/ingest", name="api.client_api.replay_api.replay_ingest")
 async def replay_ingest(asgi_request: Request, archive: bytes = Body(b""),
                   dry_run: bool = Query(False),
-                  create_missing_tests: bool = Query(False),
+                  create_missing_tests: bool | None = Query(None),
                   backfill_logs: bool = Query(True),
+                  build_id: str | None = Query(None),
+                  as_me: bool | None = Query(None),
+                  resume_run_id: UUID | None = Query(None),
+                  local_runs: bool = Query(False),
                   user: User = Depends(api_current_user)):
     content_type = (asgi_request.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
     if content_type and content_type not in ACCEPTED_CONTENT_TYPES:
@@ -78,6 +85,13 @@ async def replay_ingest(asgi_request: Request, archive: bytes = Body(b""),
         auth_header=auth_header,
         create_missing_tests=create_missing_tests,
         backfill_logs=backfill_logs,
+        build_id=build_id or None,
+        caller=user,
+        as_me=as_me,
+        resume_run_id=resume_run_id,
+        local_runs=local_runs,
+        # BASE_URL only: a URL built from the request would trust its Host header.
+        argus_url=Config.load_yaml_config().get("BASE_URL") or "",
     )
     summary = await service.ingest(archive, dry_run=dry_run)
 

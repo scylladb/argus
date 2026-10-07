@@ -28,6 +28,7 @@ from argus.backend.models.run_config import (
     RunConfiguration,
 )
 from argus.backend.models.run_cost import RunCost
+from argus.backend.models.replay_build import ReplayBuildNumber
 from coodie.aio import Document
 
 from argus.backend.models.runtime_store import RuntimeStore
@@ -468,6 +469,7 @@ USED_MODELS: list[type[Document]] = [
     RunConfiguration,
     RunConfigParam,
     RunConfigParamByRun,
+    ReplayBuildNumber,
     RunConfigParamValueIndex,
     RunConfigParamName,
     RunCost,
