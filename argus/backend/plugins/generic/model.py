@@ -69,10 +69,7 @@ class GenericRun(PluginModelBase):
         run.build_number = get_build_number(request_data["build_url"])
         run.sub_type = request_data.get("sub_type")
         await run.assign_categories()
-        try:
-            run.assignee = await run.get_scheduled_assignee()
-        except DocumentNotFound:
-            run.assignee = None
+        run.assignee = await run.get_assignee(request_data.get("started_by"))
         if version := request_data.get("scylla_version"):
             await run.submit_product_version(version)
         run.status = TestStatus.RUNNING.value

@@ -169,10 +169,7 @@ class DriverTestRun(PluginModelBase):
         run.build_number = get_build_number(req.job_url)
         run.start_time = datetime.now(UTC)
         await run.assign_categories()
-        try:
-            run.assignee = await run.get_scheduled_assignee()
-        except Exception:
-            run.assignee = None
+        run.assignee = await run.get_assignee()
 
         run.status = TestStatus.CREATED.value
         await run.save()
@@ -349,10 +346,7 @@ class DriverTestRun(PluginModelBase):
         run.build_id = req.job_name
         run.build_job_url = req.job_url
         await run.assign_categories()
-        try:
-            run.assignee = await run.get_scheduled_assignee()
-        except Exception:
-            run.assignee = None
+        run.assignee = await run.get_assignee()
         for key, value in req.test_environment.items():
             env_info = EnvironmentInfo.model_construct()
             env_info.key = key
