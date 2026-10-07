@@ -362,6 +362,83 @@ A key that Argus does not know is not an error:
 
 `linked_on` is `null` for links made before Argus recorded the time.
 
+```http
+POST /api/v1/client/replay/ingest
+Content-Type: application/x-tar-zstd
+```
+
+Applies the requests that an Argus client recorded in replay logs
+(`argus_replay_log_*.jsonl`). The body is an archive of those logs: `tar.zst`,
+`tar.gz`, plain `tar` or `zip`. The server sorts the records, applies them
+through the client API with the token of the caller, and returns a summary.
+It skips the calls that send mail or start CI jobs.
+
+| Parameter | Type | Default | Description |
+| --------- | ---- | ------- | ----------- |
+| dry_run | bool | `false` | Check the archive and the test entities. Apply nothing. |
+| build_id | string | see below | Replay into a new run under this build path, such as `scylla-staging/jdoe/my-run`. Each run in the archive gets a new run ID, and `submit_run` gets the path as its job name. Each replay makes a new run. End the path with `#<n>` to choose the build number of the first run. |
+| resume_run_id | uuid | none | Needs a build path, given or default. Write into this run in place of a new one, to finish a replay that failed. The archive must hold one run, and this run must be its copy under the same `build_id`. |
+| as_me | bool | `true` with a build path, else `false` | With a build path, make the caller the starter and the assignee of each new run. Without one, make the caller the assignee of each run, and write the change to the run events. The run keeps its recorded starter. |
+| create_missing_tests | bool | `true` for the `local-runs` default, else `false` | Create the group and the test that the build path names when they do not exist, and the release for the `local-runs` default. When `false`, a `submit_run` for a missing test fails with a message that names the missing parts. |
+| backfill_logs | bool | `true` | List the S3 prefix of each run and attach the log archives that the logs do not record. |
+| local_runs | bool | `false` | Send an archive of one local run to `local-runs/<caller username>/<job>` when `build_id` is absent. The CLI sends `true` unless the user gives `--keep-run`. |
+
+With `local_runs` and without `build_id`, an archive of one local run, a
+`submit_run` with no build URL, goes to `local-runs/<caller username>/<job>`. `<job>` is the first SCT
+config file of the run without its directory and extension. Any other archive
+keeps its recorded paths and run IDs. "A build path" in the table above means
+`build_id` or this default.
+
+`build_id` is two or more names split by `/`, with an optional `#<n>` at the
+end. A name is not empty and holds no whitespace. `n` is a positive integer
+that no run under the path has. Without `#<n>`, each new run takes the next
+number above the highest build number under the path. A resumed run keeps its
+build number. The first name is the release and the last name is the test.
+The names between them make the group. The server reserves each build number
+before it creates the run, so two replays into one path take two numbers. A
+resume skips the `submit_run` record of the archive. A number that a failed
+replay reserved, and that no run holds, is free again after ten minutes. An
+explicit `build_id` must name a release that exists. Only the `local-runs`
+default creates its release. The build URL of a new run is its own Argus
+link, `<BASE_URL>/test/<path>/<n>/`, or `/test/<path>/<n>/` when `BASE_URL`
+is not configured. A bad `build_id` or `resume_run_id` fails the request
+before the server applies a record. A recorded S3 link
+keeps the original run ID, because the log archive stays where the original
+run uploaded it.
+
+A run that a replay into a build path made stores the recorded run ID in
+`source_run_id`. The run endpoints return the field, and the run page links
+to the original run.
+
+`runs` lists each run in the archive once. `id` is the run ID in Argus after
+the replay. `source_id` is the run ID in the log. The two are equal without
+a build path. `build_id` and `build_number` name the build of a new run, and are
+`null` without a build path. A dry run returns the build each run would get.
+An error with the endpoint `stamp_run` is a run that the server could not
+stamp with its source run or its new owner.
+
+```json
+{
+  "response": {
+    "total": 83,
+    "processed": 83,
+    "succeeded": 83,
+    "failed": 0,
+    "skipped_no_replay": 0,
+    "backfilled_logs": 2,
+    "errors": [],
+    "runs": [
+      {"type": "scylla-cluster-tests",
+       "id": "7f3e2a6c-5b1d-4c8e-9a0f-2d4b6c8e0a1f",
+       "source_id": "91c226dc-a057-4ad4-a0b8-bf8bc73031b9",
+       "build_id": "scylla-staging/jdoe/my-run",
+       "build_number": 1}
+    ]
+  },
+  "status": "ok"
+}
+```
+
 ## Email reporting API
 
 ```http
