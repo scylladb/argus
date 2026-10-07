@@ -7,6 +7,7 @@
     import { timestampToISODate } from "../../Common/DateUtils";
     import JenkinsBuildModal from "../Jenkins/JenkinsBuildModal.svelte";
     import JenkinsCloneModal from "../Jenkins/JenkinsCloneModal.svelte";
+    import ReplayedFrom from "../ReplayedFrom.svelte";
     interface Props {
         testRun?: any;
         testInfo: any;
@@ -71,6 +72,9 @@
                         {testRun.build_id}
                     </a>
                 </li>
+                {#if testRun.source_run_id}
+                    <ReplayedFrom sourceRunId={testRun.source_run_id} />
+                {/if}
             </ul>
         </div>
     </div>

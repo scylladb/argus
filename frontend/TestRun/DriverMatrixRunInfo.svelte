@@ -7,6 +7,7 @@
     import { timestampToISODate } from "../Common/DateUtils";
     import JenkinsBuildModal from "./Jenkins/JenkinsBuildModal.svelte";
     import JenkinsCloneModal from "./Jenkins/JenkinsCloneModal.svelte";
+    import ReplayedFrom from "./ReplayedFrom.svelte";
     let { testRun = {}, testInfo } = $props();
     let innerWidth = $state(0);
     let mobile = $derived(innerWidth < 768);
@@ -85,6 +86,9 @@
                         {testRun.build_id}
                     </a>
                 </li>
+                {#if testRun.source_run_id}
+                    <ReplayedFrom sourceRunId={testRun.source_run_id} />
+                {/if}
             </ul>
         </div>
         <div class="col-12 col-md-6 p-2">
