@@ -20,11 +20,14 @@ from argus.backend.models.web import (
     ArgusRelease,
     ReleaseStatsSnapshot,
     ReleaseDistinctVersions,
+    User,
 )
+from argus.backend.service.jenkins_service import JenkinsService
 from argus.backend.util.common import chunk, gather_limited, select_rows
 from argus.common.enums import TestInvestigationStatus, TestStatus
 
 LOGGER = logging.getLogger(__name__)
+JENKINS_LOOKUP_TIMEOUT_SECONDS = 5
 
 DEFAULT_STATS_PER_PARTITION_LIMIT = 15
 
@@ -34,6 +37,7 @@ class PluginModelBase(Document):
         __abstract__ = True
 
     _plugin_name: ClassVar[str] = "unknown"
+    _resolves_assignee_from_jenkins: ClassVar[bool] = False
     # Metadata
     build_id: Annotated[str, PrimaryKey()]
     start_time: Annotated[datetime, ClusteringKey(order="DESC")] = Field(
@@ -76,22 +80,71 @@ class PluginModelBase(Document):
         associated_test: ArgusTest = await ArgusTest.get(build_system_id=self.build_id)
         associated_release: ArgusRelease = await ArgusRelease.get(id=associated_test.release_id)
 
-        plans: list[ArgusReleasePlan] = await ArgusReleasePlan.find(release_id=associated_release.id).all()
+        plans = [plan for plan in await ArgusReleasePlan.find(release_id=associated_release.id).all()
+                 if self._is_plan_active(plan)]
 
         if version:
             plans = [plan for plan in plans if plan.target_version == version]
 
         for plan in plans:
             if associated_test.group_id in plan.groups:
-                return plan.assignee_mapping.get(associated_test.group_id, plan.owner)
-            if associated_test.id in plan.tests:
-                return plan.assignee_mapping.get(associated_test.id, plan.owner)
+                planned_assignee = plan.assignee_mapping.get(associated_test.group_id, plan.owner)
+            elif associated_test.id in plan.tests:
+                planned_assignee = plan.assignee_mapping.get(associated_test.id, plan.owner)
+            else:
+                continue
+            if await User.exists_by_id(planned_assignee):
+                return planned_assignee
+            LOGGER.warning("Plan %s assigns test %s to missing user %s", plan.id, associated_test.id, planned_assignee)
 
         # FIXME: Legacy fallback until we fully migrate to new plans
         return self._legacy_get_scheduled_assignee(associated_test=associated_test, associated_release=associated_release)
 
-    async def get_scheduled_assignee(self) -> UUID:
-        return await self.get_assignment()
+    @staticmethod
+    def _is_plan_active(plan: ArgusReleasePlan) -> bool:
+        if plan.completed:
+            return False
+        if plan.ends_at is None:
+            return True
+        ends_at = plan.ends_at if plan.ends_at.tzinfo else plan.ends_at.replace(tzinfo=UTC)
+        return ends_at > datetime.now(UTC)
+
+    async def get_assignee(self, started_by: str | None = None) -> UUID | None:
+        try:
+            return await self._resolve_assignee(started_by)
+        except Exception:  # noqa: BLE001
+            LOGGER.warning("Could not resolve the assignee for a run of %s, leaving it unassigned",
+                           self.build_id, exc_info=True)
+            return None
+
+    async def _resolve_assignee(self, started_by: str | None) -> UUID | None:
+        try:
+            if investigation_assignee := await self.get_assignment():
+                return investigation_assignee
+        except DocumentNotFound:
+            pass
+        except Exception:  # noqa: BLE001
+            LOGGER.warning("Could not read the planned assignee for a run of %s, trying the next source",
+                           self.build_id, exc_info=True)
+
+        if started_by and (trigger_user := await User.exists_by_name(started_by)):
+            return trigger_user.id
+
+        if not self._resolves_assignee_from_jenkins:
+            return None
+
+        if (requested_by_user := await self._get_jenkins_requested_by_user()) and (
+                jenkins_user := await User.find_unique_by_email_local_part(requested_by_user)):
+            return jenkins_user.id
+
+        return None
+
+    async def _get_jenkins_requested_by_user(self) -> str | None:
+        if not self.build_id or self.build_number is None or self.build_number < 1:
+            return None
+
+        service = JenkinsService(timeout=JENKINS_LOOKUP_TIMEOUT_SECONDS)
+        return await service.get_requested_by_user(build_id=self.build_id, build_number=self.build_number)
 
     def _legacy_get_scheduled_assignee(self, associated_test: ArgusTest, associated_release: ArgusRelease) -> UUID:
         """Legacy scheduling removed - schedules no longer exist."""

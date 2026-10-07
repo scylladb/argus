@@ -158,6 +158,7 @@ class SCTResource(Document):
 
 class SCTTestRun(PluginModelBase):
     _plugin_name: ClassVar[str] = "scylla-cluster-tests"
+    _resolves_assignee_from_jenkins: ClassVar[bool] = True
 
     class Settings:
         name = "sct_test_run"
@@ -280,11 +281,10 @@ class SCTTestRun(PluginModelBase):
     async def init_sct_run(cls, req: SCTTestRunSubmissionRequest):
         run = cls.model_construct()
         run.build_id = req.job_name
+        run.build_job_url = req.job_url
+        run.build_number = get_build_number(req.job_url)
         await run.assign_categories()
-        try:
-            run.assignee = await run.get_scheduled_assignee()
-        except DocumentNotFound:
-            run.assignee = None
+        run.assignee = await run.get_assignee(req.started_by)
         run.start_time = datetime.now(timezone.utc)
         run.id = UUID(req.run_id)
         run.scm_revision_id = req.commit_id
@@ -292,8 +292,6 @@ class SCTTestRun(PluginModelBase):
             run.origin_url = req.origin_url
             run.branch_name = req.branch_name
         run.started_by = req.started_by
-        run.build_job_url = req.job_url
-        run.build_number = get_build_number(req.job_url)
 
         return run
 
