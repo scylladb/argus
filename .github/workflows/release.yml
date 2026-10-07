@@ -1,63 +1,248 @@
-name: Release on Pypi and GitHub
+name: Release on PyPI and GitHub
 
+# Trigger: push a tag of the form vX.Y.Z
+# Example: git tag v0.17.0 && git push origin v0.17.0
+#
+# One release per tag, carrying three kinds of artefact:
+#   - the argus-alm and pytest-argus-reporter wheels, published to PyPI as
+#     before and attached to the release;
+#   - one .tar.zst bundle per architecture, with a sha256 beside each. A
+#     bundle carries the web application, the argusAI worker, the built
+#     frontend, its own CPython and every locked dependency. The target host
+#     needs glibc 2.34 or later and nothing else. roles/argus in
+#     scylladb/qatools downloads, verifies and installs it.
+#
+# The frontend is built once, on the runner. Both bundles build on native
+# runners inside manylinux containers; nothing runs under emulation.
+#
+# The systemd units, nginx and the host live in the deployment repository,
+# not here.
 on:
-  workflow_dispatch:
-
   push:
     tags:
-      - 'v*'  # Trigger on version tags like v1.0.0
+      # Numeric prefix required, so tags like vtest never start a release.
+      # cli/v* and qatools-health-v* keep their own workflows and do not
+      # match here.
+      - 'v[0-9]*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build. No release is published."
+        required: true
+        type: string
+
+permissions:
+  contents: read
 
 jobs:
+  version:
+    name: Resolve version
+    runs-on: ubuntu-24.04
+    outputs:
+      value: ${{ steps.resolve.outputs.value }}
+    steps:
+      # The dispatched input reaches the shell through the environment, never
+      # the script text, and both sources are checked against the shape every
+      # later step assumes: argus-<version>/ names the directory, VERSION in
+      # the bundle equals it, and the build script rm -rf's a path built from
+      # it. `v1.2.3` is the typo this catches; shell metacharacters the rest.
+      - name: Resolve version
+        id: resolve
+        shell: bash
+        env:
+          DISPATCHED: ${{ inputs.version }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+              VALUE="$DISPATCHED"
+          else
+              VALUE="${GITHUB_REF_NAME#v}"
+          fi
+          if [[ ! "$VALUE" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.]?[0-9A-Za-z.-]+)?$ ]]; then
+              echo "bad version '${VALUE}': expected x.y.z with an optional pre-release suffix and no leading v" >&2
+              exit 1
+          fi
+          echo "Version: ${VALUE}"
+          echo "value=${VALUE}" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build distribution 📦
-    runs-on: ubuntu-latest
-
+    runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      with:
-        persist-credentials: false
-    - name: Install uv
-      uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
-      with:
-        enable-cache: true
-        python-version: '3.14'
-    - name: Build a binary wheel and a source tarball
-      run: |
-        uv build
-        uv build pytest-argus-reporter/ -o dist
-    - name: Store the distribution packages
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-      with:
-        name: python-package-distributions
-        path: dist/
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+          python-version: '3.14'
+      - name: Build a binary wheel and a source tarball
+        run: |
+          uv build
+          uv build pytest-argus-reporter/ -o dist
+      - name: Store the distribution packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: python-package-distributions
+          path: dist/
 
-  publish-to-pypi:
-    name: >-
-      Publish Python 🐍 distribution 📦 to PyPI
-    if: github.ref_type == 'tag'
-    needs:
-    - build
-    runs-on: ubuntu-latest
+  frontend:
+    name: Build the frontend
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+          cache: 'yarn'
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+      # NODE_ENV decides minification and source maps in vite.config.ts.
+      - name: Build the bundles
+        run: NODE_ENV=production yarn build
+      # Once, for both architectures: the assets do not depend on the CPU.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: frontend-dist
+          path: public/dist/
+          retention-days: 1
+
+  bundle:
+    name: Bundle (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    needs: [version, frontend]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # manylinux_2_34 sets the glibc floor at 2.34 (Rocky 9+,
+          # Ubuntu 22.04+). The deploy target is Rocky 10, which ships
+          # glibc 2.39, so this keeps headroom.
+          - arch: x86_64
+            runner: ubuntu-24.04
+            image: quay.io/pypa/manylinux_2_34_x86_64@sha256:249cdcdcd91ba0639b50140a5a4cd09eead2056e2f76267e7919678a66f9d33d
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            image: quay.io/pypa/manylinux_2_34_aarch64@sha256:8621bc7caecfd1e7818a800e8ae8c979936665f180a93e13efeed54cbb026d74
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Fetch the built frontend
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: frontend-dist
+          path: public/dist
+
+      # The build runs in the container, but the checkout stays on the host.
+      # The runner never needs Python 3.13 itself.
+      - name: Build in manylinux container
+        run: |
+          docker run --rm \
+              -v "${GITHUB_WORKSPACE}:/io" \
+              -w /io \
+              "${{ matrix.image }}" \
+              bash scripts/release/build-bundle.sh \
+                  "${{ needs.version.outputs.value }}"
+
+      - name: Create archive
+        id: archive
+        shell: bash
+        run: |
+          VERSION="${{ needs.version.outputs.value }}"
+          NAME="argus-${VERSION}-linux-${{ matrix.arch }}"
+          # The container writes dist/ as root.
+          sudo chown -R "$(id -u):$(id -g)" dist
+          # The archive roots at the bundle directory, so the extracted tree
+          # lands in one folder. Every entry is recorded as root's: the
+          # runner's uid means nothing on the host, and GNU tar run as root
+          # would otherwise hand the tree to whichever account carries 1001
+          # there. The checksum records a bare file name, so `sha256sum -c`
+          # works next to the download.
+          ( cd dist \
+              && tar --owner=0 --group=0 --numeric-owner -cf - "argus-${VERSION}" \
+                  | zstd -19 -T0 --long=27 -q -o "${NAME}.tar.zst" \
+              && sha256sum "${NAME}.tar.zst" | tee "${NAME}.tar.zst.sha256" )
+          ls -lh "dist/${NAME}.tar.zst"
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the extracted bundle runs
+        shell: bash
+        run: |
+          NAME="${{ steps.archive.outputs.name }}"
+          VERSION="${{ needs.version.outputs.value }}"
+          # Extract to a different path than the build path, so any absolute
+          # path baked into the bundle fails the check here, not on the
+          # production host. The container carries no Python of its own on
+          # PATH, which is the point of the test.
+          mkdir -p "${RUNNER_TEMP}/verify"
+          tar --zstd -xf "dist/${NAME}.tar.zst" -C "${RUNNER_TEMP}/verify"
+          docker run --rm \
+              -v "${RUNNER_TEMP}/verify:/opt/argus" \
+              -w "/opt/argus/argus-${VERSION}" \
+              "${{ matrix.image }}" \
+              sh -c 'bin/argus-cli --help >/dev/null && ./python/bin/python3.13 -c "import argus_backend, argusAI.event_similarity_processor_v2, argus.backend.service.health.__main__, qatools_health" && echo "runs from /opt/argus: ok"'
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.archive.outputs.name }}
+          path: |
+            dist/${{ steps.archive.outputs.name }}.tar.zst
+            dist/${{ steps.archive.outputs.name }}.tar.zst.sha256
+          retention-days: 14
+
+  release:
+    name: Publish to PyPI and GitHub
+    if: github.event_name == 'push'
+    needs: [version, build, bundle]
+    runs-on: ubuntu-24.04
     environment:
       name: pypi
-      url: https://pypi.org/p/argus-alm  # Replace <package-name> with your PyPI project name
+      url: https://pypi.org/p/argus-alm
     permissions:
-      id-token: write  # IMPORTANT: mandatory for trusted publishing
+      id-token: write  # mandatory for trusted publishing
       contents: write
-
     steps:
-    - name: Download all the dists
-      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-      with:
-        name: python-package-distributions
-        path: dist/
+      - name: Download the wheels
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: python-package-distributions
+          path: dist/
 
-    - name: Publish distribution 📦 to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
+      # Into their own directory: the PyPI step below publishes everything
+      # under dist/, and a .tar.zst there is not a distribution.
+      - name: Download the bundles
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: argus-${{ needs.version.outputs.value }}-linux-*
+          merge-multiple: true
+          path: bundles/
 
-    - name: Create GitHub release
-      uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
-      with:
-        generate_release_notes: true
-        files: dist/*
+      - name: Assert both architectures are present
+        env:
+          VERSION: ${{ needs.version.outputs.value }}
+        run: |
+          ls -lh bundles
+          # A release carrying only one of them is worse than a failed one:
+          # the role asserts the asset for its architecture exists and stops.
+          for arch in x86_64 aarch64; do
+              test -f "bundles/argus-${VERSION}-linux-${arch}.tar.zst" \
+                  || { echo "missing ${arch} bundle" >&2; exit 1; }
+              test -f "bundles/argus-${VERSION}-linux-${arch}.tar.zst.sha256" \
+                  || { echo "missing ${arch} checksum" >&2; exit 1; }
+          done
+
+      - name: Publish distribution 📦 to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*
+            bundles/*

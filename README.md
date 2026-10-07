@@ -78,7 +78,7 @@ For local setup, dependencies, ScyllaDB, seed data, and daily workflow, see [`do
 
 ## Production Deployment
 
-For source-based production installation, nginx, systemd, and logging setup, see [`docs/deployment.md`](docs/deployment.md).
+For production deployment, see [`docs/deployment.md`](docs/deployment.md).
 
 ## Contributing
 
