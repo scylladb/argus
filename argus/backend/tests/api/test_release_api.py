@@ -124,6 +124,26 @@ def test_list_releases_includes_session_release(api_client, release):
     assert release.name in names
 
 
+async def test_list_releases_puts_priority_first_and_dormant_last(api_client, release_manager_service):
+    prioritized = await release_manager_service.create_release(
+        f"release_api_priority_{time.time_ns()}", "Prioritized", False)
+    dormant = await release_manager_service.create_release(f"release_api_dormant_{time.time_ns()}", "Dormant", False)
+    await release_manager_service.edit_release({
+        "id": prioritized.id, "pretty_name": prioritized.pretty_name, "description": None,
+        "valid_version_regex": None, "enabled": True, "perpetual": False, "dormant": False, "priority": 10,
+    })
+    await release_manager_service.set_release_dormancy(str(dormant.id), True)
+
+    resp = api_client.get(f"{API_PREFIX}/releases")
+    assert resp.status_code == 200, resp.content
+    releases = resp.json()["response"]
+    names = [r["name"] for r in releases]
+
+    listed_before = releases[:names.index(prioritized.name)]
+    assert all(not r["dormant"] and (r["priority"] or 0) >= 10 for r in listed_before)
+    assert all(r["dormant"] for r in releases[names.index(dormant.name):])
+
+
 def test_release_details(api_client, release):
     resp = api_client.get(f"{API_PREFIX}/release/{release.id}/details")
     assert resp.status_code == 200, resp.content

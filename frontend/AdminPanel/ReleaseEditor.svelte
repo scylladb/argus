@@ -43,6 +43,17 @@
                 />
             </div>
             <div class="form-group">
+                <label for="release-editor-priority" class="form-label">Priority (higher is listed first)</label>
+                <input
+                    id="release-editor-priority"
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    class="form-control"
+                    bind:value={releaseData.priority}
+                />
+            </div>
+            <div class="form-group">
                 <label for="" class="form-label mb-0">Weekly schedules</label>
                 <input
                     type="checkbox"

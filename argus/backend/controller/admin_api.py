@@ -41,12 +41,13 @@ class SetReleaseDormancyRequest(BaseModel):
 
 class EditReleaseRequest(BaseModel):
     id: str
-    pretty_name: str
+    pretty_name: str | None = None
     description: str | None = None
     valid_version_regex: str | None = None
     enabled: bool
     perpetual: bool
     dormant: bool
+    priority: int | None = None
 
 
 class DeleteReleaseRequest(BaseModel):

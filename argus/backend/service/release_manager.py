@@ -15,12 +15,13 @@ class ReleaseManagerException(Exception):
 
 class ReleaseEditPayload(TypedDict):
     id: str
-    pretty_name: str
+    pretty_name: str | None
     description: str
     valid_version_regex: str | None
     enabled: bool
     perpetual: bool
     dormant: bool
+    priority: int | None
 
 
 class ReleaseManagerService:
@@ -189,6 +190,7 @@ class ReleaseManagerService:
         release.dormant = payload["dormant"]
         release.description = payload["description"]
         release.valid_version_regex = payload["valid_version_regex"]
+        release.priority = payload.get("priority") or 0
 
         await release.save()
         await invalidate_release_snapshots(release.id)
