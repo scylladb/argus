@@ -157,6 +157,48 @@ def test_admin_edit_release(api_client, admin_release):
     assert body["response"]["dormant"] is True
 
 
+def _edit_release_payload(release: dict, **changes) -> dict:
+    return {
+        "id": release["id"],
+        "pretty_name": release["pretty_name"],
+        "description": None,
+        "valid_version_regex": None,
+        "enabled": True,
+        "perpetual": False,
+        "dormant": False,
+        **changes,
+    }
+
+
+def test_admin_edit_release_stores_priority(api_client, admin_release):
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/release/edit",
+                       _edit_release_payload(admin_release, priority=5))
+    assert resp.json()["status"] == "ok", resp.content
+
+    details = api_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details").json()
+    assert details["response"]["priority"] == 5
+
+
+def test_admin_edit_release_stores_a_null_priority_as_zero(api_client, admin_release):
+    client_post(api_client, f"{ADMIN_PREFIX}/release/edit", _edit_release_payload(admin_release, priority=5))
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/release/edit",
+                       _edit_release_payload(admin_release, priority=None))
+    assert resp.json()["status"] == "ok", resp.content
+
+    details = api_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details").json()
+    assert details["response"]["priority"] == 0
+
+
+def test_admin_edit_release_without_a_pretty_name(api_client, admin_release):
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/release/edit",
+                       _edit_release_payload(admin_release, pretty_name=None, priority=7))
+    assert resp.json()["status"] == "ok", resp.content
+
+    details = api_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details").json()
+    assert details["response"]["pretty_name"] is None
+    assert details["response"]["priority"] == 7
+
+
 def test_admin_edit_release_unknown_id_errors(api_client):
     payload = {
         "id": str(uuid.uuid4()),
