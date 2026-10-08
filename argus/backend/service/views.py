@@ -95,7 +95,7 @@ class UserViewService:
                     entities["tests"].append(UUID(entity_id))
         return entities
 
-    async def test_lookup(self, query: str):
+    async def test_lookup(self, query: str) -> tuple[list[dict], int]:
         return await TestLookup.test_lookup(query)
 
     async def update_view(self, view_id: str | UUID, update_data: ViewUpdateRequest, user: User) -> bool:

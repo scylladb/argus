@@ -1,22 +1,329 @@
-
-
 import asyncio
-from functools import partial
 import re
-from urllib.parse import unquote
+import time
+from collections import defaultdict
+from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
+from urllib.parse import unquote
 from uuid import UUID
 
 from coodie.aio import Document
 from coodie.exceptions import DocumentNotFound
 
-from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest
+from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, User
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.loader import all_plugin_models
+from argus.backend.service.stats import ReleaseStatsCollector
+from argus.backend.util.common import select_rows, version_key
+from argus.common.enums import TestInvestigationStatus, TestStatus
+
+INDEX_TTL = 60
+STATS_FACETS = ("status", "istatus", "assignee")
+FACET_KEYS = ("release", "group", "type", *STATS_FACETS)
+TYPE_ORDER = {"release": 0, "group": 1, "test": 2}
+TOKEN = re.compile(r'(?:"[^"]*"?|[^\s"])+')
+JOB_SEGMENT = re.compile(r"/job/([^/?#]+)")
+RELEASE_COLUMNS = ("id", "name", "pretty_name", "enabled", "priority", "dormant")
+GROUP_COLUMNS = ("id", "release_id", "name", "pretty_name", "build_system_id", "enabled")
+GROUP_REF_KEYS = ("id", "name", "pretty_name", "enabled")
+TEST_COLUMNS = ("id", "release_id", "group_id", "name", "pretty_name", "build_system_id", "enabled", "test_metadata")
+
+
+@dataclass(slots=True, frozen=True)
+class ParsedQuery:
+    terms: tuple[str, ...]
+    excluded_terms: tuple[str, ...]
+    facets: dict[str, tuple[str, ...]]
+    excluded_facets: dict[str, tuple[str, ...]]
+    uuid: UUID | None
+
+
+@dataclass(slots=True, frozen=True)
+class IndexEntry:
+    id: UUID
+    type: str
+    name: str
+    pretty_name: str | None
+    release_id: UUID | None
+    group_id: UUID | None
+    build_system_id: str | None
+    enabled: bool
+    test_metadata: dict | None
+    haystack: str
+
+
+@dataclass(slots=True, frozen=True)
+class StatsFacts:
+    status: str
+    investigation_status: str
+    assignee: str | None
+
+
+@dataclass(slots=True, frozen=True)
+class StatsLookup:
+    facts: dict[str, StatsFacts]
+    user_names: dict[str, str]
+
+
+@dataclass(slots=True, frozen=True)
+class SearchIndex:
+    entries: list[IndexEntry]
+    by_id: dict[UUID, IndexEntry]
+    releases: dict[UUID, dict]
+    groups: dict[UUID, dict]
+    built_at: float
+
+
+def _tokenize(query: str) -> list[tuple[str, int]]:
+    # Each token keeps the length of the part typed before its first quote:
+    # a "-" or a facet key counts only there, so quoted text stays literal.
+    tokens = []
+    for match in TOKEN.finditer(query):
+        raw = match.group()
+        quote = raw.find('"')
+        tokens.append((raw.replace('"', ""), len(raw) if quote < 0 else quote))
+    return tokens
+
+
+def _job_path(token: str) -> str | None:
+    if not token.startswith(("http://", "https://")):
+        return None
+    return "/".join(JOB_SEGMENT.findall(token)) or None
+
+
+def _unique(values: list[str]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(values))
+
+
+def _single_uuid(tokens: list[tuple[str, int]]) -> UUID | None:
+    if len(tokens) != 1:
+        return None
+    try:
+        return UUID(tokens[0][0])
+    except ValueError:
+        return None
+
+
+def parse_query(query: str) -> ParsedQuery:
+    tokens = _tokenize(query)
+    terms, excluded_terms = [], []
+    facets, excluded_facets = defaultdict(list), defaultdict(list)
+    for text, bare_length in tokens:
+        negated = bare_length > 0 and text.startswith("-") and text.strip("-") != ""
+        if negated:
+            text, bare_length = text[1:], bare_length - 1
+        key, colon, value = text.partition(":")
+        if colon and len(key) < bare_length and key.lower() in FACET_KEYS:
+            if value:
+                (excluded_facets if negated else facets)[key.lower()].append(value.lower())
+        elif text:
+            (excluded_terms if negated else terms).append(unquote(_job_path(text) or text).lower())
+    return ParsedQuery(
+        terms=_unique(terms),
+        excluded_terms=_unique(excluded_terms),
+        facets={key: _unique(values) for key, values in facets.items()},
+        excluded_facets={key: _unique(values) for key, values in excluded_facets.items()},
+        uuid=_single_uuid(tokens),
+    )
+
+
+def _entry(entry_type: str, row: dict, release_id: UUID | None = None, group_id: UUID | None = None,
+           test_metadata: dict | None = None) -> IndexEntry:
+    build_system_id = row.get("build_system_id")
+    return IndexEntry(
+        id=row["id"],
+        type=entry_type,
+        name=row["name"],
+        pretty_name=row["pretty_name"],
+        release_id=release_id,
+        group_id=group_id,
+        build_system_id=build_system_id,
+        enabled=row["enabled"],
+        test_metadata=test_metadata,
+        haystack="\n".join(part for part in (row["name"], row["pretty_name"], build_system_id) if part).lower(),
+    )
+
+
+def _index_rows(releases: list[dict], groups: list[dict], tests: list[dict]) -> SearchIndex:
+    release_refs = {release["id"]: {**release, "priority": release["priority"] or 0} for release in releases}
+    group_refs = {group["id"]: {key: group[key] for key in GROUP_REF_KEYS} for group in groups}
+    # Point each row at its parent's UUID object instead of a copy per row, to keep the index small.
+    release_ids = {release_id: release_id for release_id in release_refs}
+    group_ids = {group_id: group_id for group_id in group_refs}
+    entries = [
+        *(_entry("release", release) for release in releases),
+        *(_entry("group", group, release_id=release_ids.get(group["release_id"], group["release_id"]))
+          for group in groups),
+        *(_entry("test", test, release_id=release_ids.get(test["release_id"], test["release_id"]),
+                 group_id=group_ids.get(test["group_id"], test["group_id"]),
+                 test_metadata=dict(test["test_metadata"]) if test["test_metadata"] else None)
+          for test in tests),
+    ]
+    index = SearchIndex(
+        entries=entries,
+        by_id={entry.id: entry for entry in entries},
+        releases=release_refs,
+        groups=group_refs,
+        built_at=time.monotonic(),
+    )
+    entries.sort(key=lambda entry: _order_key(entry, index))
+    return index
+
+
+async def _build_index() -> SearchIndex:
+    releases, groups, tests = await asyncio.gather(
+        select_rows(ArgusRelease.find(), *RELEASE_COLUMNS),
+        select_rows(ArgusGroup.find(), *GROUP_COLUMNS),
+        select_rows(ArgusTest.find(), *TEST_COLUMNS),
+    )
+    return await asyncio.to_thread(_index_rows, releases, groups, tests)
+
+
+def _is_stale(index: SearchIndex | None) -> bool:
+    return index is None or time.monotonic() - index.built_at >= INDEX_TTL
+
+
+def _own_release(entry: IndexEntry, index: SearchIndex) -> dict | None:
+    return index.releases.get(entry.id if entry.type == "release" else entry.release_id)
+
+
+def _own_group(entry: IndexEntry, index: SearchIndex) -> dict | None:
+    return index.groups.get(entry.id if entry.type == "group" else entry.group_id)
+
+
+def _in_scope(entry: IndexEntry, release_id: UUID | None) -> bool:
+    return release_id is None or (entry.type != "release" and entry.release_id == release_id)
+
+
+def _status_scope(release_id: UUID | None, parsed: ParsedQuery, index: SearchIndex) -> dict | None:
+    if release_id:
+        return index.releases.get(release_id)
+    values = parsed.facets.get("release", ())
+    named = [release for release in index.releases.values()
+             if any(value in release["name"].lower() or value in (release["pretty_name"] or "").lower()
+                    for value in values)]
+    exact = [release for release in named
+             if any(value in (release["name"].lower(), (release["pretty_name"] or "").lower()) for value in values)]
+    return next((candidates[0] for candidates in (exact, named) if len(candidates) == 1), None)
+
+
+def _latest_assignee(test: dict) -> str | None:
+    assignee = test["last_runs"][0].get("assignee") if test["last_runs"] else None
+    return str(assignee) if assignee else None
+
+
+def stats_facts(stats: dict) -> dict[str, StatsFacts]:
+    if stats.get("dormant"):
+        return {}
+    return {
+        test_id: StatsFacts(
+            status=TestStatus(test["status"]).value,
+            investigation_status=TestInvestigationStatus(test["investigation_status"]).value,
+            assignee=_latest_assignee(test),
+        )
+        for group in stats["groups"].values() for test_id, test in group["tests"].items()
+    }
+
+
+async def _stats_lookup(release: dict, parsed: ParsedQuery) -> StatsLookup:
+    stats = await ReleaseStatsCollector(release_name=release["name"]).collect(
+        limited=False, force=False, include_no_version=True)
+    user_names = {}
+    if "assignee" in parsed.facets or "assignee" in parsed.excluded_facets:
+        users = await select_rows(User.find(), "id", "username", "full_name")
+        user_names = {str(user["id"]): f"{user['username']}\n{user['full_name'] or ''}".lower() for user in users}
+    return StatsLookup(facts=stats_facts(stats), user_names=user_names)
+
+
+def _visible(entry: IndexEntry, index: SearchIndex) -> bool:
+    group = index.groups.get(entry.group_id)
+    release = index.releases.get(entry.release_id)
+    return entry.enabled and (group is None or group["enabled"]) and (release is None or release["enabled"])
+
+
+def _stats_facet_matches(facts: StatsFacts | None, key: str, value: str, user_names: dict[str, str]) -> bool:
+    if facts is None:
+        return False
+    if key == "status":
+        return facts.status.startswith(value)
+    if key == "istatus":
+        return facts.investigation_status.startswith(value)
+    return facts.assignee is not None and value in user_names.get(facts.assignee, "")
+
+
+def _facet_matches(entry: IndexEntry, key: str, value: str, index: SearchIndex, stats: StatsLookup | None) -> bool:
+    if key == "type":
+        return entry.type == value
+    if key in STATS_FACETS:
+        return stats is not None and _stats_facet_matches(stats.facts.get(str(entry.id)), key, value, stats.user_names)
+    ref = _own_release(entry, index) if key == "release" else _own_group(entry, index)
+    return ref is not None and (value in ref["name"].lower() or value in (ref["pretty_name"] or "").lower())
+
+
+def _matches(entry: IndexEntry, parsed: ParsedQuery, index: SearchIndex, stats: StatsLookup | None) -> bool:
+    if stats is not None and entry.type != "test":
+        return False
+    haystack = entry.haystack
+    if not all(term in haystack for term in parsed.terms):
+        return False
+    if any(term in haystack for term in parsed.excluded_terms):
+        return False
+    if not _visible(entry, index):
+        return False
+    if not all(any(_facet_matches(entry, key, value, index, stats) for value in values)
+               for key, values in parsed.facets.items()):
+        return False
+    return not any(_facet_matches(entry, key, value, index, stats)
+                   for key, values in parsed.excluded_facets.items() for value in values)
+
+
+def _match_tier(term: str, display: str) -> int:
+    if not term or display == term:
+        return 0
+    if display.startswith(term):
+        return 1
+    position = display.find(term)
+    tier = 3 if position >= 0 else 4
+    while position > 0:
+        if not display[position - 1].isalnum():
+            return 2
+        position = display.find(term, position + 1)
+    return tier
+
+
+def _order_key(entry: IndexEntry, index: SearchIndex) -> tuple:
+    release = _own_release(entry, index) or {}
+    return (
+        TYPE_ORDER[entry.type],
+        release.get("dormant", False),
+        -release.get("priority", 0),
+        version_key(entry.pretty_name or entry.name),
+        str(entry.id),
+    )
+
+
+def _to_hit(entry: IndexEntry, index: SearchIndex) -> dict:
+    return {
+        "id": entry.id,
+        "type": entry.type,
+        "name": entry.name,
+        "pretty_name": entry.pretty_name,
+        "build_system_id": entry.build_system_id,
+        "enabled": entry.enabled,
+        "test_metadata": entry.test_metadata or {},
+        "release_id": entry.release_id,
+        "group_id": entry.group_id,
+        "release": index.releases.get(entry.release_id),
+        "group": index.groups.get(entry.group_id),
+    }
 
 
 class TestLookup:
+    __test__ = False
     ADD_ALL_ID = UUID("db6f33b2-660b-4639-ba7f-79725ef96616")
+    _index: SearchIndex | None = None
+    _index_lock: asyncio.Lock | None = None
+    _index_lock_loop: int | None = None
 
     @classmethod
     def index_mapper(cls, item: Document, type="test"):
@@ -47,14 +354,6 @@ class TestLookup:
         return next((run for run in runs if run is not None), None)
 
     @classmethod
-    def query_to_uuid(cls, query: str) -> UUID | None:
-        try:
-            uuid = UUID(query.strip())
-            return uuid
-        except ValueError:
-            return None
-
-    @classmethod
     async def resolve_run_test(cls, test_id: UUID) -> ArgusTest:
         try:
             test = await ArgusTest.get(id=test_id)
@@ -81,7 +380,8 @@ class TestLookup:
     @classmethod
     async def _dump_resolved(cls, resolver: Callable[[UUID], Awaitable[Document | None]],
                              entity_id: UUID | None) -> dict | None:
-        return (await resolver(entity_id)).model_dump() if entity_id else None
+        entity = await resolver(entity_id) if entity_id else None
+        return entity.model_dump() if entity else None
 
     @classmethod
     async def make_single_run_response(cls, run_id: UUID) -> list[dict[str, Any]]:
@@ -94,87 +394,62 @@ class TestLookup:
                 cls._dump_resolved(cls.resolve_run_group, run["group_id"]),
                 cls._dump_resolved(cls.resolve_run_release, run["release_id"]),
             )
-            if run["test"]:
-                name = run["test"]["name"]
-            run["name"] = f"{name}#{run['build_number']}"
+            test_name = run["test"]["name"] if run["test"] else ""
+            run["name"] = f"{test_name}#{run['build_number']}"
 
             return [run]
 
         return []
 
     @classmethod
-    async def test_lookup(cls, query: str, release_id: UUID | str = None):
-        if release_id:
-            release_id = UUID(release_id) if isinstance(release_id, str) else release_id
-        if uuid := cls.query_to_uuid(query):
-            return await cls.make_single_run_response(uuid)
+    def _lock(cls) -> asyncio.Lock:
+        loop_id = id(asyncio.get_running_loop())
+        if cls._index_lock is None or cls._index_lock_loop != loop_id:
+            cls._index_lock, cls._index_lock_loop = asyncio.Lock(), loop_id
+        return cls._index_lock
 
-        def check_visibility(entity: dict):
-            if entity["type"] == "release" and release_id:
-                return False
-            if not entity["enabled"]:
-                return False
-            if entity.get("group") and not entity["group"]["enabled"]:
-                return False
-            if entity.get("release") and not entity["release"]["enabled"]:
-                return False
-            return True
+    @classmethod
+    async def _get_index(cls) -> SearchIndex:
+        index = cls._index
+        if _is_stale(index):
+            async with cls._lock():
+                index = cls._index
+                if _is_stale(index):
+                    index = cls._index = await _build_index()
+        return index
 
-        def facet_extraction(query: str) -> str:
-            extractor = re.compile(r"(?:(?P<name>(?:release|group|type)):(?P<value>\"?[\w\d\.\-]*\"?))")
-            facets = re.findall(extractor, query)
+    @classmethod
+    def clear_index(cls) -> None:
+        cls._index = None
 
-            return (re.sub(extractor, "", query).strip(), facets)
+    @classmethod
+    async def _lookup_uuid(cls, entity_id: UUID, index: SearchIndex) -> list[dict]:
+        if entry := index.by_id.get(entity_id):
+            return [_to_hit(entry, index)]
+        return await cls.make_single_run_response(entity_id)
 
-        def type_facet_filter(item: dict, key: str, facet_query: str):
-            entity_type: str = item[key]
-            return facet_query.lower() == entity_type
+    @classmethod
+    async def test_lookup(cls, query: str, release_id: UUID | str | None = None,
+                          limit: int | None = None, offset: int = 0) -> tuple[list[dict], int]:
+        if isinstance(release_id, str):
+            release_id = UUID(release_id) if release_id else None
+        parsed = parse_query(query)
+        index = await cls._get_index()
+        if parsed.uuid:
+            hits = await cls._lookup_uuid(parsed.uuid, index)
+            return (hits if limit is None else hits[offset:offset + limit]), len(hits)
 
-        def facet_filter(item: dict, key: str, facet_query: str):
-            if entity := item.get(key):
-                name: str = entity.get("pretty_name") or entity.get("name")
-                return facet_query.lower() in name.lower() if name else False
-            return False
-
-        def facet_wrapper(query_func: Callable[[dict], bool], facet_query: str, facet_type: str) -> bool:
-            def inner(item: dict, query: str):
-                return query_func(item, query) and facet_funcs[facet_type](item, facet_type, facet_query)
-            return inner
-
-        facet_funcs = {
-            "type": type_facet_filter,
-            "release": facet_filter,
-            "group": facet_filter,
-        }
-
-        def index_searcher(item, query: str):
-            name: str = item["pretty_name"] or item["name"]
-            return unquote(query).lower() in name.lower() if query else True
-
-        text_query, facets = facet_extraction(query)
-        search_func = index_searcher
-        for facet, value in facets:
-            if facet in facet_funcs.keys():
-                search_func = facet_wrapper(query_func=search_func, facet_query=value, facet_type=facet)
-
-        tests_query = ArgusTest.find()
-        groups_query = ArgusGroup.find()
-        if release_id:
-            tests_query = tests_query.filter(release_id=release_id)
-            groups_query = groups_query.filter(release_id=release_id)
-            releases_query = ArgusRelease.get(id=release_id)
-        else:
-            releases_query = ArgusRelease.find().all()
-        releases, all_tests, all_groups = await asyncio.gather(releases_query, tests_query.all(), groups_query.all())
-        all_releases = [releases] if release_id else releases
-        release_by_id = {release.id: partial(cls.index_mapper, type="release")(release) for release in all_releases}
-        group_by_id = {group.id: partial(cls.index_mapper, type="group")(group) for group in all_groups}
-        index = [cls.index_mapper(t) for t in all_tests]
-        index = [*release_by_id.values(), *group_by_id.values(), *index]
-        for item in index:
-            item["group"] = group_by_id.get(item.get("group_id"))
-            item["release"] = release_by_id.get(item.get("release_id"))
-
-        results = filter(partial(search_func, query=text_query), index)
-
-        return [{"id": cls.ADD_ALL_ID, "name": "Add all...", "type": "special"}, *list(res for res in results if check_visibility(res))]
+        stats_query = any(key in parsed.facets or key in parsed.excluded_facets for key in STATS_FACETS)
+        scope = _status_scope(release_id, parsed, index) if stats_query else None
+        stats = await _stats_lookup(scope, parsed) if scope else None
+        matches = [] if stats_query and scope is None else [
+            entry for entry in index.entries
+            if _in_scope(entry, release_id) and _matches(entry, parsed, index, stats)
+        ]
+        first_term = parsed.terms[0] if parsed.terms else ""
+        # The entries are stored in _order_key order and the sort is stable, so ties keep that order.
+        ranked = sorted(matches, key=lambda entry: _match_tier(first_term, (entry.pretty_name or entry.name).lower()))
+        if limit is None:
+            add_all = {"id": cls.ADD_ALL_ID, "name": "Add all...", "type": "special"}
+            return [add_all, *(_to_hit(entry, index) for entry in ranked)], len(matches)
+        return [_to_hit(entry, index) for entry in ranked[offset:offset + limit]], len(matches)

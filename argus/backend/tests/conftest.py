@@ -30,6 +30,7 @@ import pytest
 
 from argus.backend.plugins.loader import all_plugin_models, all_plugin_types
 from argus.backend.plugins.sct.service import SCTService
+from argus.backend.service import test_lookup as lookup
 from argus.backend.service.issue_service import IssueService
 from argus.backend.service.jenkins_service import JenkinsService
 from argus.backend.service.testrun import TestRunService
@@ -218,6 +219,11 @@ g = _RequestContextShim()
 def test_user_context(argus_db, logged_in_user):
     g.user = logged_in_user
     yield
+
+
+@fixture(autouse=True)
+def _clear_search_index():
+    lookup.TestLookup.clear_index()
 
 
 @fixture(scope='session')
