@@ -214,7 +214,7 @@ The query grammar:
 ```
 query   := token*            # tokens split on whitespace; "..." keeps spaces
 token   := ["-"] (facet | term)
-facet   := ("release" | "group" | "type" | "issue" | "status" | "istatus" | "assignee") ":" value
+facet   := ("release" | "group" | "type" | "issue" | "config" | "status" | "istatus" | "assignee") ":" value
 value   := quoted | non-space+
 term    := quoted | non-space+
 ```
@@ -233,7 +233,17 @@ term    := quoted | non-space+
   value that names exactly one, and then match tests only. Without one release
   the query matches nothing.
 - `issue:<KEY>` returns the runs linked to that Jira issue, newest first, from
-  the issue links service, and ignores every other token and `releaseId`.
+  the issue links service, across releases: it ignores `releaseId`.
+- `config:<name>=<value>` returns the runs whose config parameter has that
+  value, case kept; a name that is the unique dotted suffix of a stored name,
+  such as `backend`, stands for it. Repeating a name ORs, different names AND.
+  `config:<name>` asks for the parameter to be set and needs `issue:`.
+- Under `issue:` or `config:` the rest of the query narrows the runs: words,
+  `release:` and `group:` match the run's test; `status:`, `istatus:` and
+  `assignee:` match the run; `type:run` keeps them. `issue:` with `config:`
+  narrows the issue's runs. `config:` alone inside one release narrows each
+  test's last five runs from the stats snapshot, and without a release reads at
+  most 500 runs of the value.
 - A `http(s)://…/job/a/job/b/…` token becomes the path `a/b/…`.
 - A query that is one UUID resolves a release, group or test first, then a
   run. It never returns the "Add all..." row.
@@ -332,7 +342,13 @@ def summarize_release_stats(stats: dict) -> dict: ...
   snapshot per query. (build)
 - The status facets match a prefix, not a substring, so `istatus:investigated`
   does not match `not_investigated`. (build)
-- `issue:` names one issue, as a UUID names one entity, so it ignores the rest
-  of the query and the release scope: an issue's runs span releases. (build)
+- `issue:` ignores the release scope, because an issue's runs span releases.
+  (build)
+- The rest of the query narrows the runs of `issue:` and `config:`, so the two
+  combine with each other and with the other facets. (build)
+- `config:` is release-aware: inside a release it narrows the runs the stats
+  snapshot keeps, which is bounded and newest first, and outside one it caps the
+  read at 500 runs, because a common value holds tens of thousands of runs in
+  random order. (build)
 - Search results take their status indicators from the stats the sidebar
   already holds, so the search request does no extra work for them. (build)

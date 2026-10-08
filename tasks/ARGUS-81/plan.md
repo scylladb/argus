@@ -528,7 +528,42 @@ stays in every plan built from a spec.
 - [x] Run the verify sequence.
 - [x] Committed in 5d79b54a `feature(search)`, c4a9be50 `improvement(cli/search)`, 62c80e4e `improvement(workspace)` and fa5e0a4b `docs(api-usage)`.
 
-## Task 9 — Documentation
+## Task 9 — The config facet and facets over runs
+
+**Files:**
+- Modify: `argus/backend/service/test_lookup.py`, `cli/cmd/search/root.go`, `frontend/WorkArea/Sidebar/SidebarSearch.svelte`, `docs/api_usage.md`
+- Test: `argus/backend/tests/test_query_parser.py`, `argus/backend/tests/planner_api/test_planner_api.py`, `argus/backend/tests/issues/test_issues.py`, `frontend/WorkArea/Sidebar/SidebarSearch.test.ts`
+
+**Internals:**
+- **`ParsedQuery.configs`:** `(name, value | None)` pairs, case kept; `-config:`
+  is dropped.
+- **`_resolve_param_name(name, names)`:** an exact name, or the one stored name
+  that ends in `.<name>`. `_config_filters` reads the name catalogue once and
+  orders names with values before bare names.
+- **`RunRow`** and its sources:
+  - `_issue_rows(links)`;
+  - `_snapshot_rows(stats)`, each test's `last_runs`;
+  - `_resolve_runs(ids)`, one indexed read per run through the plugin models,
+    with `RUN_COLUMNS`.
+- **`_lookup_runs`:**
+  1. Takes the base runs from `issue:`, or from the scoped release's snapshot,
+     or from `_config_partition_runs`, capped at `CONFIG_RUN_LIMIT = 500`.
+  2. Narrows them with `_narrow_by_configs`, which builds on
+     `RunConfigParamService.narrow_run_ids`.
+  3. Fetches `investigation_status` and `assignee` only for `istatus:` or
+     `assignee:`.
+  4. Filters with `_run_matches` and sorts newest first.
+- **`SidebarSearch`:** keeps the release chip for `config:`, and explains an
+  empty `config:` result.
+
+- [x] Write the failing tests: the parser forms (case, bare name, quotes, `=` in values, exclusion); name resolution; scoped and global config runs, newest first; status, word and type narrowing; OR of one name; a bare name alone; `issue:` with `config:` and `status:`; the config hint and chip.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Check `config:backend=gce` and its combinations on the dev data through the CLI and the sidebar.
+- [x] Run the verify sequence.
+- [x] Committed in 2c8193ff `feature(search)`, 514c66ac `improvement(cli/search)`, 4b5d50c6 `improvement(workspace)` and 8c54aab0 `docs(api-usage)`.
+
+## Task 10 — Documentation
 
 **Files:**
 - Modify:
