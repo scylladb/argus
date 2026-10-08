@@ -41,8 +41,12 @@
     const scopeId = $derived(activeScope?.id ?? null);
     const openSet = $derived(new Set(openIds));
     const issueQuery = $derived(/(^|\s)issue:/i.test(query));
+    const configQuery = $derived(/(^|\s)config:/i.test(query));
     const emptyMessage = $derived.by(() => {
         if (issueQuery) return "No runs are linked to that issue. issue: takes a Jira key such as SCT-1234.";
+        if (configQuery) {
+            return "No runs match. config: takes name=value, such as config:backend=aws. Inside a release it looks at each test's last five runs, outside one at up to 500 runs of a value.";
+        }
         if (!scopeId && /(^|\s)-?(status|istatus|assignee):/i.test(query)) {
             return "status:, istatus: and assignee: work inside one release. Open a release or add release:<name>.";
         }

@@ -162,6 +162,15 @@ describe("SidebarSearch", () => {
         expect(screen.queryByText(/in scylla-master/)).toBeNull();
     });
 
+    it("keeps the release scope for a config search and explains an empty result", async () => {
+        answerWith({ hits: [], total: 0 });
+        render(SidebarSearch, { props: { scope, onPick: vi.fn() } });
+        await search("config:backend=aws status:failed");
+
+        await waitFor(() => expect(screen.getByText(/config: takes name=value/)).toBeTruthy(), { timeout: 2000 });
+        expect(screen.getByText(/in scylla-master/)).toBeTruthy();
+    });
+
     it("marks the hits already open in the panel", async () => {
         answerWith({ hits: [HIT, OTHER], total: 2 });
         render(SidebarSearch, { props: { scope: null, openIds: ["t1"], onPick: vi.fn() } });
