@@ -25,7 +25,7 @@ from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, User
 from argus.backend.rendering import url_for
 from argus.backend.service.argus_service import ArgusService, ScheduleUpdateRequest
 from argus.backend.service.results_service import ResultsService
-from argus.backend.service.stats import ReleaseStatsCollector
+from argus.backend.service.stats import ReleaseStatsCollector, summarize_release_stats
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import DEFAULT_API_TOKEN_DURATION, UserService, api_current_user
 from argus.backend.util.common import NoneIfEmpty
@@ -459,6 +459,18 @@ async def release_stats_v2(release: str = Query(...), limited: bool = Query(...)
     return APIResponse({
         "status": "ok",
         "response": stats
+    })
+
+
+@router.get("/release/stats/summary", name="api.release_stats_summary")
+async def release_stats_summary(release: str = Query(...), force: bool = Query(False),
+                                user: User = Depends(api_current_user)):
+    stats = await ReleaseStatsCollector(release_name=release).collect(
+        limited=False, force=force, include_no_version=True)
+
+    return APIResponse({
+        "status": "ok",
+        "response": summarize_release_stats(stats)
     })
 
 
