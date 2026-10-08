@@ -187,7 +187,9 @@ describe("Sidebar", () => {
         await waitFor(() => expect(row("alpha-test").getAttribute("tabindex")).toBe("0"));
         expect(document.activeElement).toBe(input);
 
-        await fireEvent.keyDown(await waitFor(() => row("alpha-test")), { key: "ArrowLeft" });
+        const picked = await waitFor(() => row("alpha-test"));
+        picked.focus();
+        await fireEvent.keyDown(picked, { key: "ArrowLeft" });
 
         await waitFor(() => expect(rowNames()).toEqual(["Longevity", "Core QA", "Core QA"]));
         await waitFor(() => expect(document.activeElement).toBe(row("Longevity")));
@@ -252,6 +254,36 @@ describe("Sidebar", () => {
         const option = await waitFor(() => screen.getByText("beta-test", { selector: "ul.options *" }), { timeout: 2000 });
 
         expect(option.closest("li")?.textContent).toContain("Status: failed.");
+    });
+
+    it("leaves the focus in the search when a slow list arrives", async () => {
+        let deliverGroups: (value: unknown) => void = () => {};
+        const fetchMock = serve();
+        const base = fetchMock.getMockImplementation()!;
+        fetchMock.mockImplementation((url: string) =>
+            url.startsWith("/api/v1/groups") ? new Promise((resolve) => (deliverGroups = resolve)).then(() => ok(GROUPS)) : base(url));
+        renderSidebar();
+
+        await fireEvent.click(await waitFor(() => row("scylla-master")));
+        const input = document.getElementById("workspace-search") as HTMLInputElement;
+        input.focus();
+        deliverGroups(null);
+
+        await waitFor(() => expect(rowNames()).toEqual(["Longevity", "Core QA", "Core QA"]));
+        expect(document.activeElement).toBe(input);
+    });
+
+    it("retries the failed stats of the release list on refresh", async () => {
+        let failing = true;
+        const fetchMock = serve({ stats: () => (failing ? Promise.reject(new Error("down")) : ok(SUMMARY)) });
+        renderSidebar();
+        await waitFor(() => expect(row("scylla-master").textContent).toContain("Stats unavailable"));
+
+        failing = false;
+        await fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+        await waitFor(() => expect(row("scylla-master").textContent).not.toContain("Stats unavailable"));
+        expect(fetchMock.mock.calls.filter(([url]) => (url as string).startsWith("/api/v1/release/stats")).length).toBe(2);
     });
 
     it("goes back up through the breadcrumb", async () => {

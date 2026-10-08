@@ -43,6 +43,7 @@
     const issueQuery = $derived(/(^|\s)issue:/i.test(query));
     const configQuery = $derived(/(^|\s)config:/i.test(query));
     const emptyMessage = $derived.by(() => {
+        if (refusal) return refusal;
         if (issueQuery) return "No runs are linked to that issue. issue: takes a Jira key such as SCT-1234.";
         if (configQuery) {
             return "No runs match. config: takes name=value, such as config:backend=aws. Inside a release it looks at each test's last five runs, outside one at up to 500 runs of a value.";
@@ -53,7 +54,24 @@
         return "Nothing matches";
     });
 
+    let refusal: string | null = $state(null);
+
     export const focus = () => input?.focus();
+
+    export const resetScope = () => {
+        widenedFrom = null;
+    };
+
+    const loadPage = async (params: { search: string; offset: number; limit: number }) => {
+        try {
+            const page = await searchPage(params, scopeId);
+            refusal = null;
+            return page;
+        } catch (error) {
+            refusal = error instanceof Error ? error.message : String(error);
+            return { options: [], hasMore: false };
+        }
+    };
 
     const hitPath = (hit: SearchHit): string =>
         [hit.release, hit.group]
@@ -94,7 +112,7 @@
             bind:open
             bind:input
             loadOptions={{
-                fetch: (params) => searchPage(params, scopeId),
+                fetch: loadPage,
                 debounceMs: 200,
                 batchSize: 30,
                 onOpen: false,

@@ -29,6 +29,7 @@
 
     const sidebar = new SidebarState();
     let drawer: HTMLElement | undefined = $state();
+    let searchBox: HTMLElement | undefined = $state();
     let search: SidebarSearch | undefined = $state();
     let activeId: string | null = $state(null);
     let focusTarget: string | null = $state(null);
@@ -76,7 +77,10 @@
         const { id, move } = pending;
         pending = null;
         const index = Math.max(0, id === FIRST_ROW ? 0 : entries.findIndex((entry) => entry.item.id === id));
-        if (move) {
+        const focused = document.activeElement;
+        const focusIsFree = !focused || focused === document.body ||
+            (!!drawer?.contains(focused) && !searchBox?.contains(focused));
+        if (move && focusIsFree) {
             focusRow(index);
         } else {
             activeId = entries[index].item.id;
@@ -86,6 +90,7 @@
     const navigated = (id: string | typeof FIRST_ROW = FIRST_ROW, { move = true } = {}) => {
         activeId = focusTarget = null;
         pending = { id, move };
+        search?.resetScope();
     };
 
     const activate = (entry: Entry | undefined) => {
@@ -138,7 +143,13 @@
     };
 
     const refresh = () => {
-        if (sidebar.release) sidebar.ensureStats(sidebar.release, { force: true });
+        if (sidebar.release) {
+            sidebar.ensureStats(sidebar.release, { force: true });
+        } else {
+            for (const release of sidebar.releases.data ?? []) {
+                if (sidebar.stats.get(release.name)?.error) sidebar.ensureStats(release);
+            }
+        }
         reload();
     };
 
@@ -262,7 +273,7 @@
         <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#workspace-sidebar" aria-label="Close"></button>
     </div>
     <div class="sidebar-panel d-flex flex-column flex-grow-1 bg-body border rounded shadow-sm">
-        <div class="p-2 border-bottom">
+        <div class="p-2 border-bottom" bind:this={searchBox}>
             <SidebarSearch bind:this={search} scope={sidebar.release} {openIds} statsFor={hitStats} onPick={pick} />
         </div>
         <div class="d-flex align-items-center gap-2 px-3 py-2 border-bottom">
