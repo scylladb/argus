@@ -12,20 +12,23 @@ from uuid import UUID
 from coodie.aio import Document
 from coodie.exceptions import DocumentNotFound
 
+from argus.backend.error_handlers import DataValidationError
 from argus.backend.models.run_config import NAME_BUCKET, RunConfigParam, RunConfigParamName
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, User
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.loader import all_plugin_models
 from argus.backend.service.issue_service import IssueService, IssueServiceException
 from argus.backend.service.run_config_params import ConfigParamFilter, RunConfigParamService
-from argus.backend.service.stats import ReleaseStatsCollector
+from argus.backend.service.stats import ReleaseStatsCollector, investigation_status_value, status_value
 from argus.backend.util.common import gather_limited, select_rows, version_key
-from argus.common.enums import TestInvestigationStatus, TestStatus
 
 INDEX_TTL = 60
 STATS_FACETS = ("status", "istatus", "assignee")
 FACET_KEYS = ("release", "group", "type", "issue", "config", *STATS_FACETS)
 CONFIG_RUN_LIMIT = 500
+MAX_QUERY_LENGTH = 1000
+MAX_QUERY_TOKENS = 24
+MAX_CONFIG_FILTERS = 8
 RUN_LOOKUP_CONCURRENCY = 50
 RUN_COLUMNS = ("id", "test_id", "status", "investigation_status", "assignee", "start_time", "build_id", "build_number")
 TYPE_ORDER = {"release": 0, "group": 1, "test": 2}
@@ -44,8 +47,11 @@ class ParsedQuery:
     facets: dict[str, tuple[str, ...]]
     excluded_facets: dict[str, tuple[str, ...]]
     uuid: UUID | None
-    issue_key: str | None
+    issue_keys: tuple[str, ...]
     configs: tuple[tuple[str, str | None], ...]
+
+    def has_positive_match(self) -> bool:
+        return bool(self.terms or self.facets or self.issue_keys or self.configs or self.uuid)
 
 
 @dataclass(slots=True, frozen=True)
@@ -117,13 +123,17 @@ def _unique(values: list[str]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(values))
 
 
-def _single_uuid(tokens: list[tuple[str, int]]) -> UUID | None:
-    if len(tokens) != 1:
-        return None
+def _as_uuid(text: str) -> UUID | None:
     try:
-        return UUID(tokens[0][0])
+        return UUID(text)
     except ValueError:
         return None
+
+
+def _single_uuid(tokens: list[tuple[str, int]]) -> UUID | None:
+    if len(tokens) != 1 or tokens[0][0].startswith("-"):
+        return None
+    return _as_uuid(tokens[0][0])
 
 
 def parse_query(query: str) -> ParsedQuery:
@@ -143,6 +153,8 @@ def parse_query(query: str) -> ParsedQuery:
         elif colon and len(key) < bare_length and key.lower() in FACET_KEYS:
             if value:
                 (excluded_facets if negated else facets)[key.lower()].append(value.lower())
+        elif text and negated and (excluded_id := _as_uuid(text)):
+            excluded_terms.append(str(excluded_id))
         elif text:
             (excluded_terms if negated else terms).append(unquote(_job_path(text) or text).lower())
     issue_keys = facets.pop("issue", [])
@@ -153,7 +165,7 @@ def parse_query(query: str) -> ParsedQuery:
         facets={key: _unique(values) for key, values in facets.items()},
         excluded_facets={key: _unique(values) for key, values in excluded_facets.items()},
         uuid=_single_uuid(tokens),
-        issue_key=issue_keys[0] if issue_keys else None,
+        issue_keys=_unique(issue_keys),
         configs=tuple(dict.fromkeys(configs)),
     )
 
@@ -248,8 +260,8 @@ def stats_facts(stats: dict) -> dict[str, StatsFacts]:
         return {}
     return {
         test_id: StatsFacts(
-            status=TestStatus(test["status"]).value,
-            investigation_status=TestInvestigationStatus(test["investigation_status"]).value,
+            status=status_value(test["status"]),
+            investigation_status=investigation_status_value(test["investigation_status"]),
             assignee=_latest_assignee(test),
         )
         for group in stats["groups"].values() for test_id, test in group["tests"].items()
@@ -299,9 +311,10 @@ async def _config_filters(configs: tuple[tuple[str, str | None], ...]) -> dict[s
 async def _narrow_by_configs(candidates: set[UUID], filters: dict[str, tuple[str | None, ...]]) -> set[UUID]:
     service = RunConfigParamService()
     for name, values in filters.items():
-        narrowed = await asyncio.gather(
-            *(service.narrow_run_ids(candidates, [ConfigParamFilter(name=name, value=value)]) for value in values))
-        candidates = set().union(*narrowed)
+        narrowed = set()
+        for value in values:
+            narrowed |= await service.narrow_run_ids(candidates, [ConfigParamFilter(name=name, value=value)])
+        candidates = narrowed
         if not candidates:
             break
     return candidates
@@ -313,7 +326,8 @@ async def _config_partition_runs(filters: dict[str, tuple[str | None, ...]]) -> 
         select_rows(RunConfigParam.find(name=name, value=value).limit(CONFIG_RUN_LIMIT), "run_id")
         for value in values
     ))
-    return {UUID(row["run_id"]) for batch in batches for row in batch}
+    run_ids = list(dict.fromkeys(UUID(row["run_id"]) for batch in batches for row in batch))
+    return set(run_ids[:CONFIG_RUN_LIMIT])
 
 
 def _as_datetime(value: datetime | str) -> datetime:
@@ -364,7 +378,7 @@ def _snapshot_rows(stats: dict) -> dict[UUID, RunRow]:
             for run in test["last_runs"]:
                 run_id = UUID(str(run["id"]))
                 rows[run_id] = RunRow(
-                    id=run_id, test_id=UUID(test_id), status=TestStatus(run["status"]).value,
+                    id=run_id, test_id=UUID(test_id), status=status_value(run["status"]),
                     start_time=_as_datetime(run["start_time"]), build_id=run.get("build_job_name"),
                     build_number=run.get("build_number"),
                     assignee=str(run["assignee"]) if run.get("assignee") else None,
@@ -403,7 +417,7 @@ def _matches(entry: IndexEntry, parsed: ParsedQuery, index: SearchIndex, stats: 
     haystack = entry.haystack
     if not all(term in haystack for term in parsed.terms):
         return False
-    if any(term in haystack for term in parsed.excluded_terms):
+    if any(term in haystack for term in parsed.excluded_terms) or str(entry.id) in parsed.excluded_terms:
         return False
     if not _visible(entry, index):
         return False
@@ -428,6 +442,15 @@ def _match_tier(term: str, display: str) -> int:
     return tier
 
 
+def _match_and_rank(index: SearchIndex, parsed: ParsedQuery, release_id: UUID | None,
+                    stats: StatsLookup | None) -> list[IndexEntry]:
+    matches = [entry for entry in index.entries
+               if _in_scope(entry, release_id) and _matches(entry, parsed, index, stats)]
+    first_term = parsed.terms[0] if parsed.terms else ""
+    # The entries are stored in _order_key order and the sort is stable, so ties keep that order.
+    return sorted(matches, key=lambda entry: _match_tier(first_term, (entry.pretty_name or entry.name).lower()))
+
+
 def _order_key(entry: IndexEntry, index: SearchIndex) -> tuple:
     release = _own_release(entry, index) or {}
     return (
@@ -445,7 +468,8 @@ def _run_matches(row: RunRow, parsed: ParsedQuery, index: SearchIndex, user_name
         return False
     if not all(term in test.haystack for term in parsed.terms):
         return False
-    if any(term in test.haystack for term in parsed.excluded_terms):
+    if any(term in test.haystack for term in parsed.excluded_terms) or {str(row.id), str(row.test_id)} & set(
+            parsed.excluded_terms):
         return False
     facts = StatsFacts(status=row.status, investigation_status=row.investigation_status or "", assignee=row.assignee)
 
@@ -607,12 +631,13 @@ class TestLookup:
         filters = await _config_filters(parsed.configs) if parsed.configs else {}
         if filters is None:
             return []
-        if parsed.issue_key:
-            try:
-                links = (await IssueService().get_issue_links(parsed.issue_key))["links"]
-            except IssueServiceException:
-                return []
-            rows = _issue_rows(links)
+        if parsed.issue_keys:
+            rows = {}
+            for key in parsed.issue_keys:
+                try:
+                    rows.update(_issue_rows((await IssueService().get_issue_links(key))["links"]))
+                except IssueServiceException:
+                    continue
         elif all(None in values for values in filters.values()):
             return []
         elif release := _single_release(release_id, parsed, index):
@@ -646,10 +671,18 @@ class TestLookup:
                           limit: int | None = None, offset: int = 0) -> tuple[list[dict], int]:
         if isinstance(release_id, str):
             release_id = UUID(release_id) if release_id else None
+        if len(query) > MAX_QUERY_LENGTH:
+            raise DataValidationError(f"A search query holds at most {MAX_QUERY_LENGTH} characters")
+        if len(_tokenize(query)) > MAX_QUERY_TOKENS:
+            raise DataValidationError(f"A search query holds at most {MAX_QUERY_TOKENS} words and facets")
         parsed = parse_query(query)
+        if len(parsed.configs) > MAX_CONFIG_FILTERS:
+            raise DataValidationError(f"A search query holds at most {MAX_CONFIG_FILTERS} config: values")
+        if not parsed.has_positive_match():
+            return [], 0
         index = await cls._get_index()
-        if parsed.issue_key or parsed.configs or parsed.uuid:
-            if parsed.issue_key or parsed.configs:
+        if parsed.issue_keys or parsed.configs or parsed.uuid:
+            if parsed.issue_keys or parsed.configs:
                 hits = await cls._lookup_runs(parsed, release_id, index)
             else:
                 hits = await cls._lookup_uuid(parsed.uuid, index)
@@ -658,14 +691,9 @@ class TestLookup:
         stats_query = any(key in parsed.facets or key in parsed.excluded_facets for key in STATS_FACETS)
         scope = _single_release(release_id, parsed, index) if stats_query else None
         stats = await _stats_lookup(scope, parsed) if scope else None
-        matches = [] if stats_query and scope is None else [
-            entry for entry in index.entries
-            if _in_scope(entry, release_id) and _matches(entry, parsed, index, stats)
-        ]
-        first_term = parsed.terms[0] if parsed.terms else ""
-        # The entries are stored in _order_key order and the sort is stable, so ties keep that order.
-        ranked = sorted(matches, key=lambda entry: _match_tier(first_term, (entry.pretty_name or entry.name).lower()))
+        ranked = [] if stats_query and scope is None else await asyncio.to_thread(
+            _match_and_rank, index, parsed, release_id, stats)
         if limit is None:
             add_all = {"id": cls.ADD_ALL_ID, "name": "Add all...", "type": "special"}
-            return [add_all, *(_to_hit(entry, index) for entry in ranked)], len(matches)
-        return [_to_hit(entry, index) for entry in ranked[offset:offset + limit]], len(matches)
+            return [add_all, *(_to_hit(entry, index) for entry in ranked)], len(ranked)
+        return [_to_hit(entry, index) for entry in ranked[offset:offset + limit]], len(ranked)

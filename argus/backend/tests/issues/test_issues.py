@@ -878,3 +878,16 @@ async def test_search_by_issue_key_narrows_its_runs_by_config_and_status(
     assert [hit["id"] for hit in on_aws["hits"]] == [str(failed_on_aws.id), str(run.id)]
     assert [hit["id"] for hit in failed["hits"]] == [str(failed_on_aws.id)]
     assert with_backend["total"] == 3
+
+
+async def test_search_by_two_issue_keys_lists_the_runs_of_either(
+        api_client, run: SCTTestRun, client_service: ClientService, testrun_service: TestRunService,
+        fake_test: ArgusTest, mocked_issue_service: IssueService, logged_in_user: User):
+    other_run = await submit_run(client_service, testrun_service, fake_test)
+    first_key, second_key = unique_jira_key(), f"OTHER-{time.time_ns() % 10**9}"
+    await link_jira_issue(mocked_issue_service, run, logged_in_user, first_key)
+    await link_jira_issue(mocked_issue_service, other_run, logged_in_user, second_key)
+
+    body = _search(api_client, query=f"issue:{first_key} issue:{second_key} issue:not-a-key", limit=10)
+
+    assert {hit["id"] for hit in body["hits"]} == {str(run.id), str(other_run.id)}

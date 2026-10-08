@@ -338,6 +338,51 @@ async def test_search_config_facet_with_only_a_name_matches_nothing_on_its_own(
     assert body == {"hits": [], "total": 0}
 
 
+def _search_error(api_client, **params) -> dict:
+    body = api_client.get("/api/v1/planning/search", params=params).json()
+    assert body["status"] == "error", body
+    return body
+
+
+@pytest.mark.parametrize("query", ["-longevity", "-type:group", "-issue:SCT-1", '"'])
+def test_search_with_nothing_to_match_returns_nothing(api_client, query):
+    assert _search(api_client, query=query, limit=10) == {"hits": [], "total": 0}
+
+
+async def test_search_excludes_an_entity_by_its_uuid(api_client, release_manager_service):
+    token = _search_token()
+    _, _, (kept, dropped) = await _release_tree(release_manager_service, [f"{token}-a", f"{token}-b"])
+
+    body = _search(api_client, query=f"{token} type:test -{dropped.id}", limit=10)
+
+    assert [hit["id"] for hit in body["hits"]] == [str(kept.id)]
+
+
+def test_search_refuses_a_query_with_too_many_words(api_client):
+    _search_error(api_client, query=" ".join(f"group:g{index}" for index in range(lookup.MAX_QUERY_TOKENS + 1)))
+
+
+def test_search_refuses_a_query_that_is_too_long(api_client):
+    _search_error(api_client, query="x" * (lookup.MAX_QUERY_LENGTH + 1))
+
+
+def test_search_refuses_too_many_config_values(api_client):
+    _search_error(api_client, query=" ".join(f"config:backend=v{index}" for index in range(lookup.MAX_CONFIG_FILTERS + 1)))
+
+
+async def test_search_config_facet_caps_the_runs_it_reads_across_values(
+        api_client, release_manager_service, client_service, monkeypatch):
+    monkeypatch.setattr(lookup, "CONFIG_RUN_LIMIT", 1)
+    token = _search_token()
+    _, _, (test,) = await _release_tree(release_manager_service, [f"{token}-a"])
+    await _run_with_config(client_service, test, "passed", backend=f"aws-{token}")
+    await _run_with_config(client_service, test, "passed", backend=f"gce-{token}")
+
+    body = _search(api_client, query=f"config:backend=aws-{token} config:backend=gce-{token}", limit=10)
+
+    assert body["total"] == 1
+
+
 async def test_search_status_facet_takes_its_release_from_a_release_facet(
         api_client, release_manager_service, client_service):
     token = _search_token()
