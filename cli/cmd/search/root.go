@@ -51,8 +51,13 @@ searches for its job path, a/b. A word made only of dashes, such as --, is
 plain text.
 
 A query that is a single UUID returns that release, group, test, or run.
-issue:<KEY> returns the runs linked to that Jira issue, newest first, and
-ignores the rest of the query and --release.
+issue:<KEY> returns the runs linked to that Jira issue, newest first, from
+every release. config:<name>=<value> returns the runs whose config parameter
+has that value; a short name such as backend stands for sct_config.backend.
+The rest of the query narrows those runs: words, release:, group:, and
+status:, istatus:, assignee: on the run itself. Without issue:, config: with
+--release looks at each test's last five runs, and without it reads at most
+500 runs of the value.
 
 Pass the whole query as a single shell-quoted argument, e.g.:
 
