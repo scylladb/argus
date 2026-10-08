@@ -159,7 +159,7 @@ exits 0.
 - [x] `uv run pre-commit run --all-files`
 - [x] Build the binary into the scratchpad and check that `argus issue --help` lists
       `runs`.
-- [ ] Against Argus: a key with linked runs as JSON, with `--text`, and with
+- [x] Against Argus: a key with linked runs as JSON, with `--text`, and with
       `--raw`. An unknown key such as `SCT-999999` prints `[]` and exits 0.
       `not-a-key` prints the API error and exits 1.
 - [x] Commit, with the boxes of this plan checked, after Komachi's review.
