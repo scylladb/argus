@@ -135,3 +135,12 @@ def test_a_summary_reads_a_missing_status_as_the_default():
 
     assert tests[ran_id]["investigation_status"] == "not_investigated"
     assert tests[never_ran_id]["status"] == "created"
+
+
+def test_search_facts_read_a_missing_status_as_the_default():
+    stats, _, ran_id, never_ran_id = _stats_with_missing_statuses()
+
+    facts = lookup.stats_facts(stats)
+
+    assert facts[ran_id].investigation_status == "not_investigated"
+    assert facts[never_ran_id].status == "created"

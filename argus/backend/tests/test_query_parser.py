@@ -124,14 +124,14 @@ def test_investigation_status_and_assignee_are_facets():
 def test_issue_key_is_taken_from_the_issue_facet():
     parsed = lookup.parse_query("longevity issue:SCT-717 status:failed")
 
-    assert parsed.issue_key == "sct-717"
+    assert parsed.issue_keys == ("sct-717",)
     assert "issue" not in parsed.facets
 
 
 def test_excluded_issue_key_is_ignored():
     parsed = lookup.parse_query("longevity -issue:SCT-717")
 
-    assert parsed.issue_key is None
+    assert parsed.issue_keys == ()
     assert parsed.excluded_facets == {}
 
 
@@ -163,3 +163,16 @@ def test_config_name_resolves_exactly_or_by_a_unique_dotted_suffix():
     assert lookup._resolve_param_name("backend", names) == "sct_config.backend"
     assert lookup._resolve_param_name("region", names) is None
     assert lookup._resolve_param_name("missing", names) is None
+
+
+def test_a_negated_uuid_is_an_exclusion_not_a_lookup():
+    entity_id = uuid4()
+
+    parsed = lookup.parse_query(f"-{str(entity_id).upper()}")
+
+    assert parsed.uuid is None
+    assert parsed.excluded_terms == (str(entity_id),)
+
+
+def test_repeated_issue_keys_are_all_kept():
+    assert lookup.parse_query("issue:SCT-1 issue:SCT-2").issue_keys == ("sct-1", "sct-2")
