@@ -147,8 +147,8 @@
                         {/if}
                     </span>
                     {#if option.hit.type === "test" && openSet.has(option.hit.id)}
-                        <span class="text-success-emphasis flex-shrink-0 mt-1" title="Open in the panel">
-                            <Fa icon={faCheck} /><span class="visually-hidden">Open in the panel</span>
+                        <span class="text-success-emphasis flex-shrink-0 mt-1" title="Open in the panel; pick it again to close it">
+                            <Fa icon={faCheck} /><span class="visually-hidden">Open in the panel; pick it again to close it</span>
                         </span>
                     {/if}
                 </span>
