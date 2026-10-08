@@ -395,7 +395,8 @@ such a query matches nothing. With one, only tests match.
 | `-azure`, `-release:2025.1` | Leaves out what the word or the facet matches |
 | `https://jenkins.example.com/job/a/job/b/` | The test whose build id is `a/b` |
 | A UUID | That release, group, test or run |
-| `issue:SCT-1234` | The runs linked to that Jira issue, newest first. It ignores the rest of the query and `releaseId` |
+| `issue:SCT-1234` | The runs linked to that Jira issue, newest first, across releases: it ignores `releaseId` |
+| `config:backend=aws` | Runs whose recorded config parameter has that value. `backend` stands for the one parameter whose name ends in `.backend`. Repeating a name matches any of its values; different names must all match. `config:backend` alone asks for the parameter to be set, and needs `issue:` beside it |
 
 Hits come ranked: an exact name match first, then a name that starts with the
 first word, then a word inside the name. Within each rank, releases come before
@@ -445,7 +446,16 @@ curl --request GET \
 }
 ```
 
-An `issue:` query returns run hits named `<test name>#<build number>` with
+`issue:` and `config:` return runs instead of releases, groups and tests, and
+the rest of the query narrows those runs: words and `release:`, `group:` match
+the run's test, `status:`, `istatus:` and `assignee:` match the run itself,
+and `type:run` keeps them. With `issue:`, `config:` narrows the issue's runs.
+Without `issue:`, `config:` inside one release (`releaseId`, or a `release:`
+value that names exactly one) looks at the last five runs of each test, as
+the release stats keep them; without a release it reads at most 500 runs of
+the value, newest first among those.
+
+An `issue:` or `config:` query returns run hits named `<test name>#<build number>` with
 their `status`, `start_time`, `build_number`, `test_id` and the `test`, `group`
 and `release` objects. An unknown key, or text that is not a Jira key, returns
 no hits.
