@@ -118,3 +118,20 @@ def test_search_facts_read_the_latest_run_from_either_shape():
 
 def test_search_facts_of_a_dormant_release_are_empty():
     assert lookup.stats_facts({"dormant": True}) == {}
+
+
+def _stats_with_missing_statuses() -> tuple[dict, str, str, str]:
+    group_id, ran_id, never_ran_id = str(uuid4()), str(uuid4()), str(uuid4())
+    stats = _as_snapshot(_fresh_stats(group_id, ran_id, never_ran_id))
+    stats["groups"][group_id]["tests"][ran_id]["investigation_status"] = None
+    stats["groups"][group_id]["tests"][never_ran_id]["status"] = None
+    return stats, group_id, ran_id, never_ran_id
+
+
+def test_a_summary_reads_a_missing_status_as_the_default():
+    stats, group_id, ran_id, never_ran_id = _stats_with_missing_statuses()
+
+    tests = summarize_release_stats(stats)["groups"][group_id]["tests"]
+
+    assert tests[ran_id]["investigation_status"] == "not_investigated"
+    assert tests[never_ran_id]["status"] == "created"
