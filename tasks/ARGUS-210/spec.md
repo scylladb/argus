@@ -47,6 +47,8 @@ each show an empty state.
   clone buttons. A run view rewrites the URL to `/tests/<plugin>/<run>/<tab>`
   on a tab change, outside the workspace.
 - Jira issue card (existing): renders the header with the delete action off.
+  The Jira and GitHub cards move to a two-line layout: the state, the key, the
+  labels and the actions on the first line, the summary across the second.
 - Status styles (existing): aborted gets its own background and button
   classes. The light theme keeps its color, and the dark theme lightens it.
 
@@ -176,6 +178,7 @@ interface Props { link: LinkedRun }
 | An issue with hundreds of links renders hundreds of rows | One request, plain rows, no run view until a row opens. Pagination follows the API when it gains parameters |
 | The new props change shared widgets | The defaults keep the title bar and the URL updates; tests cover both values |
 | The aborted color changes on every page that shows a status | The light theme keeps `$dark`. Only the dark theme changes, to a gray its backgrounds do not hide |
+| The card rework changes the issue cards on the run's issue tab and in the aggregated lists | Same content and actions; checked in both themes and at 600 px |
 
 ## Deferred work
 
@@ -185,6 +188,8 @@ interface Props { link: LinkedRun }
   from the key, and the issue card already renders by `subtype`.
 - Pagination, when the lookup gains parameters.
 - The Jira write-back of ARGUS-220 can point an issue to this URL.
+- One shared layout for the Jira and GitHub issue cards, which duplicate each
+  other.
 
 ## Decisions
 
@@ -211,3 +216,6 @@ interface Props { link: LinkedRun }
   run's own URL, so a refresh left the issue page. (build)
 - Aborted gets its own status classes. The Bootstrap dark color matched the
   dark theme's backgrounds and hid the status. (build)
+- The Jira and GitHub issue cards drop their fixed column widths for a
+  two-line layout. It fits narrow widths and gives the summary the full
+  width. It lands in a commit of its own. (build)

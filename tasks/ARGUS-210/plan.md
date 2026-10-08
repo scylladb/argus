@@ -407,9 +407,9 @@ A commit of its own.
 **Tests:** `frontend/Common/IssueCard.test.ts` and `frontend/Github/Issues.test.ts` render both
 cards and keep passing. No new test: the change is layout.
 
-- [ ] Rework both cards.
-- [ ] Run `yarn test`.
-- [ ] Check the cards on `/issues/<key>` and on a run's issue tab, in both themes and at 600 px.
+- [x] Rework both cards.
+- [x] Run `yarn test`.
+- [x] Check the cards on `/issues/<key>` and on a run's issue tab, in both themes and at 600 px.
 
 ## Task 9 — Verify
 
@@ -424,7 +424,7 @@ cards and keep passing. No new test: the change is layout.
   - `/issues/SCT1234`: the alert with the API message
   - logged out, `/issues/<key>`: the login page, then back to the issue page
   - the page at a narrow width and a wide width (`docs/standards/frontend/responsive.md`)
-- [ ] Hand the diff to the user for review. After approval, make two commits, each with the
+- [x] Hand the diff to the user for review. After approval, make two commits, each with the
   checked boxes of its tasks:
   - Tasks 1–7 as `feature(issues): …`
   - Task 8 as `improvement(frontend/issues): …`

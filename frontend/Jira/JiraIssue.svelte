@@ -89,36 +89,29 @@
 </script>
 
 <div class="row m-2">
-    <div class="col rounded p-2 bg-white shadow-sm">
-        <div class="d-flex">
-            <div class="ms-2 align-self-center flex-shrink-0" style="width: 10em;">
-                <div class="mb-1 py-1 shadow-sm rounded-pill d-inline-flex {JiraIssueColorMap[issue.state] || JiraIssueColorMap["new"]}">
-                    <div class="ms-2 me-1"><Fa icon={JiraIssueIcon[issue.state] || JiraIssueIcon["new"]} /></div>
-                    <div class="me-2">{issue.state}</div>
-                </div>
+    <div class="issue-card col rounded border p-2 bg-white">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <div class="py-1 rounded-pill d-inline-flex flex-shrink-0 {JiraIssueColorMap[issue.state] || JiraIssueColorMap["new"]}">
+                <div class="ms-2 me-1"><Fa icon={JiraIssueIcon[issue.state] || JiraIssueIcon["new"]} /></div>
+                <div class="me-2">{issue.state}</div>
             </div>
-            <div
-                class="ms-2 me-2"
-                style="width: 30em;"
-                title={issue.summary}
+            <a
+                target="_blank"
+                class="fw-bold text-nowrap link-body-emphasis link-underline-opacity-0 link-underline-opacity-75-hover"
+                href={issue.permalink}><Fa icon={faJira} /> {issue.key}</a
             >
-                <Fa icon={faJira} /> <a target="_blank" class="link-dark" href={issue.permalink}>{issue.summary}</a>
-                <div class="text-muted ms-auto me-2">{issue.key}</div>
-            </div>
-            <div class="ms-2 me-2">
-                {#each issue.labels as label (label.id)}
-                    <button
-                        class="align-items-center me-1 px-2 label-text border border-dark cursor-pointer"
-                        style="color: {Color(`${label2color(label)}`).isDark() ? 'white' : 'black'}; background-color: {label2color(label)};"
-                        onclick={() => {
-                            dispatch("labelClick", label);
-                        }}
-                    >
-                        <div>{label.name}</div>
-                    </button>
-                {/each}
-            </div>
-            <div class="ms-auto me-2 d-flex align-items-center gap-2">
+            {#each issue.labels as label (label.id)}
+                <button
+                    class="align-items-center px-2 label-text border border-dark cursor-pointer"
+                    style="color: {Color(`${label2color(label)}`).isDark() ? 'white' : 'black'}; background-color: {label2color(label)};"
+                    onclick={() => {
+                        dispatch("labelClick", label);
+                    }}
+                >
+                    <div>{label.name}</div>
+                </button>
+            {/each}
+            <div class="ms-auto d-flex align-items-center gap-2">
                 {#if Object.keys(users).length > 0}
                     <div
                         class="text-muted d-flex align-items-center"
@@ -162,6 +155,11 @@
                 {/if}
             </div>
         </div>
+        <a
+            target="_blank"
+            class="d-block mt-1 link-body-emphasis link-underline-opacity-0 link-underline-opacity-100-hover"
+            href={issue.permalink}>{issue.summary}</a
+        >
     </div>
 </div>
 
@@ -255,6 +253,10 @@
 </div>
 
 <style>
+    .issue-card {
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
     .label-text {
         font-size: 0.9em;
         font-weight: 500;
