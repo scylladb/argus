@@ -52,7 +52,7 @@ plain text.
 
 A query that is a single UUID returns that release, group, test, or run.
 issue:<KEY> returns the runs linked to that Jira issue, newest first, from
-every release. config:<name>=<value> returns the runs whose config parameter
+every release; repeat it for several issues. config:<name>=<value> returns the runs whose config parameter
 has that value; a short name such as backend stands for sct_config.backend.
 The rest of the query narrows those runs: words, release:, group:, and
 status:, istatus:, assignee: on the run itself. Without issue:, config: with
