@@ -2,6 +2,7 @@ import json
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from argus.backend.service import test_lookup as lookup
 from argus.backend.service.stats import summarize_release_stats
 from argus.backend.util.encoders import ArgusJSONProvider
 from argus.common import enums
@@ -98,3 +99,22 @@ def test_group_without_uninvestigated_tests_has_nothing_to_investigate():
 
 def test_dormant_release_passes_through():
     assert summarize_release_stats({"dormant": True}) == {"dormant": True}
+
+
+def test_search_facts_read_the_latest_run_from_either_shape():
+    group_id, ran_id, never_ran_id = str(uuid4()), str(uuid4()), str(uuid4())
+    fresh = _fresh_stats(group_id, ran_id, never_ran_id)
+    assignee = uuid4()
+    fresh["groups"][group_id]["tests"][ran_id]["last_runs"][0]["assignee"] = assignee
+
+    for stats in (fresh, _as_snapshot(fresh)):
+        facts = lookup.stats_facts(stats)
+
+        assert facts[ran_id] == lookup.StatsFacts(
+            status="failed", investigation_status="not_investigated", assignee=str(assignee))
+        assert facts[never_ran_id] == lookup.StatsFacts(
+            status="not_run", investigation_status="not_investigated", assignee=None)
+
+
+def test_search_facts_of_a_dormant_release_are_empty():
+    assert lookup.stats_facts({"dormant": True}) == {}

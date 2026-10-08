@@ -211,6 +211,12 @@ def test_search_finds_release_by_name(api_client, release):
     assert release.name in names
 
 
+def test_search_total_counts_the_matches_without_the_add_all_row(api_client, release):
+    body = api_client.get(f"/api/v1/views/search?query={release.name}").json()["response"]
+
+    assert body["total"] == len([hit for hit in body["hits"] if hit["type"] != "special"])
+
+
 def test_view_resolve_tests_returns_serialized_tests(api_client, view_name, fake_test):
     created = _create_view(api_client, view_name, items=[f"test:{fake_test.id}"])
     view_id = created["response"]["id"]

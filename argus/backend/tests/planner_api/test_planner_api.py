@@ -1,14 +1,17 @@
 import datetime
 import json
 import uuid
+from dataclasses import asdict
 
 import pytest
-from argus.backend.tests.conftest import g
+from argus.backend.tests.conftest import g, get_fake_test_run
 
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.web import ArgusUserView, User, UserRoles
+from argus.common.enums import TestInvestigationStatus
+from argus.backend.service import test_lookup as lookup
 
 
 @pytest.fixture
@@ -183,6 +186,237 @@ def test_search_finds_test_name(api_client, release, fake_test):
     assert res["status"] == "ok"
     names = {h.get("name") for h in res["response"]["hits"]}
     assert fake_test.name in names
+
+
+def _search(api_client, **params) -> dict:
+    res = api_client.get("/api/v1/planning/search", params=params).json()
+    assert res["status"] == "ok", res
+    return res["response"]
+
+
+def _search_token() -> str:
+    return f"q{uuid.uuid4().hex[:12]}"
+
+
+async def _release_tree(release_manager_service, test_names: list[str], priority: int = 0):
+    release = await release_manager_service.create_release(f"search_rel_{uuid.uuid4().hex}", None, False)
+    if priority:
+        await release_manager_service.edit_release({
+            "id": release.id, "pretty_name": None, "description": None, "valid_version_regex": None,
+            "enabled": True, "perpetual": False, "dormant": False, "priority": priority,
+        })
+    group = await release_manager_service.create_group(
+        f"search_grp_{uuid.uuid4().hex}", None, build_system_id=release.name, release_id=str(release.id))
+    tests = [
+        await release_manager_service.create_test(
+            name, None, f"{release.name}/{name}", "", group_id=str(group.id), release_id=str(release.id),
+            plugin_name="scylla-cluster-tests")
+        for name in test_names
+    ]
+    return release, group, tests
+
+
+async def _run_with_status(client_service, test, status: str) -> None:
+    run_type, run_req = get_fake_test_run(test)
+    await client_service.submit_run(run_type, asdict(run_req))
+    await client_service.update_run_status(run_type, run_req.run_id, status)
+
+
+async def test_search_status_facet_keeps_the_scoped_tests_in_that_status(
+        api_client, release_manager_service, client_service):
+    token = _search_token()
+    release, _, (failed, passed, never_ran) = await _release_tree(
+        release_manager_service, [f"{token}-a", f"{token}-b", f"{token}-c"])
+    await _run_with_status(client_service, failed, "failed")
+    await _run_with_status(client_service, passed, "passed")
+
+    only_failed = _search(api_client, query=f"{token} status:failed", releaseId=str(release.id), limit=10)
+    not_passed = _search(api_client, query=f"{token} -status:passed", releaseId=str(release.id), limit=10)
+
+    assert [hit["id"] for hit in only_failed["hits"]] == [str(failed.id)]
+    assert {hit["id"] for hit in not_passed["hits"]} == {str(failed.id), str(never_ran.id)}
+
+
+async def test_search_istatus_and_assignee_facets_read_the_latest_run(
+        api_client, release_manager_service, client_service, testrun_service, planner_user):
+    token = _search_token()
+    release, _, (mine, investigated) = await _release_tree(release_manager_service, [f"{token}-a", f"{token}-b"])
+    run_type, mine_run = get_fake_test_run(mine)
+    await client_service.submit_run(run_type, asdict(mine_run))
+    await testrun_service.change_run_assignee(mine.id, uuid.UUID(mine_run.run_id), planner_user.id, planner_user)
+    run_type, done_run = get_fake_test_run(investigated)
+    await client_service.submit_run(run_type, asdict(done_run))
+    await testrun_service.change_run_investigation_status(
+        investigated.id, uuid.UUID(done_run.run_id), TestInvestigationStatus.INVESTIGATED, planner_user)
+
+    by_assignee = _search(api_client, query=f"{token} assignee:{planner_user.username}",
+                          releaseId=str(release.id), limit=10)
+    by_full_name = _search(api_client, query=f'{token} assignee:"planner user"', releaseId=str(release.id), limit=10)
+    pending = _search(api_client, query=f"{token} istatus:not", releaseId=str(release.id), limit=10)
+    done = _search(api_client, query=f"{token} istatus:investigated", releaseId=str(release.id), limit=10)
+
+    assert [hit["id"] for hit in by_assignee["hits"]] == [str(mine.id)]
+    assert [hit["id"] for hit in by_full_name["hits"]] == [str(mine.id)]
+    assert [hit["id"] for hit in pending["hits"]] == [str(mine.id)]
+    assert [hit["id"] for hit in done["hits"]] == [str(investigated.id)]
+
+
+async def test_search_status_facet_takes_its_release_from_a_release_facet(
+        api_client, release_manager_service, client_service):
+    token = _search_token()
+    release, _, (failed, _) = await _release_tree(release_manager_service, [f"{token}-a", f"{token}-b"])
+    await _run_with_status(client_service, failed, "failed")
+
+    body = _search(api_client, query=f"{token} release:{release.name} status:failed", limit=10)
+
+    assert [hit["id"] for hit in body["hits"]] == [str(failed.id)]
+
+
+async def test_search_status_facet_without_one_release_matches_nothing(
+        api_client, release_manager_service, client_service):
+    token = _search_token()
+    _, _, (failed,) = await _release_tree(release_manager_service, [f"{token}-a"])
+    await _run_with_status(client_service, failed, "failed")
+
+    only_failed = _search(api_client, query=f"{token} status:failed", limit=10)
+    not_passed = _search(api_client, query=f"{token} -status:passed", limit=10)
+
+    assert only_failed == {"hits": [], "total": 0}
+    assert not_passed == {"hits": [], "total": 0}
+
+
+async def test_search_without_limit_leads_with_add_all_and_returns_the_cli_fields(
+        api_client, release_manager_service):
+    token = _search_token()
+    release, group, (test,) = await _release_tree(release_manager_service, [f"{token}-longevity"])
+
+    body = _search(api_client, query=token)
+
+    assert body["total"] == 1
+    assert body["hits"] == [
+        {"id": str(lookup.TestLookup.ADD_ALL_ID), "name": "Add all...", "type": "special"},
+        {
+            "id": str(test.id), "type": "test", "name": test.name, "pretty_name": None,
+            "build_system_id": test.build_system_id, "enabled": True, "test_metadata": {},
+            "release_id": str(release.id), "group_id": str(group.id),
+            "release": {"id": str(release.id), "name": release.name, "pretty_name": None, "enabled": True,
+                        "priority": 0, "dormant": False},
+            "group": {"id": str(group.id), "name": group.name, "pretty_name": None, "enabled": True},
+        },
+    ]
+
+
+async def test_search_pages_are_disjoint_and_total_counts_every_match(api_client, release_manager_service):
+    token = _search_token()
+    await _release_tree(release_manager_service, [f"{token}-{number}" for number in range(5)])
+
+    first = _search(api_client, query=token, limit=2, offset=0)
+    second = _search(api_client, query=token, limit=2, offset=2)
+
+    assert first["total"] == second["total"] == 5
+    assert [hit["type"] for hit in first["hits"] + second["hits"]] == ["test"] * 4
+    assert not {hit["id"] for hit in first["hits"]} & {hit["id"] for hit in second["hits"]}
+
+
+async def test_search_ranks_exact_then_prefix_then_word_then_substring_matches(
+        api_client, release_manager_service):
+    token = _search_token()
+    await _release_tree(release_manager_service, [f"x{token}", f"x-{token}", f"{token}-tail", token])
+
+    body = _search(api_client, query=token, limit=10)
+
+    assert [hit["name"] for hit in body["hits"]] == [token, f"{token}-tail", f"x-{token}", f"x{token}"]
+
+
+async def test_search_ranks_a_prioritized_release_above_the_same_name_elsewhere(
+        api_client, release_manager_service):
+    token = _search_token()
+    _, _, (plain,) = await _release_tree(release_manager_service, [token])
+    _, _, (prioritized,) = await _release_tree(release_manager_service, [token], priority=10)
+
+    body = _search(api_client, query=token, limit=10)
+
+    assert [hit["id"] for hit in body["hits"]] == [str(prioritized.id), str(plain.id)]
+
+
+async def test_search_with_release_id_returns_only_that_release(api_client, release_manager_service):
+    token = _search_token()
+    release, _, (inside,) = await _release_tree(release_manager_service, [token])
+    await _release_tree(release_manager_service, [token])
+
+    by_test = _search(api_client, query=token, releaseId=str(release.id), limit=10)
+    by_release = _search(api_client, query=release.name, releaseId=str(release.id), limit=10)
+
+    assert [hit["id"] for hit in by_test["hits"]] == [str(inside.id)]
+    assert {hit["type"] for hit in by_release["hits"]} == {"group", "test"}
+
+
+async def test_search_ors_a_repeated_facet_and_drops_excluded_terms(api_client, release_manager_service):
+    token = _search_token()
+    first, _, (in_first, _) = await _release_tree(release_manager_service, [f"{token}-aws", f"{token}-azure"])
+    second, _, (in_second, _) = await _release_tree(release_manager_service, [f"{token}-aws", f"{token}-azure"])
+    await _release_tree(release_manager_service, [f"{token}-aws"])
+
+    body = _search(api_client, query=f"{token} release:{first.name} release:{second.name} -azure type:test",
+                   limit=10)
+
+    assert {hit["id"] for hit in body["hits"]} == {str(in_first.id), str(in_second.id)}
+
+
+async def test_search_by_test_uuid_returns_that_test(api_client, release_manager_service):
+    _, _, (test,) = await _release_tree(release_manager_service, [_search_token()])
+
+    body = _search(api_client, query=str(test.id))
+
+    assert [(hit["id"], hit["type"]) for hit in body["hits"]] == [(str(test.id), "test")]
+    assert body["total"] == 1
+
+
+async def test_search_by_uuid_pages_like_any_other_query(api_client, release_manager_service):
+    _, _, (test,) = await _release_tree(release_manager_service, [_search_token()])
+
+    first = _search(api_client, query=str(test.id), limit=30, offset=0)
+    second = _search(api_client, query=str(test.id), limit=30, offset=30)
+
+    assert [hit["id"] for hit in first["hits"]] == [str(test.id)]
+    assert second == {"hits": [], "total": 1}
+
+
+async def test_search_by_run_uuid_names_the_run_after_its_test(api_client, client_service, fake_test):
+    run_type, run_request = get_fake_test_run(fake_test)
+    await client_service.submit_run(run_type, asdict(run_request))
+
+    (hit,) = _search(api_client, query=run_request.run_id)["hits"]
+
+    assert hit["type"] == "run"
+    assert hit["test"]["id"] == str(fake_test.id)
+    assert hit["name"] == f"{fake_test.name}#{hit['build_number']}"
+
+
+async def test_search_by_run_uuid_names_the_run_by_build_number_when_its_test_is_gone(
+        api_client, client_service, release_manager_service, fake_test):
+    run_type, run_request = get_fake_test_run(fake_test)
+    await client_service.submit_run(run_type, asdict(run_request))
+    await release_manager_service.delete_test(fake_test.id)
+
+    (hit,) = _search(api_client, query=run_request.run_id)["hits"]
+
+    assert hit["type"] == "run"
+    assert hit["test"] is None
+    assert hit["name"] == f"#{hit['build_number']}"
+
+
+async def test_search_sees_a_new_group_after_the_index_is_cleared(api_client, release_manager_service):
+    token = _search_token()
+    release, _, _ = await _release_tree(release_manager_service, [])
+    assert _search(api_client, query=token, limit=10)["total"] == 0
+
+    await release_manager_service.create_group(token, None, build_system_id=token, release_id=str(release.id))
+    assert _search(api_client, query=token, limit=10)["total"] == 0
+    lookup.TestLookup.clear_index()
+
+    hits = _search(api_client, query=token, limit=10)["hits"]
+    assert [(hit["name"], hit["type"]) for hit in hits] == [(token, "group")]
 
 
 def test_explode_group(api_client, group, fake_test):
