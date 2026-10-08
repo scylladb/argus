@@ -362,6 +362,165 @@ A key that Argus does not know is not an error:
 
 `linked_on` is `null` for links made before Argus recorded the time.
 
+```http
+GET /api/v1/planning/search
+```
+
+Searches releases, groups and tests by name. Each server worker answers from
+an index it keeps in memory and rebuilds once it is 60 seconds old, so a new
+release, group or test can take up to a minute to appear, and two requests may
+see indexes of different ages.
+
+| Parameter | Type | Description |
+| --------- | ---- | ------------|
+| query          | string     | The search query. The syntax follows this table. An empty query returns no hits            |
+| releaseId          | uuid     | Optional. Returns only the groups and tests of this release            |
+| limit          | integer     | Optional, at least 1. Returns one page of at most `limit` hits and leaves out the "Add all..." row            |
+| offset          | integer     | Optional, default 0. The number of hits to skip before the page starts            |
+
+The query is a list of words separated by spaces. Every word must match.
+
+| Token | Matches |
+| ----- | ------- |
+| `longevity` | Names, pretty names and build ids that contain the text, in any case |
+| `"cluster - tier1"` | The quoted text, spaces included |
+| `release:2026.1`, `group:longevity` | Entities whose release or group name contains the value. Quote a value that holds spaces. Repeating a key matches any of its values |
+| `type:test` | `release`, `group` or `test` |
+| `status:fail`, `istatus:not` | Tests whose latest status, or latest investigation status, starts with the value, as the release stats show them: `status:fail` finds `failed`, `istatus:not` finds `not_investigated` |
+| `assignee:alice` | Tests whose latest run is assigned to a user whose username or full name contains the value |
+
+`status:`, `istatus:` and `assignee:` read the stats of one release: the one in
+`releaseId`, or the one a `release:` value names exactly. Without one release
+such a query matches nothing. With one, only tests match.
+| `-azure`, `-release:2025.1` | Leaves out what the word or the facet matches |
+| `https://jenkins.example.com/job/a/job/b/` | The test whose build id is `a/b` |
+| A UUID | That release, group, test or run |
+| `issue:SCT-1234` | The runs linked to that Jira issue, newest first, across releases: it ignores `releaseId` |
+| `config:backend=aws` | Runs whose recorded config parameter has that value. `backend` stands for the one parameter whose name ends in `.backend`. Repeating a name matches any of its values; different names must all match. `config:backend` alone asks for the parameter to be set, and needs `issue:` beside it |
+
+Hits come ranked: an exact name match first, then a name that starts with the
+first word, then a word inside the name. Within each rank, releases come before
+groups and groups before tests, and a release with a higher priority comes
+first. `total` counts every match, so a client asks for the next page while
+`offset + hits` is below it.
+
+```sh
+curl --request GET \
+ --url 'https://argus.scylladb.com/api/v1/planning/search?query=longevity-50gb&limit=30' \
+ --header "Authorization: token YourTokenHere"
+```
+
+```json
+{
+  "response": {
+    "total": 14,
+    "hits": [
+      {
+        "id": "3f1c9a52-7d4e-4b8a-9c21-5e6f7a8b9c0d",
+        "type": "test",
+        "name": "longevity-50gb-3days-test",
+        "pretty_name": null,
+        "build_system_id": "scylla-master/longevity/longevity-50gb-3days-test",
+        "enabled": true,
+        "test_metadata": {},
+        "release_id": "5316e591-6a68-4814-b736-e294710d11e4",
+        "group_id": "b197bc8c-71ce-4832-910f-f6daf47857b0",
+        "release": {
+          "id": "5316e591-6a68-4814-b736-e294710d11e4",
+          "name": "scylla-master",
+          "pretty_name": null,
+          "enabled": true,
+          "priority": 10,
+          "dormant": false
+        },
+        "group": {
+          "id": "b197bc8c-71ce-4832-910f-f6daf47857b0",
+          "name": "longevity",
+          "pretty_name": "Cluster - Longevity Tests",
+          "enabled": true
+        }
+      }
+    ]
+  },
+  "status": "ok"
+}
+```
+
+A query holds at most 1000 characters, 24 words and facets, and 8 `config:`
+values; a longer one answers with a validation error. A query with nothing to
+match, such as only exclusions, returns no hits. `-<uuid>` leaves out that
+release, group, test or run, and repeating `issue:` lists the runs of every key.
+
+`issue:` and `config:` return runs instead of releases, groups and tests, and
+the rest of the query narrows those runs: words and `release:`, `group:` match
+the run's test, `status:`, `istatus:` and `assignee:` match the run itself,
+and `type:run` keeps them. With `issue:`, `config:` narrows the issue's runs.
+Without `issue:`, `config:` inside one release (`releaseId`, or a `release:`
+value that names exactly one) looks at the last five runs of each test, as
+the release stats keep them; without a release it reads at most 500 runs of
+the value, newest first among those.
+
+An `issue:` or `config:` query returns run hits named `<test name>#<build number>` with
+their `status`, `start_time`, `build_number`, `test_id` and the `test`, `group`
+and `release` objects. An unknown key, or text that is not a Jira key, returns
+no hits.
+
+A release hit has `null` for `release_id`, `group_id`, `release` and `group`.
+A group hit has `null` for `group_id` and `group`. A run hit, from a UUID query,
+carries the run fields with `test`, `group` and `release` objects.
+
+```http
+GET /api/v1/release/stats/summary
+```
+
+Returns the status counts of a release, of each of its groups and of each
+test, without the run details that `/api/v1/release/stats/v2` returns. It reads
+the same stored snapshot as the release dashboard.
+
+| Parameter | Type | Description |
+| --------- | ---- | ------------|
+| release          | string     | Release name            |
+| force          | boolean     | Optional, default false. Recomputes the stats and stores a new snapshot            |
+
+```json
+{
+  "response": {
+    "total": 20,
+    "created": 0,
+    "running": 1,
+    "failed": 3,
+    "test_error": 0,
+    "error": 0,
+    "passed": 12,
+    "aborted": 0,
+    "not_planned": 0,
+    "not_run": 4,
+    "to_investigate": 2,
+    "groups": {
+      "b197bc8c-71ce-4832-910f-f6daf47857b0": {
+        "total": 5,
+        "failed": 1,
+        "passed": 4,
+        "to_investigate": 1,
+        "tests": {
+          "3f1c9a52-7d4e-4b8a-9c21-5e6f7a8b9c0d": {
+            "status": "failed",
+            "investigation_status": "not_investigated",
+            "start_time": "2026-10-01T10:00:00.000Z"
+          }
+        }
+      }
+    }
+  },
+  "status": "ok"
+}
+```
+
+A group carries every status count, as the release does; the example shortens
+them. `to_investigate` counts the failed, test error and error tests nobody has
+investigated. `start_time` is `null` for a test that never ran. A dormant
+release answers `{"dormant": true}` unless it has a stored snapshot.
+
 ## Email reporting API
 
 ```http

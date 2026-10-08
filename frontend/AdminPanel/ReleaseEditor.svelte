@@ -1,5 +1,6 @@
 <script lang="ts">
     import { createEventDispatcher } from "svelte";
+    import { sendMessage } from "../Stores/AlertStore";
     import ReleaseDeletionConfirmationPopup from "./ReleaseDeletionConfirmationPopup.svelte";
     const dispatch = createEventDispatcher();
     let { releaseData = $bindable() } = $props();
@@ -7,6 +8,11 @@
     let awaitingConfirmation = $state(false);
 
     const handleReleaseEdit = function() {
+        const priority = releaseData.priority;
+        if (priority !== null && priority !== undefined && !(Number.isInteger(priority) && priority >= 0)) {
+            sendMessage("error", "The priority must be a whole number, 0 or more.", "ReleaseEditor::handleReleaseEdit");
+            return;
+        }
         dispatch("releaseEdit", releaseData);
     };
 
@@ -40,6 +46,18 @@
                     class="form-control"
                     placeholder="Example: 2024.1(.*)"
                     bind:value={releaseData.valid_version_regex}
+                />
+            </div>
+            <div class="form-group">
+                <label for="release-editor-priority" class="form-label">Priority (higher is listed first)</label>
+                <input
+                    id="release-editor-priority"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="0"
+                    class="form-control"
+                    bind:value={releaseData.priority}
                 />
             </div>
             <div class="form-group">

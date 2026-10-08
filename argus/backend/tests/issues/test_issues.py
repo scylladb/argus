@@ -810,3 +810,84 @@ def test_issue_links_endpoint_rejects_a_value_that_is_no_issue_key(api_client):
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["status"] == "error"
+
+
+def _search(api_client, **params) -> dict:
+    body = api_client.get("/api/v1/planning/search", params=params).json()
+    assert body["status"] == "ok", body
+    return body["response"]
+
+
+async def test_search_by_issue_key_lists_its_runs_across_the_release_scope(
+        api_client, run: SCTTestRun, client_service: ClientService, testrun_service: TestRunService,
+        fake_test: ArgusTest, mocked_issue_service: IssueService, logged_in_user: User):
+    newer_run = await submit_run(client_service, testrun_service, fake_test)
+    key = unique_jira_key()
+    await link_jira_issue(mocked_issue_service, run, logged_in_user, key)
+    await link_jira_issue(mocked_issue_service, newer_run, logged_in_user, key)
+
+    body = _search(api_client, query=f"issue:{key}", releaseId=str(uuid4()), limit=10)
+
+    assert body["total"] == 2
+    assert [hit["id"] for hit in body["hits"]] == [str(newer_run.id), str(run.id)]
+    hit = body["hits"][0]
+    assert hit["type"] == "run"
+    assert hit["name"] == f"{fake_test.name}#{newer_run.build_number}"
+    assert hit["status"] == newer_run.status
+    assert hit["test_id"] == str(fake_test.id)
+    assert hit["group"]["id"] == str(fake_test.group_id)
+    assert hit["release"]["id"] == str(fake_test.release_id)
+
+
+async def test_search_by_issue_key_pages_its_runs(
+        api_client, run: SCTTestRun, client_service: ClientService, testrun_service: TestRunService,
+        fake_test: ArgusTest, mocked_issue_service: IssueService, logged_in_user: User):
+    newer_run = await submit_run(client_service, testrun_service, fake_test)
+    key = unique_jira_key()
+    await link_jira_issue(mocked_issue_service, run, logged_in_user, key)
+    await link_jira_issue(mocked_issue_service, newer_run, logged_in_user, key)
+
+    second_page = _search(api_client, query=f"issue:{key}", limit=1, offset=1)
+
+    assert second_page["total"] == 2
+    assert [hit["id"] for hit in second_page["hits"]] == [str(run.id)]
+
+
+@pytest.mark.parametrize("key", ["NOBODY-424242", "not-a-key"])
+def test_search_by_an_unknown_or_invalid_issue_key_finds_nothing(api_client, key):
+    assert _search(api_client, query=f"issue:{key}", limit=10) == {"hits": [], "total": 0}
+
+
+async def test_search_by_issue_key_narrows_its_runs_by_config_and_status(
+        api_client, run: SCTTestRun, client_service: ClientService, testrun_service: TestRunService,
+        fake_test: ArgusTest, mocked_issue_service: IssueService, logged_in_user: User):
+    on_gce = await submit_run(client_service, testrun_service, fake_test)
+    failed_on_aws = await submit_run(client_service, testrun_service, fake_test)
+    key = unique_jira_key()
+    for linked in (run, on_gce, failed_on_aws):
+        await link_jira_issue(mocked_issue_service, linked, logged_in_user, key)
+    await ClientService.parse_config_values("sct_config", json.dumps({"backend": "aws"}), str(run.id))
+    await ClientService.parse_config_values("sct_config", json.dumps({"backend": "gce"}), str(on_gce.id))
+    await ClientService.parse_config_values("sct_config", json.dumps({"backend": "aws"}), str(failed_on_aws.id))
+    await client_service.update_run_status("scylla-cluster-tests", str(failed_on_aws.id), "failed")
+
+    on_aws = _search(api_client, query=f"issue:{key} config:backend=aws", limit=10)
+    failed = _search(api_client, query=f"issue:{key} config:backend=aws status:failed", limit=10)
+    with_backend = _search(api_client, query=f"issue:{key} config:backend", limit=10)
+
+    assert [hit["id"] for hit in on_aws["hits"]] == [str(failed_on_aws.id), str(run.id)]
+    assert [hit["id"] for hit in failed["hits"]] == [str(failed_on_aws.id)]
+    assert with_backend["total"] == 3
+
+
+async def test_search_by_two_issue_keys_lists_the_runs_of_either(
+        api_client, run: SCTTestRun, client_service: ClientService, testrun_service: TestRunService,
+        fake_test: ArgusTest, mocked_issue_service: IssueService, logged_in_user: User):
+    other_run = await submit_run(client_service, testrun_service, fake_test)
+    first_key, second_key = unique_jira_key(), f"OTHER-{time.time_ns() % 10**9}"
+    await link_jira_issue(mocked_issue_service, run, logged_in_user, first_key)
+    await link_jira_issue(mocked_issue_service, other_run, logged_in_user, second_key)
+
+    body = _search(api_client, query=f"issue:{first_key} issue:{second_key} issue:not-a-key", limit=10)
+
+    assert {hit["id"] for hit in body["hits"]} == {str(run.id), str(other_run.id)}

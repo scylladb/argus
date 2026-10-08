@@ -37,6 +37,7 @@
     "string-template": "^1.0.0",
     "svelte": "^5.46.4",
     "svelte-fa": "^4.0.4",
+    "svelte-multiselect": "11.8.0",
     "svelte-select": "5.8.3",
     "url-slug": "^4.0.1",
     "uuid": "^11.1.0",

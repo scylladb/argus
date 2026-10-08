@@ -2233,6 +2233,11 @@ svelte-floating-ui@1.5.8:
     "@floating-ui/core" "^1.5.0"
     "@floating-ui/dom" "^1.5.3"
 
+svelte-multiselect@11.8.0:
+  version "11.8.0"
+  resolved "https://registry.yarnpkg.com/svelte-multiselect/-/svelte-multiselect-11.8.0.tgz#be822ab19e56142a17d313cab81d581f139b13ea"
+  integrity sha512-B+y6UPZCB9/EWk9a0kxBkN4Z05bMj8g10N2RK6CNLrkRDD2iS1hLs1jJTWuQUDSbUofNChLk6kqx9nSrs8xzwQ==
+
 svelte-select@5.8.3:
   version "5.8.3"
   resolved "https://registry.yarnpkg.com/svelte-select/-/svelte-select-5.8.3.tgz#ba25f4982a5e500d2541e8e80d113228cb6f2250"

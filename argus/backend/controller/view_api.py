@@ -135,14 +135,14 @@ async def delete_view(payload: DeleteViewRequest, user: User = Depends(api_curre
 async def search_tests(query: str | None = Query(None), user: User = Depends(api_current_user)):
     service = UserViewService()
     if query:
-        res = await service.test_lookup(query)
+        hits, total = await service.test_lookup(query)
     else:
-        res = []
+        hits, total = [], 0
     return APIResponse({
         "status": "ok",
         "response": {
-            "hits": res,
-            "total": len(res)
+            "hits": hits,
+            "total": total
         }
     })
 

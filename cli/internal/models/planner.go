@@ -504,8 +504,8 @@ type SearchHit struct {
 type SearchHitList = []SearchHit
 
 // SearchResponse is the response payload for GET /planning/search. The backend
-// wraps the hits in {hits, total}; Total counts the synthetic "Add all..." row
-// too, so it is not used directly for display counts.
+// wraps the hits in {hits, total}; Total counts the matches, without the
+// synthetic "Add all..." row.
 type SearchResponse struct {
 	Hits  []SearchHit `json:"hits"`
 	Total int         `json:"total"`

@@ -661,6 +661,57 @@ class ReleaseStatsCollector:
         return result
 
 
+UNINVESTIGATED_FAILURES = (TestStatus.FAILED, TestStatus.TEST_ERROR, TestStatus.ERROR)
+
+
+def status_value(raw: str | None) -> str:
+    try:
+        return TestStatus(raw).value
+    except ValueError:
+        return TestStatus.CREATED.value
+
+
+def investigation_status_value(raw: str | None) -> str:
+    try:
+        return TestInvestigationStatus(raw).value
+    except ValueError:
+        return TestInvestigationStatus.NOT_INVESTIGATED.value
+
+
+def _status_counts(stats: dict) -> dict:
+    # A freshly collected dict keys these by enum and a snapshot by string; both match the string value.
+    not_investigated = stats.get(TestInvestigationStatus.NOT_INVESTIGATED.value, {})
+    return {
+        "total": stats["total"],
+        **{status.value: stats.get(status.value, 0) for status in TestStatus},
+        "to_investigate": sum(not_investigated.get(status.value, 0) for status in UNINVESTIGATED_FAILURES),
+    }
+
+
+def _test_summary(test: dict) -> dict:
+    start_time = test["start_time"] if test["last_runs"] else None
+    return {
+        "status": status_value(test["status"]),
+        "investigation_status": investigation_status_value(test["investigation_status"]),
+        "start_time": ArgusJSONProvider.default(start_time) if isinstance(start_time, datetime) else start_time,
+    }
+
+
+def summarize_release_stats(stats: dict) -> dict:
+    if stats.get("dormant"):
+        return stats
+    return {
+        **_status_counts(stats),
+        "groups": {
+            group_id: {
+                **_status_counts(group),
+                "tests": {test_id: _test_summary(test) for test_id, test in group["tests"].items()},
+            }
+            for group_id, group in stats["groups"].items()
+        },
+    }
+
+
 class ViewStatsCollector:
     def __init__(self, view_id: UUID, filter: str | None = None) -> None:
         self.view = None
