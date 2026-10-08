@@ -446,6 +446,11 @@ curl --request GET \
 }
 ```
 
+A query holds at most 1000 characters, 24 words and facets, and 8 `config:`
+values; a longer one answers with a validation error. A query with nothing to
+match, such as only exclusions, returns no hits. `-<uuid>` leaves out that
+release, group, test or run, and repeating `issue:` lists the runs of every key.
+
 `issue:` and `config:` return runs instead of releases, groups and tests, and
 the rest of the query narrows those runs: words and `release:`, `group:` match
 the run's test, `status:`, `istatus:` and `assignee:` match the run itself,
