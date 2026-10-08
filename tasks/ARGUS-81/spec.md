@@ -9,7 +9,8 @@ One search box replaces the three level filters and the panel search box. It
 calls `planning/search`, which now answers from a per-worker in-memory index,
 parses a richer query, and returns ranked pages.
 
-Releases gain an admin-set `priority` that orders them on the server. The
+Releases gain an admin-set `priority` that orders them on the server, and a
+viewer can pin releases in the browser to list them above everything else. The
 sidebar loads a compact stats summary only for prioritized releases, hovered
 releases and opened releases, and re-sorts tests whenever stats change.
 
@@ -42,6 +43,10 @@ order:
    before `scylla-2025.1`, and `manager-3.12` comes before `manager-3.9`.
 
 The Jinja `/releases` page uses the same service, so it gets the same order.
+
+The sidebar then lifts the releases this viewer pinned above all others, in
+server order. A pin toggle sits beside each release row. The pins live in the
+browser's `localStorage`; when storage is blocked they last for the page.
 
 **Search.** `TestLookup` keeps one `SearchIndex` per worker. The index is
 compact: one entry per release, group and test, plus parent refs and a
@@ -84,7 +89,8 @@ share a limiter of 2 concurrent requests.
 
 ```mermaid
 flowchart TD
-    E{Trigger} -->|page load, priority above 0| Q[limiter, 2 slots]
+    E{Trigger} -->|page load, priority above 0 or pinned| Q[limiter, 2 slots]
+    E -->|pinned now| Q
     E -->|hover or focus 150 ms| Q
     E -->|release opened| F
     Q --> F{dormant?}
@@ -118,7 +124,13 @@ A search hit drives the sidebar as follows:
 | test | Enter its group, focus the test and open it. |
 | run | Open its test and add the run. |
 
-The search scope is the current release. A chip switches it to all releases.
+A hit shows the status of its test, or the status bar of its group or
+release, whenever the sidebar holds that release's stats, which it always does
+inside a release. A run hit shows the run's own status. The dropdown stays open
+with its query after a pick, so several hits can be
+opened in a row; the pick moves the sidebar without taking the focus from the
+search. The search scope is the current release, held while the dropdown is
+open. A chip switches it to all releases.
 
 **Ordering within a level.**
 - Tests sort by status severity, then by name. The order is derived from the
@@ -177,7 +189,8 @@ offset    int >= 0, default 0
 ```
 
 Without `limit`, the response is the same as today: the "Add all..." row,
-then every hit, now ranked. The response body is:
+then every hit, now ranked. In both forms `total` counts the matches, without
+the "Add all..." row. The response body is:
 
 ```json
 {"status": "ok", "response": {"total": 341, "hits": [
@@ -200,19 +213,27 @@ The query grammar:
 ```
 query   := token*            # tokens split on whitespace; "..." keeps spaces
 token   := ["-"] (facet | term)
-facet   := ("release" | "group" | "type") ":" value
+facet   := ("release" | "group" | "type" | "status" | "istatus" | "assignee") ":" value
 value   := quoted | non-space+
 term    := quoted | non-space+
 ```
 
 - Terms AND together. Each term is a case-insensitive substring of the
   haystack.
-- Repeating a facet key ORs its values. Different keys AND together.
+- A `release:` or `group:` value is a case-insensitive substring of the name or
+  the pretty name. A release or group matches its own facet too. Repeating a
+  facet key ORs its values. Different keys AND together.
 - A leading `-` excludes the term or facet. A token made only of dashes is a
   plain term.
+- `status:` and `istatus:` match the start of a test's latest status and
+  latest investigation status in the release stats snapshot. `assignee:`
+  matches a substring of the username or full name of the latest run's
+  assignee. These three need one release, from `releaseId` or a `release:`
+  value that names exactly one, and then match tests only. Without one release
+  the query matches nothing.
 - A `http(s)://…/job/a/job/b/…` token becomes the path `a/b/…`.
 - A query that is one UUID resolves a release, group or test first, then a
-  run.
+  run. It never returns the "Add all..." row.
 
 `GET /api/v1/release/stats/summary?release=<name>&force=0|1` returns:
 
@@ -250,7 +271,7 @@ class TestLookup:
     @classmethod
     def clear_index(cls) -> None: ...
 
-# argus/backend/service/argus_service.py
+# argus/backend/util/common.py
 def version_key(name: str) -> tuple: ...
 
 # argus/backend/service/stats.py
@@ -290,3 +311,23 @@ def summarize_release_stats(stats: dict) -> dict: ...
 - The sidebar does not persist its position across page loads. Nothing asks
   for it. (spec)
 - Groups keep the name order. Tests sort by status, as they do today. (spec)
+- `version_key` lives in `util/common.py`. Both the release order and the
+  search ranking use it, and `test_lookup` cannot import `argus_service`
+  without a cycle. (build)
+- `total` counts the matches only. A page needs the match count to know
+  whether more pages follow, and no consumer counted the "Add all..." row.
+  (build)
+- A `release:` or `group:` facet also matches the release or group itself, so
+  `type:group group:longevity` finds the group. (build)
+- Viewers pin releases in the browser, and a pin lists the release above every
+  other, admin priority included. A pin is one viewer's convenience, so it
+  needs no server state. (build)
+- The search stays open after a pick, so one query can open several tests.
+  (build)
+- `status:`, `istatus:` and `assignee:` filter by the release stats snapshot,
+  so they work on one release only: every release would mean parsing every
+  snapshot per query. (build)
+- The status facets match a prefix, not a substring, so `istatus:investigated`
+  does not match `not_investigated`. (build)
+- Search results take their status indicators from the stats the sidebar
+  already holds, so the search request does no extra work for them. (build)

@@ -31,7 +31,8 @@ stays in every plan built from a spec.
   `docs(<scope>): …`, with `Task: ARGUS-81` as the last line and no co-author
   trailer.
 - The code stays uncommitted until Komachi has reviewed it. After the review,
-  commit one task per commit, in the order below.
+  the docs go in their own commits and the code in one commit per scope, as
+  Komachi chose; each task's last box names the commits that hold it.
 - Verify sequence, from `CLAUDE.md`:
   1. `uv run pre-commit run --all-files`
   2. `uv run pytest`
@@ -45,7 +46,8 @@ stays in every plan built from a spec.
 - Modify:
   - `argus/backend/models/web.py:164-177` (`ArgusRelease`)
   - `argus/backend/service/argus_service.py:130-134` (`get_releases`)
-  - `argus/backend/controller/admin_api.py:42-49` (`EditReleaseRequest`)
+  - `argus/backend/util/common.py`: `version_key`
+  - `argus/backend/controller/admin_api.py:42-49` (`EditReleaseRequest`; `pretty_name` becomes optional, because a release without one could not be edited and so could not get a priority)
   - `argus/backend/service/release_manager.py:16-23,182-195` (`ReleaseEditPayload`, `edit_release`)
   - `frontend/AdminPanel/ReleaseEditor.svelte:29-70`
 - Test:
@@ -56,7 +58,8 @@ stays in every plan built from a spec.
 **Internals:**
 - **`ArgusRelease`:** gains `priority: int = 0`.
 - **`version_key(name: str) -> tuple`:** a module function in
-  `argus_service.py`. It splits the name with `re.split(r"(\d+)", name)`. A
+  `argus/backend/util/common.py`, because `test_lookup` cannot import
+  `argus_service` without a cycle. It splits the name with `re.split(r"(\d+)", name)`. A
   text chunk becomes `(0, chunk.lower(), 0)` and a digit chunk becomes
   `(1, "", -int(chunk))`.
 - **`release_sort_key(release)`:** returns
@@ -70,16 +73,16 @@ stays in every plan built from a spec.
   `<input type="number" min="0" class="form-control" bind:value={releaseData.priority}>`,
   labelled "Priority (higher is listed first)".
 
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - `version_key` orders `scylla-2026.3 < scylla-2025.1`, `manager-3.12 < manager-3.9`, `enterprise-2024.1 < enterprise-2024.1/releng-testing`.
   - `release_sort_key` on `SimpleNamespace(priority=None, dormant=False, name=…)` sorts like priority 0.
   - an admin edit with `"priority": 5` makes `/api/v1/release/{id}/details` return 5, and `"priority": null` stores 0.
   - `GET /api/v1/releases` lists a priority-10 release first and a dormant release after every non-dormant one.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Run `uv run python -m argus.backend.cli sync-models` against the dev DB.
-- [ ] Run the verify sequence.
-- [ ] Commit `feature(release): order releases by an admin-set priority`, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Run `uv run python -m argus.backend.cli sync-models` against the dev DB.
+- [x] Run the verify sequence.
+- [x] Committed in 7e9fd00d `feature(release)`.
 
 ## Task 2 — Search index, query parser and paged search
 
@@ -91,6 +94,7 @@ stays in every plan built from a spec.
   - `argus/backend/service/views.py:98-99`
   - `argus/backend/tests/conftest.py`: an autouse fixture
   - `cli/cmd/search/root.go:31-43`: the help text
+  - `cli/internal/models/planner.go`: the `SearchResponse` comment on `total`
 - Test:
   - `argus/backend/tests/test_query_parser.py` (new, unit)
   - `argus/backend/tests/planner_api/test_planner_api.py`
@@ -148,7 +152,7 @@ stays in every plan built from a spec.
   `TestLookup.clear_index()`. It imports through
   `from argus.backend.service import test_lookup as lookup`.
 
-- [ ] Write the failing tests.
+- [x] Write the failing tests.
   - Parser:
     - `release:"scylla 5.4"` strips the quotes;
     - `release:scylla-2025.1/releng-testing` keeps the `/`;
@@ -168,12 +172,12 @@ stays in every plan built from a spec.
     - a test UUID query returns that test;
     - a group created after one search shows up after `clear_index()`.
   - `/api/v1/views/search` still returns `hits` and `total`.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Update the CLI help text: quoted facet values, AND terms, `-` exclusion, job paths and URLs, entity UUIDs.
-- [ ] Time the search against the dev DB, cold and warm, for `longevity-50gb` and `-` with `limit=30`, and note the numbers for the PR body.
-- [ ] Run the verify sequence, the CLI commands included.
-- [ ] Commit `feature(search): serve the test lookup from an in-memory index`, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Update the CLI help text: quoted facet values, AND terms, `-` exclusion, job paths and URLs, entity UUIDs.
+- [x] Time the search against the dev DB, cold and warm, for `longevity-50gb` and `-` with `limit=30`, and note the numbers for the PR body.
+- [ ] Run the verify sequence, the CLI commands included. Open: golangci-lint is not installed here, so `make lint` did not run; gofmt, `go vet` and `go test -race` pass.
+- [x] Committed in cda3f21d `feature(search)` and 414e922a `improvement(cli/search)`.
 
 ## Task 3 — Release stats summary route
 
@@ -199,17 +203,17 @@ stays in every plan built from a spec.
   `collect(limited=False, force=force, include_no_version=True)`, then
   `summarize_release_stats`.
 
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - a snapshot-shaped dict (string keys, ISO `start_time`) and a fresh dict (enum keys, `datetime`) produce the same summary;
   - a test with an empty `last_runs` gets `start_time: None`;
   - a group without `not_investigated` gets `to_investigate: 0`;
   - dormant passes through;
   - the route returns the summary for the session `release` fixture.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Compare the bytes of `stats/v2` and `stats/summary` for scylla-master on the dev DB, and time a cold summary with `force=1`.
-- [ ] Run the verify sequence.
-- [ ] Commit `feature(stats): add a compact release stats summary route`, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Compare the bytes of `stats/v2` and `stats/summary` for scylla-master on the dev DB, and time a cold summary with `force=1`.
+- [x] Run the verify sequence.
+- [x] Committed in 976b4163 `feature(stats)`.
 
 ## Task 4 — Sidebar state, sort and status summary
 
@@ -249,7 +253,11 @@ stays in every plan built from a spec.
       dormant releases and dedupes on `promise`.
   - Prefetch:
     - `limiter`: a small queue that runs at most 2 tasks at a time.
-    - `prefetch(release)` and `cancelPrefetch(release)`, with a 150 ms timer.
+    - `prefetch(release)` replaces any pending prefetch with a 150 ms timer
+      for this release. `cancelPrefetch()` drops it, and the list calls it on
+      `pointerleave`. A row never calls back on `blur` or `pointerleave`:
+      Chrome fires `blur` while a clicked row is torn down, and the row's
+      callback props then read as a Svelte sentinel.
     - `loadEager()` sends every release with `priority > 0` through the
       limiter.
 - **`StatusSummary.svelte`:**
@@ -263,7 +271,7 @@ stays in every plan built from a spec.
   - It carries `role="img"` and an `aria-label` that lists every non-zero
     status and the total.
 
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - `sortTests` puts failed before passed before not_run, and re-sorts when stats change;
   - `ensureStats`:
     - two concurrent calls send one fetch;
@@ -273,10 +281,10 @@ stays in every plan built from a spec.
     - a rejected fetch sets `error` and clears `promise`;
   - the limiter never runs more than 2 at once;
   - `StatusSummary` renders one segment per non-zero status and the expected aria-label, and renders nothing for `total: 0`.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence.
-- [ ] Commit `feature(workspace): add the sidebar state, sort and status summary`, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence.
+- [x] Committed in e52823a9 `feature(workspace)`.
 
 ## Task 5 — Sidebar components, drawer, and the panel without search
 
@@ -289,6 +297,7 @@ stays in every plan built from a spec.
 - Modify:
   - `frontend/WorkArea/WorkArea.svelte` (all)
   - `frontend/WorkArea/TestRunsPanel.svelte:1-111`
+  - `svelte.config.js`: skip the TypeScript script preprocessor for files under `node_modules`. Without a tsconfig there, it drops imports that only the markup uses, such as `highlight_matches` in svelte-multiselect. The Svelte 5 compiler strips their type annotations itself.
 - Delete:
   - `frontend/WorkArea/RunRelease.svelte`
   - `frontend/WorkArea/RunGroup.svelte`
@@ -315,7 +324,11 @@ stays in every plan built from a spec.
     - A fixed button `d-md-none position-fixed bottom-0 start-0 m-3` uses
       `data-bs-toggle="offcanvas"` and `data-bs-target="#workspace-sidebar"`.
       It has an `aria-label` and the `faBars` icon.
-  - **Keyboard.** The `<ul>` handles `onkeydown`:
+  - **Focus.** `activeId` names the row with `tabindex="0"`. `focusRow(index)`
+    sets `activeId` and bumps `focusRequest`, and the active row focuses its
+    own button in an `$effect`. A keyed `each` that binds button refs through
+    a prop loses them when rows are torn down.
+  - **Keyboard.** Each row passes `onkeydown` up:
     - ArrowUp, ArrowDown, Home and End move `activeIndex`.
     - Enter and ArrowRight call `activate(item)`.
     - ArrowLeft and Backspace call `up()` and restore the focus to the
@@ -329,15 +342,20 @@ stays in every plan built from a spec.
   - **Level header.**
     - Release level: a Dashboard link `/dashboard/{name}`, and Refresh, which calls `ensureStats(force)` and `loadGroups(force)`.
     - Group level: "Open all tests", which calls `onOpenTests`, and Refresh.
-  - **Desktop-only styles.** The sticky positioning and the `max-height`
-    live inside `@media (min-width: 768px)`.
+  - **Desktop-only styles.** The sticky positioning and a fixed
+    `height: calc(100vh - 2rem)` live inside `@media (min-width: 768px)`; the
+    runs panel gets the same `min-height`, so neither column jumps while a list
+    loads.
 - **`SidebarRow.svelte`.**
-  - Props: `kind`, `item`, `active`, `pressed`, `subtitle`, `stats`,
-    `statsState`, `assignees`, `onActivate`, `onHover`, `onLeave`.
+  - Props: `kind`, `name`, `active`, `pressed`, `subtitle`, `stats`,
+    `statsLoading`, `statsError`, `status`, `startTime`, `pinned`, `dormant`,
+    `assignees`, `focusRequest`, `onActivate`, `onKeydown`, `onFocus`,
+    `onHover`.
   - It renders a single `<button>` with `tabindex={active ? 0 : -1}`, and
     `aria-pressed` on test rows.
-  - Releases show a `faThumbtack` icon when `priority > 0`, and a
-    `text-bg-secondary` "dormant" badge.
+  - Releases show a `text-bg-secondary` "dormant" badge and a pin toggle, a
+    sibling `<button>` with `aria-pressed`, a fixed label and `tabindex` 0
+    only on the active row.
   - Tests show a status dot with a `visually-hidden` status label, and
     `timestampToISODate(start_time)` only when `start_time` is set.
 - **`SidebarSearch.svelte`.**
@@ -374,7 +392,7 @@ stays in every plan built from a spec.
     `ReleasePlannerGridView` block, and their imports.
   - `additionalRuns = $bindable({})`.
 
-- [ ] Write the failing tests, with `fetch` mocked per URL and `userList` stubbed:
+- [x] Write the failing tests, with `fetch` mocked per URL and `userList` stubbed:
   - clicking a release shows its groups and the breadcrumb `Releases › <release>`;
   - ArrowDown then Enter drills into a group;
   - ArrowLeft returns, and the group row has focus;
@@ -385,9 +403,9 @@ stays in every plan built from a spec.
   - `/` typed in a textarea does not move the focus;
   - `routeHit` handles a release, a group, a test and a run;
   - `loadHits` passes `releaseId` only when scoped, and computes `hasMore`.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Run `yarn build` and drive `/workspace` in headless Chrome:
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Run `yarn build` and drive `/workspace` in headless Chrome:
   - at 1600×1000 and at 390×844, in light and in dark;
   - the keyboard round trip, the breadcrumbs, and the search hits for
     `longevity-50gb`, `release:"scylla-master"`, a job path and a Jenkins URL;
@@ -395,19 +413,101 @@ stays in every plan built from a spec.
     and returns focus;
   - `scrollWidth === innerWidth` on mobile;
   - no 1970 dates.
-- [ ] Run the verify sequence.
-- [ ] Commit `feature(workspace): rework the sidebar into a one-level list with search`, with the boxes of this task checked.
+- [x] Run the verify sequence.
+- [x] Committed in e52823a9 `feature(workspace)`.
 
-## Task 6 — Documentation
+## Task 6 — Release pins and multi-pick search
+
+**Files:**
+- Modify:
+  - `frontend/WorkArea/Sidebar/sidebarSort.ts`
+  - `frontend/WorkArea/Sidebar/sidebarState.svelte.ts`
+  - `frontend/WorkArea/Sidebar/SidebarRow.svelte`
+  - `frontend/WorkArea/Sidebar/Sidebar.svelte`
+  - `frontend/WorkArea/Sidebar/SidebarSearch.svelte`
+- Test: the four `frontend/WorkArea/Sidebar/*.test.ts` files
+
+**Internals:**
+- **`pinnedFirst(items, pinned)`:** lifts the pinned items and keeps the order
+  within each part.
+- **`SidebarState.pinned`:** a `SvelteSet` read from
+  `localStorage["argus-workspace-pinned-releases"]` (`PINS_KEY`).
+  `togglePin(release)` writes it back, inside try/catch, and queues the stats
+  of a newly pinned release. `loadEager` includes pinned releases.
+- **Sidebar focus:** `pending = {id, move}`. A search pick navigates with
+  `move: false`, which marks the row active without a focus request, so the
+  search keeps the focus. Rows focus only on a request aimed at them
+  (`focusTarget`).
+- **`SidebarSearch`:** no `maxSelect`, because the library closes and blurs
+  once a pick reaches it. `resetFilterOnAdd={false}`. `held` keeps the scope
+  from `onopen` to `onclose`. Takes `openTests` and marks those hits with a
+  check.
+- A search pick no longer closes the mobile drawer.
+- **Clear button:** an `afterInput` × shows while the query is not empty. It
+  empties the query and focuses the input. The × and the scope chip both stop
+  the click from propagating. Svelte removes them before the click reaches the
+  library's outside-click listener on `window`, which would otherwise close the
+  dropdown. Widening refocuses the input that `{#key}` rebuilt.
+
+- [x] Write the failing tests: pinned order, persistence, blocked storage, eager stats for pins, the pin toggle in the list, two picks from one query, the held scope, the open marks, the focus kept in the search, the clear button.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Check in headless Chrome: pins move to the top and persist, two keyboard picks open two tests on desktop and in the mobile drawer, and the runs panel height stays put while a release loads.
+- [x] Run the verify sequence.
+- [x] Committed in e52823a9 `feature(workspace)`.
+
+## Task 7 — The status facet and status indicators in search
+
+**Files:**
+- Modify:
+  - `argus/backend/service/test_lookup.py`
+  - `cli/cmd/search/root.go`
+  - `frontend/WorkArea/Sidebar/SidebarRow.svelte`
+  - `frontend/WorkArea/Sidebar/SidebarSearch.svelte`
+  - `frontend/WorkArea/Sidebar/Sidebar.svelte`
+  - `frontend/WorkArea/Sidebar/sidebarState.svelte.ts`
+- Create: `frontend/WorkArea/Sidebar/StatusDot.svelte`
+- Test: `argus/backend/tests/test_query_parser.py`, `argus/backend/tests/planner_api/test_planner_api.py`, `frontend/WorkArea/Sidebar/SidebarSearch.test.ts`, `frontend/WorkArea/Sidebar/Sidebar.test.ts`
+
+**Internals:**
+- **`STATS_FACETS`** = `status`, `istatus`, `assignee`, added to `FACET_KEYS`.
+- **`_status_scope(release_id, parsed, index)`:** returns the release from
+  `releaseId`, or else the one release a `release:` value names: an exact name
+  first, then a single substring match.
+- **`stats_facts(stats) -> dict[str, StatsFacts]`:** reads `status`,
+  `investigation_status` and the latest run's `assignee` from either input
+  shape of `collect()`, and returns `{}` for a dormant release.
+- **`_stats_lookup(release, parsed)`:** runs
+  `ReleaseStatsCollector.collect(limited=False, force=False, include_no_version=True)`,
+  the sidebar's snapshot, and loads `{user_id: "username\nfull name"}` through
+  `select_rows` only when the query has `assignee:`.
+- **`_matches`:** with a stats lookup, only tests match. `status:` and
+  `istatus:` compare a prefix; `assignee:` a substring of the user names. A
+  query with a stats facet and no single release matches nothing.
+- **`StatusDot.svelte`:** the dot with its visually hidden label, shared by
+  `SidebarRow` and the search options.
+- **`SidebarSearch` `statsFor(hit)`:** returns `{status}` or `{counts}` from
+  `Sidebar.hitStats`, which reads `sidebar.stats` by the hit's release name. A
+  run hit uses its own `status`. With no scope and a `status:` token,
+  `noMatchingOptionsMsg` explains the scope.
+
+- [x] Write the failing tests: the parser facets; `stats_facts` on both shapes and on a dormant release; the scoped filter with `status:` and `-status:`; `istatus:` and `assignee:` by username and full name; the scope from a `release:` facet; no single release matches nothing; the dot and the bar in the options; the hint for each stats facet; the status from loaded stats in the sidebar search.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Update the CLI help text and the `api_usage.md` query table.
+- [x] Run the verify sequence.
+- [x] Committed in cda3f21d `feature(search)`, 414e922a `improvement(cli/search)` and e52823a9 `feature(workspace)`.
+
+## Task 8 — Documentation
 
 **Files:**
 - Modify:
   - `docs/api_usage.md`: the `stats/summary` route, the search `limit`/`offset`, the query grammar and the TTL note
   - `docs/project/architecture.md`: one line on the per-worker search index
 
-- [ ] Write the entries in the style of the existing `api_usage.md` sections.
-- [ ] Run `uv run pre-commit run --all-files`.
-- [ ] Commit `docs(api): document the search paging and the stats summary`, with the boxes of this task checked.
+- [x] Write the entries in the style of the existing `api_usage.md` sections.
+- [x] Run `uv run pre-commit run --all-files`.
+- [x] Committed in 3298a936 `docs(api-usage)`.
 
 The PR body lists these:
 - An admin sets `priority` on scylla-master and scylla-staging after the deploy.
