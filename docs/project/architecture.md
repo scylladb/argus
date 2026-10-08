@@ -61,6 +61,10 @@ Two modules under `service/` are named `test_lookup.py` and
 `argus/backend/service` in `norecursedirs` so pytest does not collect them. A
 real test placed in that directory is not collected either.
 
+`test_lookup.py` answers the release, group and test search from an index each
+worker keeps in memory. A request rebuilds it from three table scans once it is
+60 seconds old, so workers can disagree for up to a minute after a change.
+
 ### Plugin layer
 
 - **Location**: `argus/backend/plugins/`
