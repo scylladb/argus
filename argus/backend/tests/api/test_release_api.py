@@ -322,6 +322,21 @@ def test_release_stats_v2_returns_dict(api_client, release):
     assert isinstance(body["response"], dict)
 
 
+def test_release_stats_summary_lists_counts_and_tests(api_client, isolated_release, isolated_group, isolated_test):
+    resp = _api_get(api_client, f"{API_PREFIX}/release/stats/summary", release=isolated_release.name, force=1)
+    assert resp.status_code == 200, resp.content
+    body = resp.json()
+    assert body["status"] == "ok", body
+
+    summary = body["response"]
+    assert summary["total"] == summary["not_planned"] == 1
+    assert summary["to_investigate"] == 0
+    assert summary["groups"][str(isolated_group.id)]["tests"] == {
+        str(isolated_test.id): {"status": "not_planned", "investigation_status": "not_investigated",
+                                "start_time": None},
+    }
+
+
 # ---------------------------------------------------------------------------
 # /release/create
 # ---------------------------------------------------------------------------
