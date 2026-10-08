@@ -500,7 +500,35 @@ stays in every plan built from a spec.
 - [x] Run the verify sequence.
 - [x] Committed in cda3f21d `feature(search)`, 414e922a `improvement(cli/search)` and e52823a9 `feature(workspace)`.
 
-## Task 8 — Documentation
+## Task 8 — The issue facet
+
+**Files:**
+- Modify: `argus/backend/service/test_lookup.py`, `cli/cmd/search/root.go`, `frontend/WorkArea/Sidebar/SidebarSearch.svelte`, `docs/api_usage.md`
+- Test: `argus/backend/tests/test_query_parser.py`, `argus/backend/tests/issues/test_issues.py`, `frontend/WorkArea/Sidebar/SidebarSearch.test.ts`
+
+**Internals:**
+- **`ParsedQuery.issue_key`:** the first `issue:` value; `-issue:` is dropped.
+- **`TestLookup._lookup_issue(key, index)`:** calls
+  `IssueService().get_issue_links(key)` and maps each link with
+  `_issue_run_hit`, which takes the group and release from the index by
+  `test_id`. `IssueServiceException`, a value that is not a Jira key, gives no
+  hits. The issue path runs before the UUID path and pages the same way.
+- **`SidebarSearch`:** hides the release chip while the query holds `issue:`,
+  and explains an empty result. It takes `openIds`, the open tests and the runs
+  picked into them, and marks those hits.
+- **Run deselect:** `Sidebar` takes `openRuns` (WorkArea's `additionalRuns`)
+  and `onCloseRun`. Picking an open run hit calls `onCloseRun`; `WorkArea`
+  drops the run and closes the test with its last one. Closing a test drops
+  its picked runs.
+
+- [x] Write the failing tests: the parser field and the dropped exclusion; the runs of a key newest first with the rest of the query and a `releaseId` ignored; paging; an unknown and an invalid key; the hint and the hidden chip; an open run hit marked and closed on a second pick.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Check `issue:SCT-717` on the dev data through the CLI and the sidebar: two runs of one test open together, and picking each again closes it, the last one with its test.
+- [x] Run the verify sequence.
+- [x] Committed in 5d79b54a `feature(search)`, c4a9be50 `improvement(cli/search)`, 62c80e4e `improvement(workspace)` and fa5e0a4b `docs(api-usage)`.
+
+## Task 9 — Documentation
 
 **Files:**
 - Modify:

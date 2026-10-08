@@ -128,7 +128,8 @@ A hit shows the status of its test, or the status bar of its group or
 release, whenever the sidebar holds that release's stats, which it always does
 inside a release. A run hit shows the run's own status. The dropdown stays open
 with its query after a pick, so several hits can be opened in a row, and
-picking a test that is already open closes it. A pick moves the sidebar without
+picking an open test or an open run again closes it; a test closes with its
+last picked run. A pick moves the sidebar without
 taking the focus from the search. The search scope is the current release, held while the dropdown is
 open. A chip switches it to all releases.
 
@@ -213,7 +214,7 @@ The query grammar:
 ```
 query   := token*            # tokens split on whitespace; "..." keeps spaces
 token   := ["-"] (facet | term)
-facet   := ("release" | "group" | "type" | "status" | "istatus" | "assignee") ":" value
+facet   := ("release" | "group" | "type" | "issue" | "status" | "istatus" | "assignee") ":" value
 value   := quoted | non-space+
 term    := quoted | non-space+
 ```
@@ -231,6 +232,8 @@ term    := quoted | non-space+
   assignee. These three need one release, from `releaseId` or a `release:`
   value that names exactly one, and then match tests only. Without one release
   the query matches nothing.
+- `issue:<KEY>` returns the runs linked to that Jira issue, newest first, from
+  the issue links service, and ignores every other token and `releaseId`.
 - A `http(s)://…/job/a/job/b/…` token becomes the path `a/b/…`.
 - A query that is one UUID resolves a release, group or test first, then a
   run. It never returns the "Add all..." row.
@@ -329,5 +332,7 @@ def summarize_release_stats(stats: dict) -> dict: ...
   snapshot per query. (build)
 - The status facets match a prefix, not a substring, so `istatus:investigated`
   does not match `not_investigated`. (build)
+- `issue:` names one issue, as a UUID names one entity, so it ignores the rest
+  of the query and the release scope: an issue's runs span releases. (build)
 - Search results take their status indicators from the stats the sidebar
   already holds, so the search request does no extra work for them. (build)
