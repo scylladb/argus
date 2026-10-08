@@ -26,6 +26,7 @@
 
     const removeTest = function (testId) {
         testRuns = testRuns.filter(v => v != testId);
+        delete additionalRuns[testId];
         pushUrl();
     };
 
@@ -36,6 +37,15 @@
     const openRun = function (testId, runId) {
         additionalRuns[testId] = [...(additionalRuns[testId] ?? []), runId];
         openTest(testId);
+    };
+
+    const closeRun = function (testId, runId) {
+        const remaining = (additionalRuns[testId] ?? []).filter(id => id != runId);
+        if (remaining.length == 0) {
+            removeTest(testId);
+        } else {
+            additionalRuns[testId] = remaining;
+        }
     };
 
     onMount(() => {
@@ -54,10 +64,12 @@
     <div class="d-md-flex gap-3 py-md-4" id="dashboard-main">
         <Sidebar
             openTests={testRuns}
+            openRuns={additionalRuns}
             onToggleTest={toggleTest}
             onOpenTest={openTest}
             onOpenTests={openTests}
             onOpenRun={openRun}
+            onCloseRun={closeRun}
         />
         <div class="d-flex flex-column flex-grow-1 min-w-0 p-0 p-md-2 border rounded shadow-sm bg-main" id="runs-panel">
             <TestRunsPanel

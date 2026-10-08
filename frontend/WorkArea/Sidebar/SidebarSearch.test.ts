@@ -153,9 +153,18 @@ describe("SidebarSearch", () => {
         await waitFor(() => expect(screen.getByText(/work inside one release/)).toBeTruthy(), { timeout: 2000 });
     });
 
+    it("drops the release scope from an issue key search and explains an empty result", async () => {
+        answerWith({ hits: [], total: 0 });
+        render(SidebarSearch, { props: { scope, onPick: vi.fn() } });
+        await search("issue:SCT-1");
+
+        await waitFor(() => expect(screen.getByText(/No runs are linked to that issue/)).toBeTruthy(), { timeout: 2000 });
+        expect(screen.queryByText(/in scylla-master/)).toBeNull();
+    });
+
     it("marks the hits already open in the panel", async () => {
         answerWith({ hits: [HIT, OTHER], total: 2 });
-        render(SidebarSearch, { props: { scope: null, openTests: ["t1"], onPick: vi.fn() } });
+        render(SidebarSearch, { props: { scope: null, openIds: ["t1"], onPick: vi.fn() } });
         await search("longevity");
 
         const opened = (await option("longevity-50gb-3days-test")).closest("li") as HTMLElement;
