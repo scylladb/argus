@@ -11,8 +11,8 @@ parses a richer query, and returns ranked pages.
 
 Releases gain an admin-set `priority` that orders them on the server, and a
 viewer can pin releases in the browser to list them above everything else. The
-sidebar loads a compact stats summary only for prioritized releases, hovered
-releases and opened releases, and re-sorts tests whenever stats change.
+sidebar loads a compact stats summary only for prioritized, pinned, hovered and
+opened releases, and re-sorts tests whenever stats change.
 
 Below the `md` breakpoint the sidebar becomes an off-canvas drawer, opened
 from a fixed bottom-left button.
@@ -156,11 +156,14 @@ opens the drawer. Opening a test closes it.
 
 | Condition | Behavior |
 |---|---|
-| The stats summary request fails | The row shows an error marker. *Refresh* retries. Nothing spins. |
+| The stats summary request fails | The row shows an error marker. *Refresh* retries, on the release list for every failed row. Nothing spins. |
 | The groups or tests request fails | The list shows an error row with a retry button. |
 | The index rebuild fails | The request fails with the API error. The next request rebuilds. |
 | Query text holds regex or quote characters | They are plain text. An unbalanced quote runs to the end of the query. |
-| A run hit whose test was deleted | The run is returned without a test name. Its row shows the run id. |
+| A run hit whose test was deleted | A UUID lookup returns the run without a test name. `issue:` and `config:` leave out a run whose test is not in the index, which includes a test created in the last 60 s. |
+| A query holds more than 1000 characters, 24 words and facets, or 8 `config:` values | The API answers with a validation error, and the search shows its message. |
+| A query holds nothing to match, only exclusions | No hits. |
+| A NULL status or investigation status in the stats or a run | Read as `created` and `not_investigated`. |
 | A release is dormant | The sidebar requests no stats and shows a "dormant" badge. |
 
 ## Contracts
@@ -177,8 +180,9 @@ ALTER TABLE argus_release_v2 ADD priority int;   -- applied by sync-models
 `"priority": int | null`. A `null` means 0. The order follows the Design
 section.
 
-`POST /admin/api/v1/release/edit` accepts `"priority": int | null`. The
-server stores `null` as 0.
+`POST /admin/api/v1/release/edit` accepts `"priority": int | null`, a whole
+number from 0 to 2147483647, and `"pretty_name": str | null`. The server
+stores a `null` priority as 0.
 
 `GET /api/v1/planning/search` accepts these parameters:
 
@@ -206,8 +210,20 @@ the "Add all..." row. The response body is:
 
 A hit no longer carries `description`, `assignee`, `build_system_url`,
 `plugin_name` or `plugin_subtype`. Neither the CLI nor any component reads
-them. Run hits keep their current shape. `GET /api/v1/views/search` uses the
-same lookup, so its hits change the same way.
+them. The run hit of a UUID lookup keeps its current shape. `issue:` and
+`config:` return compact run hits, newest first:
+
+```json
+{"id": "…", "type": "run", "name": "longevity-10gb-3h-gce-test#25", "pretty_name": null,
+ "build_system_id": "enterprise-2023.1/longevity/longevity-10gb-3h-gce-test", "enabled": true,
+ "status": "aborted", "start_time": "2026-09-30T22:10:44.000Z", "build_number": 25,
+ "test_id": "…", "release_id": "…", "group_id": "…",
+ "test": {"id": "…", "name": "longevity-10gb-3h-gce-test"},
+ "release": {"id": "…", "name": "enterprise-2023.1", "…": "…"}, "group": {"id": "…", "name": "longevity", "…": "…"}}
+```
+
+`GET /api/v1/views/search` uses the same lookup, so its hits change the same
+way.
 
 The query grammar:
 
@@ -224,15 +240,19 @@ term    := quoted | non-space+
 - A `release:` or `group:` value is a case-insensitive substring of the name or
   the pretty name. A release or group matches its own facet too. Repeating a
   facet key ORs its values. Different keys AND together.
-- A leading `-` excludes the term or facet. A token made only of dashes is a
-  plain term.
+- A leading `-` excludes the term or facet, and `-<uuid>` excludes that
+  release, group, test or run. A token made only of dashes is a plain term. A
+  query with nothing to match, only exclusions, returns no hits.
+- A query holds at most 1000 characters, 24 words and facets, and 8 `config:`
+  values.
 - `status:` and `istatus:` match the start of a test's latest status and
   latest investigation status in the release stats snapshot. `assignee:`
   matches a substring of the username or full name of the latest run's
   assignee. These three need one release, from `releaseId` or a `release:`
   value that names exactly one, and then match tests only. Without one release
   the query matches nothing.
-- `issue:<KEY>` returns the runs linked to that Jira issue, newest first, from
+- `issue:<KEY>` returns the runs linked to that Jira issue; repeating it lists
+  the runs of every key. The runs come newest first, from
   the issue links service, across releases: it ignores `releaseId`.
 - `config:<name>=<value>` returns the runs whose config parameter has that
   value, case kept; a name that is the unique dotted suffix of a stored name,
@@ -274,6 +294,10 @@ class ParsedQuery:
     facets: dict[str, tuple[str, ...]]
     excluded_facets: dict[str, tuple[str, ...]]
     uuid: UUID | None
+    issue_keys: tuple[str, ...]
+    configs: tuple[tuple[str, str | None], ...]
+
+    def has_positive_match(self) -> bool: ...
 
 def parse_query(query: str) -> ParsedQuery: ...
 
@@ -281,6 +305,7 @@ class TestLookup:
     @classmethod
     async def test_lookup(cls, query: str, release_id: UUID | str | None = None,
                           limit: int | None = None, offset: int = 0) -> tuple[list[dict], int]: ...
+        # raises DataValidationError past MAX_QUERY_LENGTH, MAX_QUERY_TOKENS or MAX_CONFIG_FILTERS
     @classmethod
     def clear_index(cls) -> None: ...
 
@@ -352,3 +377,13 @@ def summarize_release_stats(stats: dict) -> dict: ...
   random order. (build)
 - Search results take their status indicators from the stats the sidebar
   already holds, so the search request does no extra work for them. (build)
+- A query holds at most 1000 characters, 24 words and facets, and 8 `config:`
+  values, the read of `config:` values without a release stops at 500 runs in
+  all, and the entity match runs in a worker thread: the review measured a
+  700-value query blocking a worker for 6.5 s. (review)
+- Repeating `issue:` lists the runs of every key. (review)
+- A query with nothing to match returns no hits rather than the whole index.
+  (review)
+- `-<uuid>` excludes that entity instead of looking it up. (review)
+- The admin priority is a whole number from 0 to the `int` column's maximum,
+  checked in the editor and the API. (review)
