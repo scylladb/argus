@@ -199,6 +199,15 @@ def test_admin_edit_release_without_a_pretty_name(api_client, admin_release):
     assert details["response"]["priority"] == 7
 
 
+@pytest.mark.parametrize("priority", [1.5, -1, 2**31])
+def test_admin_edit_release_refuses_a_priority_that_is_not_a_whole_number_in_range(
+        api_client, admin_release, priority):
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/release/edit",
+                       _edit_release_payload(admin_release, priority=priority))
+
+    assert resp.json()["status"] == "error", resp.content
+
+
 def test_admin_edit_release_unknown_id_errors(api_client):
     payload = {
         "id": str(uuid.uuid4()),
