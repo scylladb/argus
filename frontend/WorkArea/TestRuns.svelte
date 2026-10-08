@@ -1,7 +1,7 @@
 <script>
     import { run as run_1 } from "svelte/legacy";
 
-    import { createEventDispatcher, onMount, onDestroy } from "svelte";
+    import { createEventDispatcher, onMount, onDestroy, untrack } from "svelte";
     import queryString from "query-string";
     import { v4 as uuidv4 } from "uuid";
     import { StatusBackgroundCSSClassMap } from "../Common/TestStatus";
@@ -174,7 +174,10 @@
         }
     };
 
+    let fetchedAdditionalRuns = "";
+
     const fetchTestRuns = async function () {
+        fetchedAdditionalRuns = additionalRuns.join(",");
         try {
             let params = queryString.stringify(
                 {
@@ -211,6 +214,13 @@
             setState(states.FETCH_FAILED);
         }
     };
+
+    $effect(() => {
+        const requested = additionalRuns.join(",");
+        untrack(() => {
+            if (testInfo && requested !== fetchedAdditionalRuns) fetchTestRuns();
+        });
+    });
 
     const handleIncreaseLimit = function () {
         runLimit += 10;
