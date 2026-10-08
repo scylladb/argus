@@ -51,6 +51,8 @@ searches for its job path, a/b. A word made only of dashes, such as --, is
 plain text.
 
 A query that is a single UUID returns that release, group, test, or run.
+issue:<KEY> returns the runs linked to that Jira issue, newest first, and
+ignores the rest of the query and --release.
 
 Pass the whole query as a single shell-quoted argument, e.g.:
 
