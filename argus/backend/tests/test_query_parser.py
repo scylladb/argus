@@ -133,3 +133,33 @@ def test_excluded_issue_key_is_ignored():
 
     assert parsed.issue_key is None
     assert parsed.excluded_facets == {}
+
+
+def test_config_facet_keeps_the_case_of_its_name_and_value():
+    parsed = lookup.parse_query("longevity config:sct_config.Region=US-East")
+
+    assert parsed.configs == (("sct_config.Region", "US-East"),)
+    assert "config" not in parsed.facets
+
+
+def test_config_facet_without_a_value_asks_for_the_parameter_to_be_set():
+    assert lookup.parse_query("config:backend").configs == (("backend", None),)
+    assert lookup.parse_query("config:backend=").configs == (("backend", None),)
+
+
+def test_config_facet_value_keeps_spaces_in_quotes_and_later_equal_signs():
+    assert lookup.parse_query('config:name="a b"').configs == (("name", "a b"),)
+    assert lookup.parse_query("config:args=--x=1").configs == (("args", "--x=1"),)
+
+
+def test_excluded_config_facet_is_ignored():
+    assert lookup.parse_query("-config:backend=aws").configs == ()
+
+
+def test_config_name_resolves_exactly_or_by_a_unique_dotted_suffix():
+    names = ["sct_config.backend", "sct_config.backup_bucket_backend", "a.region", "b.region"]
+
+    assert lookup._resolve_param_name("sct_config.backend", names) == "sct_config.backend"
+    assert lookup._resolve_param_name("backend", names) == "sct_config.backend"
+    assert lookup._resolve_param_name("region", names) is None
+    assert lookup._resolve_param_name("missing", names) is None
