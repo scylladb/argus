@@ -193,6 +193,27 @@ describe("SidebarSearch", () => {
         await waitFor(() => expect(document.activeElement?.id).toBe("workspace-search"));
     });
 
+    it("scopes the search again after a reset", async () => {
+        const { component } = render(SidebarSearch, { props: { scope, onPick: vi.fn() } });
+        await fireEvent.click(screen.getByRole("button", { name: "Search all releases" }));
+        await fireEvent.keyDown(document.getElementById("workspace-search") as HTMLElement, { key: "Escape" });
+        expect(screen.queryByText(/in scylla-master/)).toBeNull();
+
+        component.resetScope();
+
+        await waitFor(() => expect(screen.getByText(/in scylla-master/)).toBeTruthy());
+    });
+
+    it("shows why the server refused a query", async () => {
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+            json: () => Promise.resolve({ status: "error", response: { arguments: ["A search query holds at most 24 words and facets"] } }),
+        }));
+        render(SidebarSearch, { props: { scope: null, onPick: vi.fn() } });
+        await search("too many words");
+
+        await waitFor(() => expect(screen.getByText(/at most 24 words/)).toBeTruthy(), { timeout: 2000 });
+    });
+
     it("shows no scope at the top level", () => {
         render(SidebarSearch, { props: { scope: null, onPick: vi.fn() } });
 
