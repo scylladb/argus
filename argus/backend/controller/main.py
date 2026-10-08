@@ -94,6 +94,11 @@ async def get_run_by_build(asgi_request: Request, build_id: str, build_number: i
     return _run_view(asgi_request, run, tab, f"{build_id} #{build_number}")
 
 
+@router.get("/issues/{key}", name="main.issue_links")
+async def issue_links(asgi_request: Request, key: str, user: User = Depends(ui_current_user)):
+    return templates.TemplateResponse(asgi_request, "issue_links.html.j2", {"key": key})
+
+
 @router.get("/", name="main.home")
 async def home(asgi_request: Request):
     return RedirectResponse(url_for(asgi_request, "main.run_dashboard"), status_code=302)

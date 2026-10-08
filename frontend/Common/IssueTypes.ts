@@ -65,6 +65,26 @@ export interface JiraSubtype extends Issue {
     assignees: string[];
 }
 
+export interface LinkedRun {
+    run_id: string;
+    test_id: string;
+    test_name: string;
+    plugin_name: string;
+    status: string;
+    start_time: string;
+    build_id: string;
+    build_number: number | null;
+    scylla_version: string | null;
+    product_version: string | null;
+    linked_on: string | null;
+    url: string;
+}
+
+export interface IssueLinks {
+    issue: Omit<JiraSubtype, "links" | "event_id"> | null;
+    links: LinkedRun[];
+}
+
 export type StateFilter = Record<State, boolean>;
 
 export interface TestRun {

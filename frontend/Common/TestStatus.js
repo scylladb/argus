@@ -78,11 +78,25 @@ export const StatusBackgroundCSSClassMap = {
     "test_error": "bg-test-error",
     "error": "bg-danger",
     "passed": "bg-success",
-    "aborted": "bg-dark",
+    "aborted": "bg-aborted",
     "not_run": "bg-secondary",
     "not_planned": "bg-not-planned",
     "unknown": "bg-dark",
     "skipped": "bg-dark"
+};
+
+export const StatusBadgeCSSClassMap = {
+    "created": "text-bg-info",
+    "running": "text-bg-warning",
+    "failed": "text-bg-danger",
+    "test_error": "bg-test-error text-white",
+    "error": "text-bg-danger",
+    "passed": "text-bg-success",
+    "aborted": "bg-aborted text-white",
+    "not_run": "text-bg-secondary",
+    "not_planned": "bg-not-planned text-dark",
+    "unknown": "text-bg-secondary",
+    "skipped": "text-bg-secondary"
 };
 
 export const StatusTableBackgroundCSSClassMap = {
@@ -121,7 +135,7 @@ export const StatusButtonCSSClassMap = {
     "test_error": "btn-orange",
     "error": "btn-danger",
     "passed": "btn-success",
-    "aborted": "btn-dark",
+    "aborted": "btn-aborted",
     "not_run": "btn-secondary",
     "not_planned": "btn-secondary",
     "unknown": "btn-secondary"
