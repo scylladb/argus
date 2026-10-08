@@ -151,6 +151,10 @@
     };
 
     const pick = (hit: SearchHit) => {
+        if (hit.type === "test" && openSet.has(hit.id)) {
+            onToggleTest(hit.id);
+            return;
+        }
         const testId = sidebar.locate(hit);
         if (testId && hit.type === "test") onOpenTest(testId);
         if (testId && hit.type === "run") onOpenRun(testId, hit.id);

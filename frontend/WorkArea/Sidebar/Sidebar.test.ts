@@ -192,6 +192,26 @@ describe("Sidebar", () => {
         await waitFor(() => expect(document.activeElement).toBe(row("Longevity")));
     });
 
+    it("closes an open test when it is picked again in the search", async () => {
+        const fetchMock = serve();
+        const searchHit = { hits: [{ id: "t1", type: "test", name: "alpha-test", pretty_name: null, release_id: MASTER.id, group_id: "g1", release: MASTER, group: GROUPS[0] }], total: 1 };
+        const base = fetchMock.getMockImplementation()!;
+        fetchMock.mockImplementation((url: string) => (url.startsWith("/api/v1/planning/search") ? ok(searchHit) : base(url)));
+        const { onToggleTest, onOpenTest } = renderSidebar({ openTests: ["t1"] });
+        await waitFor(() => row("scylla-master"));
+
+        const input = document.getElementById("workspace-search") as HTMLInputElement;
+        await fireEvent.focus(input);
+        await fireEvent.input(input, { target: { value: "alpha" } });
+        const option = await waitFor(() => screen.getByText("alpha-test", { selector: "ul.options *" }), { timeout: 2000 });
+        await fireEvent.mouseUp(option);
+        await fireEvent.click(option);
+
+        expect(onToggleTest).toHaveBeenCalledWith("t1");
+        expect(onOpenTest).not.toHaveBeenCalled();
+        expect(breadcrumb()).toBe("Releases");
+    });
+
     it("shows the loaded status of a test in the search results", async () => {
         const fetchMock = serve();
         const searchHit = { hits: [{ id: "t2", type: "test", name: "beta-test", pretty_name: null, release_id: MASTER.id, group_id: "g1", release: MASTER, group: GROUPS[0] }], total: 1 };
