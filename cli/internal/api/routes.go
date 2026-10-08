@@ -38,6 +38,7 @@ const (
 	TestRunIssueSubmit      = "/api/v1/test/%s/run/%s/issues/submit" // POST – submit an issue (test_id, run_id)
 	IssuesGet               = "/api/v1/issues/get"                   // GET  – list issues (filterKey, id query params)
 	TestRunEventIssueSubmit = "/api/v1/test/%s/run/%s/issues/event/%s/submit"
+	IssueLinks              = "/api/v1/issues/%s/links" // GET  – the issue and the runs linked to it (issue key)
 
 	// Pytest result routes
 	TestRunPytestResults = "/api/v1/run/%s/pytest/results"        // GET  – pytest results for a run (run_id)

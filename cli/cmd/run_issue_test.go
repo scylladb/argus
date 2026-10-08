@@ -1,6 +1,11 @@
 package cmd
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
 
 func TestIssueSubmitRoute(t *testing.T) {
 	tests := []struct {
@@ -18,4 +23,19 @@ func TestIssueSubmitRoute(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestIssueRunsCmd(t *testing.T) {
+	assert.Contains(t, issueCmd.Commands(), issueRunsCmd)
+
+	assert.Error(t, issueRunsCmd.Args(issueRunsCmd, []string{}))
+	assert.Error(t, issueRunsCmd.Args(issueRunsCmd, []string{"SCT-1", "SCT-2"}))
+	assert.Error(t, issueRunsCmd.Args(issueRunsCmd, []string{""}))
+	assert.Error(t, issueRunsCmd.Args(issueRunsCmd, []string{"  "}))
+	assert.NoError(t, issueRunsCmd.Args(issueRunsCmd, []string{"SCT-1234"}))
+
+	raw := issueRunsCmd.Flags().Lookup("raw")
+	require.NotNil(t, raw, "issue runs is missing the --raw flag")
+	assert.Equal(t, "false", raw.DefValue)
+	assert.NotEmpty(t, raw.Usage)
 }

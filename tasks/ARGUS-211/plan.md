@@ -35,10 +35,14 @@ stays in every plan built from a spec.
 - `LinkedRun`: one element of `links`. Fields with their JSON names
   `run_id`, `test_id`, `test_name`, `plugin_name`, `status`, `start_time`,
   `build_id`, `build_number` (`*int`), `scylla_version`, `product_version`,
-  `linked_on`, `url`. The nullable strings stay `string`, as in `UserJobRun`
-  (`cli/internal/models/jobs.go`).
+  `linked_on`, `url`. `scylla_version`, `product_version` and `linked_on` are
+  `*string`, so a null from the API stays null under `--raw`.
+- `func (l LinkedRun) Version() string`: `scylla_version` when it is set and
+  not empty, else `product_version`, else `""`.
 - `IssueLinks{Issue map[string]any; Links []LinkedRun}` with JSON names
-  `issue` and `links`.
+  `issue` and `links`. `(*IssueLinks).UnmarshalJSON` decodes through a
+  `json.Decoder` with `UseNumber()`, so a number in the issue, such as a
+  label id, stays a `json.Number` and prints as sent under `--raw --text`.
 - `IssueRunSummary` with the fields of the spec contract, and
   `Headers()` → `Id, Test, Build Id, Build Number, Version, Status, Start Time, Argus URL`.
   `Rows()` renders the build number with `strconv.Itoa`, or `""` when nil, as
@@ -48,20 +52,28 @@ stays in every plan built from a spec.
 - `func (l IssueLinks) Summaries() IssueRunSummaries`: starts from
   `make(IssueRunSummaries, 0, len(l.Links))` and maps each link in order:
   `ID=RunID`, `Test=TestName`, `BuildID`, `BuildNumber`,
-  `Version=ScyllaVersion`, `Status`, `StartTime`, `ArgusURL=URL`.
+  `Version=link.Version()`, `Status`, `StartTime`, `ArgusURL=URL`.
 
 **Tests** (`package models`):
 - `TestIssueLinks_Summaries`: two links. Asserts every mapped field, the order,
   and that `url` lands in `ArgusURL`.
+- `TestIssueLinks_Summaries_Version`: a Scylla version wins. A product
+  version fills in for a missing or empty Scylla version. No version gives
+  `""`.
+- `TestLinkedRun_KeepsNulls`: a link with every nullable field `null`
+  decodes and encodes back to the same JSON.
+- `TestIssueLinks_KeepsIssueNumbers`: a label id of `3903313650` renders as
+  `3903313650` in the key and value rows and in the JSON. The typed link fields
+  still decode.
 - `TestIssueLinks_Summaries_Empty`: `IssueLinks{}` marshals its summaries to
   `[]`.
 - `TestIssueRunSummaries_Rows`: the headers, one row with a build number and
   one with a nil build number, which renders as `""`.
 
-- [ ] Write the failing tests.
-- [ ] Run `go test ./internal/models/` and confirm that they fail to compile.
-- [ ] Add the types and `Summaries`.
-- [ ] Run `go test -race ./internal/models/` until it passes.
+- [x] Write the failing tests.
+- [x] Run `go test ./internal/models/` and confirm that they fail to compile.
+- [x] Add the types and `Summaries`.
+- [x] Run `go test -race ./internal/models/` until it passes.
 
 ## Task 2 — Fetch the lookup
 
@@ -89,10 +101,10 @@ stays in every plan built from a spec.
 - `TestIssueService_Links_RejectedKey`: `jsonErr` with
   `Not an issue key: 'SCT1234'`. Asserts that the error holds the message.
 
-- [ ] Write the failing tests.
-- [ ] Run `go test ./internal/services/` and confirm that they fail to compile.
-- [ ] Add the route and the service.
-- [ ] Run `go test -race ./internal/services/` until it passes.
+- [x] Write the failing tests.
+- [x] Run `go test ./internal/services/` and confirm that they fail to compile.
+- [x] Add the route and the service.
+- [x] Run `go test -race ./internal/services/` until it passes.
 
 ## Task 3 — The `issue runs` command
 
@@ -104,7 +116,8 @@ stays in every plan built from a spec.
 - `issueRunsCmd`:
   - `Use: "runs <issue-key>"`
   - `Short: "List the test runs linked to an issue"`
-  - `Args: cobra.ExactArgs(1)`
+  - `Args: cobra.MatchAll(cobra.ExactArgs(1), …)`: the second check rejects a
+    blank key with `the issue key is empty`.
   - `Long` holds the example `argus issue runs SCT-1234` and says four things:
     the order is newest first, the key may be in any case, a key without runs
     prints an empty list, and `--raw` prints the issue and every link field.
@@ -119,13 +132,14 @@ stays in every plan built from a spec.
 
 **Tests** (`package cmd`):
 - `TestIssueRunsCmd`: `issueRunsCmd` is a sub-command of `issueCmd`.
-  `Args` rejects zero and two arguments and accepts one. The `--raw` flag
+  `Args` rejects zero arguments, two arguments and a blank key, and accepts
+  one key. The `--raw` flag
   exists, defaults to `false`, and has help text.
 
-- [ ] Write the failing test.
-- [ ] Run `go test ./cmd/` and confirm the failure.
-- [ ] Add the command.
-- [ ] Run `go test -race ./cmd/` until it passes.
+- [x] Write the failing test.
+- [x] Run `go test ./cmd/` and confirm the failure.
+- [x] Add the command.
+- [x] Run `go test -race ./cmd/` until it passes.
 
 ## Task 4 — README
 
@@ -137,15 +151,15 @@ The section shows `argus issue runs SCT-1234`, `--text`, and `--raw`. It
 names the columns and says that a key without runs prints an empty list and
 exits 0.
 
-- [ ] Write the section.
+- [x] Write the section.
 
 ## Task 5 — Verify
 
-- [ ] `cd cli && make fmt && make lint && go test -race ./...`
-- [ ] `uv run pre-commit run --all-files`
-- [ ] Build the binary into the scratchpad and check that `argus issue --help` lists
+- [x] `cd cli && make fmt && make lint && go test -race ./...`
+- [x] `uv run pre-commit run --all-files`
+- [x] Build the binary into the scratchpad and check that `argus issue --help` lists
       `runs`.
 - [ ] Against Argus: a key with linked runs as JSON, with `--text`, and with
       `--raw`. An unknown key such as `SCT-999999` prints `[]` and exits 0.
       `not-a-key` prints the API error and exits 1.
-- [ ] Commit, with the boxes of this plan checked, after Komachi's review.
+- [x] Commit, with the boxes of this plan checked, after Komachi's review.

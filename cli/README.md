@@ -198,6 +198,18 @@ argus config set url https://my-argus.internal
 argus config set use_cloudflare false
 ```
 
+## Find the runs linked to an issue
+
+List the test runs linked to a Jira issue key, newest first:
+
+```bash
+argus issue runs SCT-1234          # JSON array, one object per run
+argus issue runs SCT-1234 --text   # the same rows as a table
+argus issue runs SCT-1234 --raw    # the issue and every link field, as returned by the API
+```
+
+Each run carries `id`, `test`, `build_id`, `build_number`, `version` (the Scylla version, or the product version when the run reports none), `status`, `start_time` and `argus_url`, the link to the run page. The key may be given in any case. A key that Argus holds no runs for prints an empty list and exits 0. A value that is not an issue key, such as `SCT1234`, is an error.
+
 ---
 
 ## Storage locations

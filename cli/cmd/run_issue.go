@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
+	"strings"
 
 	"github.com/scylladb/argus/cli/internal/api"
 	"github.com/scylladb/argus/cli/internal/logging"
@@ -151,6 +153,49 @@ Exactly one filter flag must be provided:
 }
 
 // ---------------------------------------------------------------------------
+// Subcommand: issue runs
+// ---------------------------------------------------------------------------
+
+var issueRunsCmd = &cobra.Command{
+	Use:   "runs <issue-key>",
+	Short: "List the test runs linked to an issue",
+	Long: `List the test runs linked to a Jira issue key, newest first, e.g.:
+  argus issue runs SCT-1234
+
+The key may be given in any case. A key that Argus holds no runs for prints an
+empty list. --raw emits the issue and every link field as returned by the API.`,
+	Args: cobra.MatchAll(cobra.ExactArgs(1), func(_ *cobra.Command, args []string) error {
+		if strings.TrimSpace(args[0]) == "" {
+			return errors.New("the issue key is empty")
+		}
+		return nil
+	}),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceUsage = true
+		ctx := cmd.Context()
+		client := APIClientFrom(ctx)
+		out := OutputterFrom(ctx)
+		log := logging.For(LoggerFrom(ctx), "issue-runs")
+
+		key := args[0]
+		raw, _ := cmd.Flags().GetBool("raw")
+		log.Debug().Str("key", key).Bool("raw", raw).Msg("listing runs linked to issue")
+
+		links, err := services.NewIssueService(client).Links(ctx, key)
+		if err != nil {
+			log.Error().Err(err).Str("key", key).Msg("failed to fetch issue links")
+			return err
+		}
+
+		log.Info().Str("key", key).Int("count", len(links.Links)).Msg("issue runs fetched successfully")
+		if raw {
+			return out.Write(models.NewKVTabular(links))
+		}
+		return out.Write(links.Summaries())
+	},
+}
+
+// ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
 
@@ -170,6 +215,8 @@ func init() {
 	issueListCmd.Flags().String("view-id", "", "Filter by view UUID")
 	issueListCmd.Flags().String("event-id", "", "Filter by event UUID")
 
-	issueCmd.AddCommand(issueAddCmd, issueListCmd)
+	issueRunsCmd.Flags().Bool("raw", false, "Emit the issue and its links as returned by the API")
+
+	issueCmd.AddCommand(issueAddCmd, issueListCmd, issueRunsCmd)
 	rootCmd.AddCommand(issueCmd)
 }

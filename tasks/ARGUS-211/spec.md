@@ -20,8 +20,8 @@ empty list and exits 0.
 - A run row reuses the JSON names of the `my-jobs` row (`id`, `build_id`,
   `build_number`, `version`, `status`, `argus_url`), so a script reads the run
   rows of either command the same way.
-- The server owns the key format rule. The CLI sends the key as typed, and
-  the server uppercases it or rejects it.
+- The server owns the key format rule. The CLI sends a non-empty key as
+  typed, and the server uppercases it or rejects it.
 - The lookup is never cached. A link added a minute ago shows up.
 
 ## Design
@@ -56,7 +56,7 @@ flowchart TD
 | The key is in lower case | The server uppercases it, and the result is the same |
 | The key fits no tracker's format (`SCT1234`) | The API message is printed, exit 1 |
 | The API is unreachable or rejects the credentials | As every command: the error, exit 1 |
-| No key argument, or more than one | Cobra usage error, exit 1 |
+| No key argument, an empty or blank one, or more than one | Cobra usage error, exit 1 |
 | `--raw` with an unknown key | `{"issue": null, "links": []}`, exit 0 |
 
 ## Contracts
@@ -86,7 +86,7 @@ type IssueRunSummary struct {
 	Test        string `json:"test"`         // links[].test_name
 	BuildID     string `json:"build_id"`
 	BuildNumber *int   `json:"build_number"`
-	Version     string `json:"version"`      // links[].scylla_version
+	Version     string `json:"version"`      // links[].scylla_version, else links[].product_version
 	Status      string `json:"status"`
 	StartTime   string `json:"start_time"`
 	ArgusURL    string `json:"argus_url"`    // links[].url
@@ -105,7 +105,8 @@ Id | Test | Build Id | Build Number | Version | Status | Start Time | Argus URL
 
 `--raw` prints the response payload, `{"issue": {...}, "links": [...]}`, with
 the issue fields as the API returns them and each link decoded into the twelve
-fields of the Inputs block. Under `--text` it prints a key and value table:
+fields of the Inputs block. A field that the API sends as `null` stays `null`.
+Under `--text` it prints a key and value table:
 `issue.key`, `links.0.run_id` and so on.
 
 Consumer rules: an empty array means that Argus holds no runs for the key. It
@@ -153,6 +154,10 @@ func (l IssueLinks) Summaries() IssueRunSummaries // never nil, so JSON prints [
   from there. (spec)
 - The run link is the API's `url`, passed through. The server already builds
   the build page link, and the CLI repeats no rule. (spec)
-- `version` is the run's `scylla_version`, as in the `my-jobs` row. (spec)
-- The CLI does not validate the key. The server holds the one rule, and its
-  error message reaches the user unchanged. (spec)
+- `version` is the run's `scylla_version`, or its `product_version` when the
+  run reports no Scylla version. Some runs report only the product version,
+  and their row would show no version. (build)
+- The CLI checks only that the key is not empty. The server holds the format
+  rule, and its error message reaches the user unchanged. An empty key, from
+  an unset variable in a script, would otherwise reach the server as a bare
+  404. (review)
