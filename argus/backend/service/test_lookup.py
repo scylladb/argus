@@ -13,13 +13,14 @@ from coodie.exceptions import DocumentNotFound
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, User
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.loader import all_plugin_models
+from argus.backend.service.issue_service import IssueService, IssueServiceException
 from argus.backend.service.stats import ReleaseStatsCollector
 from argus.backend.util.common import select_rows, version_key
 from argus.common.enums import TestInvestigationStatus, TestStatus
 
 INDEX_TTL = 60
 STATS_FACETS = ("status", "istatus", "assignee")
-FACET_KEYS = ("release", "group", "type", *STATS_FACETS)
+FACET_KEYS = ("release", "group", "type", "issue", *STATS_FACETS)
 TYPE_ORDER = {"release": 0, "group": 1, "test": 2}
 TOKEN = re.compile(r'(?:"[^"]*"?|[^\s"])+')
 JOB_SEGMENT = re.compile(r"/job/([^/?#]+)")
@@ -36,6 +37,7 @@ class ParsedQuery:
     facets: dict[str, tuple[str, ...]]
     excluded_facets: dict[str, tuple[str, ...]]
     uuid: UUID | None
+    issue_key: str | None
 
 
 @dataclass(slots=True, frozen=True)
@@ -118,12 +120,15 @@ def parse_query(query: str) -> ParsedQuery:
                 (excluded_facets if negated else facets)[key.lower()].append(value.lower())
         elif text:
             (excluded_terms if negated else terms).append(unquote(_job_path(text) or text).lower())
+    issue_keys = facets.pop("issue", [])
+    excluded_facets.pop("issue", None)
     return ParsedQuery(
         terms=_unique(terms),
         excluded_terms=_unique(excluded_terms),
         facets={key: _unique(values) for key, values in facets.items()},
         excluded_facets={key: _unique(values) for key, values in excluded_facets.items()},
         uuid=_single_uuid(tokens),
+        issue_key=issue_keys[0] if issue_keys else None,
     )
 
 
@@ -302,6 +307,29 @@ def _order_key(entry: IndexEntry, index: SearchIndex) -> tuple:
     )
 
 
+def _issue_run_hit(link: dict, index: SearchIndex) -> dict:
+    test = index.by_id.get(link["test_id"])
+    release_id = test.release_id if test else None
+    group_id = test.group_id if test else None
+    return {
+        "id": link["run_id"],
+        "type": "run",
+        "name": f"{link['test_name']}#{link['build_number']}",
+        "pretty_name": None,
+        "build_system_id": link["build_id"],
+        "enabled": test.enabled if test else False,
+        "status": link["status"],
+        "start_time": link["start_time"],
+        "build_number": link["build_number"],
+        "test_id": link["test_id"],
+        "release_id": release_id,
+        "group_id": group_id,
+        "test": {"id": link["test_id"], "name": link["test_name"]},
+        "release": index.releases.get(release_id),
+        "group": index.groups.get(group_id),
+    }
+
+
 def _to_hit(entry: IndexEntry, index: SearchIndex) -> dict:
     return {
         "id": entry.id,
@@ -423,6 +451,14 @@ class TestLookup:
         cls._index = None
 
     @classmethod
+    async def _lookup_issue(cls, key: str, index: SearchIndex) -> list[dict]:
+        try:
+            result = await IssueService().get_issue_links(key)
+        except IssueServiceException:
+            return []
+        return [_issue_run_hit(link, index) for link in result["links"]]
+
+    @classmethod
     async def _lookup_uuid(cls, entity_id: UUID, index: SearchIndex) -> list[dict]:
         if entry := index.by_id.get(entity_id):
             return [_to_hit(entry, index)]
@@ -435,8 +471,11 @@ class TestLookup:
             release_id = UUID(release_id) if release_id else None
         parsed = parse_query(query)
         index = await cls._get_index()
-        if parsed.uuid:
-            hits = await cls._lookup_uuid(parsed.uuid, index)
+        if parsed.issue_key or parsed.uuid:
+            if parsed.issue_key:
+                hits = await cls._lookup_issue(parsed.issue_key, index)
+            else:
+                hits = await cls._lookup_uuid(parsed.uuid, index)
             return (hits if limit is None else hits[offset:offset + limit]), len(hits)
 
         stats_query = any(key in parsed.facets or key in parsed.excluded_facets for key in STATS_FACETS)

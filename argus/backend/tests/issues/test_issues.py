@@ -810,3 +810,49 @@ def test_issue_links_endpoint_rejects_a_value_that_is_no_issue_key(api_client):
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["status"] == "error"
+
+
+def _search(api_client, **params) -> dict:
+    body = api_client.get("/api/v1/planning/search", params=params).json()
+    assert body["status"] == "ok", body
+    return body["response"]
+
+
+async def test_search_by_issue_key_lists_its_runs_and_ignores_the_rest_of_the_query(
+        api_client, run: SCTTestRun, client_service: ClientService, testrun_service: TestRunService,
+        fake_test: ArgusTest, mocked_issue_service: IssueService, logged_in_user: User):
+    newer_run = await submit_run(client_service, testrun_service, fake_test)
+    key = unique_jira_key()
+    await link_jira_issue(mocked_issue_service, run, logged_in_user, key)
+    await link_jira_issue(mocked_issue_service, newer_run, logged_in_user, key)
+
+    body = _search(api_client, query=f"issue:{key} status:passed matches-nothing", releaseId=str(uuid4()), limit=10)
+
+    assert body["total"] == 2
+    assert [hit["id"] for hit in body["hits"]] == [str(newer_run.id), str(run.id)]
+    hit = body["hits"][0]
+    assert hit["type"] == "run"
+    assert hit["name"] == f"{fake_test.name}#{newer_run.build_number}"
+    assert hit["status"] == newer_run.status
+    assert hit["test_id"] == str(fake_test.id)
+    assert hit["group"]["id"] == str(fake_test.group_id)
+    assert hit["release"]["id"] == str(fake_test.release_id)
+
+
+async def test_search_by_issue_key_pages_its_runs(
+        api_client, run: SCTTestRun, client_service: ClientService, testrun_service: TestRunService,
+        fake_test: ArgusTest, mocked_issue_service: IssueService, logged_in_user: User):
+    newer_run = await submit_run(client_service, testrun_service, fake_test)
+    key = unique_jira_key()
+    await link_jira_issue(mocked_issue_service, run, logged_in_user, key)
+    await link_jira_issue(mocked_issue_service, newer_run, logged_in_user, key)
+
+    second_page = _search(api_client, query=f"issue:{key}", limit=1, offset=1)
+
+    assert second_page["total"] == 2
+    assert [hit["id"] for hit in second_page["hits"]] == [str(run.id)]
+
+
+@pytest.mark.parametrize("key", ["NOBODY-424242", "not-a-key"])
+def test_search_by_an_unknown_or_invalid_issue_key_finds_nothing(api_client, key):
+    assert _search(api_client, query=f"issue:{key}", limit=10) == {"hits": [], "total": 0}

@@ -119,3 +119,17 @@ def test_investigation_status_and_assignee_are_facets():
     parsed = lookup.parse_query("istatus:not assignee:alice")
 
     assert parsed.facets == {"istatus": ("not",), "assignee": ("alice",)}
+
+
+def test_issue_key_is_taken_from_the_issue_facet():
+    parsed = lookup.parse_query("longevity issue:SCT-717 status:failed")
+
+    assert parsed.issue_key == "sct-717"
+    assert "issue" not in parsed.facets
+
+
+def test_excluded_issue_key_is_ignored():
+    parsed = lookup.parse_query("longevity -issue:SCT-717")
+
+    assert parsed.issue_key is None
+    assert parsed.excluded_facets == {}
