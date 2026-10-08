@@ -10,6 +10,7 @@ from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.web import ArgusUserView, User, UserRoles
+from argus.backend.service.client_service import ClientService
 from argus.common.enums import TestInvestigationStatus
 from argus.backend.service import test_lookup as lookup
 
@@ -259,6 +260,82 @@ async def test_search_istatus_and_assignee_facets_read_the_latest_run(
     assert [hit["id"] for hit in by_full_name["hits"]] == [str(mine.id)]
     assert [hit["id"] for hit in pending["hits"]] == [str(mine.id)]
     assert [hit["id"] for hit in done["hits"]] == [str(investigated.id)]
+
+
+async def _run_with_config(client_service, test, status: str, **params: str) -> str:
+    run_type, run_req = get_fake_test_run(test)
+    await client_service.submit_run(run_type, asdict(run_req))
+    await client_service.update_run_status(run_type, run_req.run_id, status)
+    await ClientService.parse_config_values("sct_config", json.dumps(params), run_req.run_id)
+    return run_req.run_id
+
+
+async def test_search_config_facet_narrows_the_recent_runs_of_the_scoped_release(
+        api_client, release_manager_service, client_service):
+    token = _search_token()
+    release, _, (on_aws, on_gce) = await _release_tree(release_manager_service, [f"{token}-a", f"{token}-b"])
+    aws_run = await _run_with_config(client_service, on_aws, "failed", backend=f"aws-{token}")
+    await _run_with_config(client_service, on_gce, "failed", backend=f"gce-{token}")
+
+    body = _search(api_client, query=f"config:sct_config.backend=aws-{token}", releaseId=str(release.id), limit=10)
+
+    assert body["total"] == 1
+    [hit] = body["hits"]
+    assert hit["id"] == aws_run
+    assert hit["type"] == "run"
+    assert hit["test_id"] == str(on_aws.id)
+    assert hit["status"] == "failed"
+
+
+async def test_search_config_facet_without_a_release_reads_the_value_newest_first(
+        api_client, release_manager_service, client_service):
+    token = _search_token()
+    _, _, (test,) = await _release_tree(release_manager_service, [f"{token}-a"])
+    older = await _run_with_config(client_service, test, "passed", backend=f"aws-{token}")
+    newer = await _run_with_config(client_service, test, "failed", backend=f"aws-{token}")
+
+    body = _search(api_client, query=f"config:backend=aws-{token}", limit=10)
+
+    assert [hit["id"] for hit in body["hits"]] == [newer, older]
+
+
+async def test_search_facets_narrow_the_runs_of_a_config_facet(
+        api_client, release_manager_service, client_service):
+    token = _search_token()
+    release, _, (first, second) = await _release_tree(release_manager_service, [f"{token}-a", f"{token}-b"])
+    failed = await _run_with_config(client_service, first, "failed", backend=f"aws-{token}")
+    await _run_with_config(client_service, second, "passed", backend=f"aws-{token}")
+
+    by_status = _search(api_client, query=f"config:backend=aws-{token} status:fail", limit=10)
+    by_word = _search(api_client, query=f"config:backend=aws-{token} {token}-a", limit=10)
+    by_type = _search(api_client, query=f"config:backend=aws-{token} type:test", limit=10)
+
+    assert [hit["id"] for hit in by_status["hits"]] == [failed]
+    assert [hit["id"] for hit in by_word["hits"]] == [failed]
+    assert by_type == {"hits": [], "total": 0}
+
+
+async def test_search_config_facet_ors_the_values_of_one_name(
+        api_client, release_manager_service, client_service):
+    token = _search_token()
+    _, _, (test,) = await _release_tree(release_manager_service, [f"{token}-a"])
+    aws = await _run_with_config(client_service, test, "passed", backend=f"aws-{token}")
+    gce = await _run_with_config(client_service, test, "passed", backend=f"gce-{token}")
+
+    body = _search(api_client, query=f"config:backend=aws-{token} config:backend=gce-{token}", limit=10)
+
+    assert {hit["id"] for hit in body["hits"]} == {aws, gce}
+
+
+async def test_search_config_facet_with_only_a_name_matches_nothing_on_its_own(
+        api_client, release_manager_service, client_service):
+    token = _search_token()
+    release, _, (test,) = await _release_tree(release_manager_service, [f"{token}-a"])
+    await _run_with_config(client_service, test, "passed", backend=f"aws-{token}")
+
+    body = _search(api_client, query="config:backend", releaseId=str(release.id), limit=10)
+
+    assert body == {"hits": [], "total": 0}
 
 
 async def test_search_status_facet_takes_its_release_from_a_release_facet(
