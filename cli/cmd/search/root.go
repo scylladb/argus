@@ -27,21 +27,38 @@ func Register(parent *cobra.Command) {
 which is the canonical, unambiguous way to reference a test in the planner
 commands.
 
-The query combines free text with optional facets, all AND-ed together:
+The query combines words and facets. Every word must match, and every facet
+key must match:
 
-  free text        case-insensitive substring match on the entity's own name
+  word             case-insensitive substring of the name, pretty name, or
+                   build_system_id
+  "two words"      a quoted phrase is one word, spaces included
   type:<value>     exact type: test, group, or release
-  release:<value>  substring match on the related release name
-  group:<value>    substring match on the related group name
+  release:<value>  substring of the release name or pretty name
+  group:<value>    substring of the group name or pretty name
+  status:<value>   start of the test's latest status: status:fail, status:not
+  istatus:<value>  start of the latest investigation status: istatus:not
+  assignee:<value> substring of the latest run assignee's username or name
+                   (status:, istatus: and assignee: need one release, from
+                   --release or a release: value that names exactly one,
+                   and return tests only)
+  -word, -key:val  exclude what matches
 
-Facet values must NOT be quoted and cannot contain spaces. Pass the whole query
-as a single shell-quoted argument, e.g.:
+Repeat a facet key to match any of its values, as in
+release:2026.1 release:2026.2. Quote a facet value that holds spaces, as in
+release:"ScyllaDB 2026.2". A Jenkins job URL (https://host/job/a/job/b/)
+searches for its job path, a/b. A word made only of dashes, such as --, is
+plain text.
+
+A query that is a single UUID returns that release, group, test, or run.
+
+Pass the whole query as a single shell-quoted argument, e.g.:
 
   argus search "release:2026.2 longevity"
-  argus search "type:group release:2026.2"
-  argus search longevity-100gb --release scylla-2026.2
-
-A bare UUID query is treated as a run/entity lookup by the backend.`,
+  argus search 'type:group release:"ScyllaDB 2026.2"'
+  argus search "longevity -azure"
+  argus search https://jenkins.scylladb.com/job/scylla-master/job/longevity/
+  argus search longevity-100gb --release scylla-2026.2`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: runSearch,
 	}
