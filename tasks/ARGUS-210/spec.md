@@ -1,0 +1,179 @@
+# ARGUS-210 — A page that lists the test runs linked to a Jira issue
+
+## Overview
+
+`GET /issues/{key}`, for example `/issues/SCT-1234`, serves a page shell that
+loads a new Svelte widget. The widget calls the ARGUS-209 lookup,
+`GET /api/v1/issues/{key}/links`, once. It shows the issue with the existing
+Jira issue card, read only, then one row per linked run, newest first. Each
+row carries a summary line, a link to the run page
+`/test/<build_id>/<build_number>`, and a toggle that opens the run inline. The
+inline view is the run page's own widget, the run selector and the run view,
+with the selector's title bar hidden. An unknown key and a key without links
+each show an empty state.
+
+## Constraints
+
+- The page reads the ARGUS-209 response as it is. No backend data path is
+  added, and the API shape does not change.
+- The key comes from the URL path, so it reaches the template and the script
+  escaped.
+- One request per page load. The response carries every field the rows show.
+- The inline view behaves as the run page does, with its run selector, tabs,
+  refresh and actions. It reuses that widget rather than a copy.
+- The run selector serves the workspace, the run pages and the standalone test
+  page. Their behavior does not change.
+- The page depends on the ARGUS-209 indexes, which `sync-models` creates on
+  deploy. The page adds no schema change.
+
+## Design
+
+**Components**
+
+- Main router: a page route behind the UI login. An anonymous visitor goes to
+  the login page and returns to the issue page after the login.
+- Page template: hands the key to the script as JSON and loads the page
+  bundle.
+- Issue links widget: fetches the lookup and renders the issue header and the
+  run list, or the empty state, or the error.
+- Linked run row: renders one run's summary line, the run page link and the
+  inline toggle. Opening the run mounts the run selector, and closing it
+  unmounts the selector.
+- Run selector (`TestRuns`, existing): gains a switch that hides its title
+  bar. The title bar holds the test name, the latest status, and the
+  configure, rebuild and clone buttons.
+- Jira issue card (existing): renders the header with the delete action off.
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant M as Main router
+    participant W as Issue links widget
+    participant A as Issues API
+    participant S as Run selector
+    B->>M: GET /issues/SCT-1234
+    M-->>B: page shell, key as JSON
+    B->>W: mount(issueKey)
+    W->>A: GET /api/v1/issues/SCT-1234/links
+    A-->>W: {issue, links}
+    W-->>B: Jira card + one row per link
+    B->>S: Show inline (test_id, run_id, title bar hidden)
+    S->>A: GET /api/v1/test-info, GET /api/v1/test/{test_id}/runs
+    S-->>B: run pills + the linked run's view, expanded
+```
+
+```mermaid
+flowchart TD
+    F[GET /api/v1/issues/key/links] --> R{Response}
+    R -->|"HTTP or JSON failure"| E1[Error alert: the HTTP error]
+    R -->|"status: error"| E2[Error alert: the API message]
+    R -->|"issue: null"| N[Empty state: Argus holds no issue KEY]
+    R -->|"issue, links: []"| C0[Jira card + empty state: no runs linked]
+    R -->|"issue, links"| C1[Jira card + N rows]
+```
+
+| Condition | Behavior |
+|---|---|
+| The visitor is not logged in | Login redirect; the issue page is the return target |
+| The value is not an issue key, e.g. `SCT1234` | The page renders; the widget shows the API message in an alert |
+| The key is in lower case | The API uppercases it; the header shows the stored key |
+| The request fails or returns no JSON | The widget shows an alert with the HTTP error |
+| The inline run selector fails to load | The selector's own message, as on the run page |
+| A link's run was deleted since the lookup | Open run lands on the run page's not-found redirect |
+
+## Contracts
+
+### Inputs
+
+The ARGUS-209 lookup, behind the session login:
+
+```
+GET /api/v1/issues/{key}/links
+  issue: key, summary, state, permalink, labels, user_id, added_on, subtype
+  links: run_id, test_id, test_name, status, start_time, build_number,
+         scylla_version, product_version, linked_on, url
+```
+
+### Outputs
+
+The page, route name `main.issue_links`, behind `ui_current_user`:
+
+```
+GET /issues/{key}    key: an issue key in any case, e.g. SCT-1234   → text/html
+```
+
+The run selector gains one prop. Existing callers omit it and keep the title
+bar:
+
+```ts
+// frontend/WorkArea/TestRuns.svelte
+showTitleBar?: boolean   // default true; false hides the title bar, the run pills and run view stay
+```
+
+### Module API
+
+```ts
+// frontend/Common/IssueTypes.ts
+export interface LinkedRun {
+    run_id: string;
+    test_id: string;
+    test_name: string;
+    plugin_name: string;
+    status: string;
+    start_time: string;
+    build_id: string;
+    build_number: number | null;
+    scylla_version: string | null;
+    product_version: string | null;
+    linked_on: string | null;
+    url: string;
+}
+
+export interface IssueLinks {
+    issue: Omit<JiraSubtype, "links" | "event_id"> | null;
+    links: LinkedRun[];
+}
+```
+
+```ts
+// frontend/IssueLinks/IssueLinks.svelte
+interface Props { issueKey: string }
+
+// frontend/IssueLinks/LinkedRun.svelte
+interface Props { link: LinkedRun }
+```
+
+## Risks
+
+| Risk | Response |
+|---|---|
+| Two runs of one test open inline share the selector's ignore-runs dialog id, so the dialog of the first one opens | Both act on the same test, so the result is the same. Run views key their ids by run id and collide only when one run is open twice |
+| Each open inline view refreshes its run list every 120 s | A view refreshes only while open; closing it stops the timer |
+| An issue with hundreds of links renders hundreds of rows | One request, plain rows, no run view until a row opens. Pagination follows the API when it gains parameters |
+| The new prop changes a shared widget | The default keeps the title bar; a test covers both values |
+
+## Deferred work
+
+- Links to this page from the rest of Argus, such as the key on the Jira issue
+  card and the run's issue tab. The route name and the URL stay as designed.
+- A second tracker. The URL stays `/issues/{key}`, the API picks the tracker
+  from the key, and the issue card already renders by `subtype`.
+- Pagination, when the lookup gains parameters.
+- The Jira write-back of ARGUS-220 can point an issue to this URL.
+
+## Decisions
+
+- The page URL carries the issue key alone, `/issues/{key}`, as the ARGUS-209
+  lookup does. A second tracker then adds a key format, not a route. (spec)
+- The inline view mounts the run page's widget, the run selector, with its
+  title bar hidden, since the row's summary line already names the run. (spec)
+- The page route does not check the key. The API holds the key rule, and the
+  widget shows its message, so the rule lives in one place. (spec)
+- The header reuses the Jira issue card with deletion off. The page lists
+  links and does not edit them. (spec)
+- An unknown key and a known key without links show different empty states,
+  so the reader learns whether Argus holds the issue at all. (spec)
+- Each row links to the run through the `url` of the response, so the page
+  builds no run URL of its own. (spec)
+- The widget fetches once and does not poll. The open inline views refresh
+  through the run selector. (spec)
