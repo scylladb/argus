@@ -664,6 +664,20 @@ class ReleaseStatsCollector:
 UNINVESTIGATED_FAILURES = (TestStatus.FAILED, TestStatus.TEST_ERROR, TestStatus.ERROR)
 
 
+def status_value(raw: str | None) -> str:
+    try:
+        return TestStatus(raw).value
+    except ValueError:
+        return TestStatus.CREATED.value
+
+
+def investigation_status_value(raw: str | None) -> str:
+    try:
+        return TestInvestigationStatus(raw).value
+    except ValueError:
+        return TestInvestigationStatus.NOT_INVESTIGATED.value
+
+
 def _status_counts(stats: dict) -> dict:
     # A freshly collected dict keys these by enum and a snapshot by string; both match the string value.
     not_investigated = stats.get(TestInvestigationStatus.NOT_INVESTIGATED.value, {})
@@ -677,8 +691,8 @@ def _status_counts(stats: dict) -> dict:
 def _test_summary(test: dict) -> dict:
     start_time = test["start_time"] if test["last_runs"] else None
     return {
-        "status": TestStatus(test["status"]).value,
-        "investigation_status": TestInvestigationStatus(test["investigation_status"]).value,
+        "status": status_value(test["status"]),
+        "investigation_status": investigation_status_value(test["investigation_status"]),
         "start_time": ArgusJSONProvider.default(start_time) if isinstance(start_time, datetime) else start_time,
     }
 
