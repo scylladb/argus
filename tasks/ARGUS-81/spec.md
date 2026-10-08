@@ -127,9 +127,9 @@ A search hit drives the sidebar as follows:
 A hit shows the status of its test, or the status bar of its group or
 release, whenever the sidebar holds that release's stats, which it always does
 inside a release. A run hit shows the run's own status. The dropdown stays open
-with its query after a pick, so several hits can be
-opened in a row; the pick moves the sidebar without taking the focus from the
-search. The search scope is the current release, held while the dropdown is
+with its query after a pick, so several hits can be opened in a row, and
+picking a test that is already open closes it. A pick moves the sidebar without
+taking the focus from the search. The search scope is the current release, held while the dropdown is
 open. A chip switches it to all releases.
 
 **Ordering within a level.**

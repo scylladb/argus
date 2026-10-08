@@ -443,6 +443,8 @@ stays in every plan built from a spec.
   from `onopen` to `onclose`. Takes `openTests` and marks those hits with a
   check.
 - A search pick no longer closes the mobile drawer.
+- **Deselect:** picking a test hit that is already open calls `onToggleTest`
+  and leaves the sidebar where it is.
 - **Clear button:** an `afterInput` × shows while the query is not empty. It
   empties the query and focuses the input. The × and the scope chip both stop
   the click from propagating. Svelte removes them before the click reaches the
