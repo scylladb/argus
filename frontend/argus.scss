@@ -58,6 +58,14 @@ div#argusErrors {
     background-color: #e65c00;
 }
 
+.bg-aborted {
+    background-color: $dark;
+}
+
+.btn-aborted {
+    @include button-variant($dark, $dark);
+}
+
 .text-test-error {
     color: #e65c00;
 }
@@ -754,6 +762,14 @@ div#notificationCounter {
 
     .bg-test-error {
         background-color: #c44e00;
+    }
+
+    .bg-aborted {
+        background-color: $gray-700;
+    }
+
+    .btn-aborted {
+        @include button-variant($gray-700, $gray-700);
     }
 
     .text-test-error {

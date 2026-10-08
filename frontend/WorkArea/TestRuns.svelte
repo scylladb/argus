@@ -31,10 +31,21 @@
      * @property {boolean} [filtered]
      * @property {boolean} [removableRuns]
      * @property {any} [additionalRuns]
+     * @property {boolean} [showTitleBar]
+     * @property {boolean} [updateUrl]
      */
 
     /** @type {Props} */
-    let { testId, tab, listId = uuidv4(), filtered = false, removableRuns = false, additionalRuns = [] } = $props();
+    let {
+        testId,
+        tab,
+        listId = uuidv4(),
+        filtered = false,
+        removableRuns = false,
+        additionalRuns = [],
+        showTitleBar = true,
+        updateUrl = true,
+    } = $props();
     /**
      * @type {{roles: string[]}}
      */
@@ -334,76 +345,78 @@
 <svelte:window bind:innerWidth />
 <div class:d-none={filtered} class="accordion-item border-none px-2 bg-main mb-1">
     {#if testInfo}
-        <div class="border-none mb-2">
-            <div
-                class="btn w-100 rounded d-flex align-items-center {removableRuns ? 'shadow-sm' : 'p-2'}"
-                class:btn-light={!open}
-                class:btn-testruns-open={open}
-                role="button"
-                tabindex="0"
-                onkeydown={() => {}}
-                onclick={() => {
-                    open = !open;
-                    new Collapse(`#collapse-${listId}`).toggle();
-                }}
-            >
-                {#if runs.length > 0}
-                    <span
-                        title={titleCase(runs[0].status)}
-                        class="me-2 cursor-question status-circle {StatusBackgroundCSSClassMap[runs[0].status] ??
-                            StatusBackgroundCSSClassMap['unknown']}"
-                    ></span>
-                {/if}
-                <div class="text-truncate" style="min-width: 0;">
-                    {testInfo.test.name}{#if !smallScreen}
-                        ({testInfo.release.name}/{testInfo.group.name}){/if}
-                </div>
-                {#if runs.length > 0}
-                    {#if !smallScreen}<div class="ms-auto text-end text-nowrap">
-                            {timestampToISODate(runs[0].start_time)}
-                        </div>{/if}
-                    <div class="mx-2" class:ms-auto={smallScreen}>#{runs[0].build_number}</div>
-                {/if}
-                <div class="btn-group">
-                    {#if applicationCurrentUser.roles.some( (v) => ["ROLE_ADMIN", "ROLE_MANAGER"].includes(v), ) || testInfo.release.name.includes("staging")}
-                        <button
-                            class="btn"
-                            onclick={(e) => {
-                                configureRequested = true;
-                                e.stopPropagation();
-                            }}><Fa icon={faGear} /></button
-                        >
+        {#if showTitleBar}
+            <div class="border-none mb-2">
+                <div
+                    class="btn w-100 rounded d-flex align-items-center {removableRuns ? 'shadow-sm' : 'p-2'}"
+                    class:btn-light={!open}
+                    class:btn-testruns-open={open}
+                    role="button"
+                    tabindex="0"
+                    onkeydown={() => {}}
+                    onclick={() => {
+                        open = !open;
+                        new Collapse(`#collapse-${listId}`).toggle();
+                    }}
+                >
+                    {#if runs.length > 0}
+                        <span
+                            title={titleCase(runs[0].status)}
+                            class="me-2 cursor-question status-circle {StatusBackgroundCSSClassMap[runs[0].status] ??
+                                StatusBackgroundCSSClassMap['unknown']}"
+                        ></span>
                     {/if}
-                    <button
-                        class="btn"
-                        onclick={(e) => {
-                            execRequested = true;
-                            e.stopPropagation();
-                        }}><Fa icon={faPlay} /></button
-                    >
-                    <button
-                        class="btn"
-                        onclick={(e) => {
-                            cloneRequested = true;
-                            e.stopPropagation();
-                        }}><Fa icon={faCopy} /></button
-                    >
-                </div>
-                {#if removableRuns}
-                    <div class="me-2" class:ms-1={runs.length > 0} class:ms-auto={runs.length == 0}>
+                    <div class="text-truncate" style="min-width: 0;">
+                        {testInfo.test.name}{#if !smallScreen}
+                            ({testInfo.release.name}/{testInfo.group.name}){/if}
+                    </div>
+                    {#if runs.length > 0}
+                        {#if !smallScreen}<div class="ms-auto text-end text-nowrap">
+                                {timestampToISODate(runs[0].start_time)}
+                            </div>{/if}
+                        <div class="mx-2" class:ms-auto={smallScreen}>#{runs[0].build_number}</div>
+                    {/if}
+                    <div class="btn-group">
+                        {#if applicationCurrentUser.roles.some( (v) => ["ROLE_ADMIN", "ROLE_MANAGER"].includes(v), ) || testInfo.release.name.includes("staging")}
+                            <button
+                                class="btn"
+                                onclick={(e) => {
+                                    configureRequested = true;
+                                    e.stopPropagation();
+                                }}><Fa icon={faGear} /></button
+                            >
+                        {/if}
                         <button
                             class="btn"
                             onclick={(e) => {
-                                dispatch("testRunRemove", { testId: testId });
+                                execRequested = true;
                                 e.stopPropagation();
-                            }}
+                            }}><Fa icon={faPlay} /></button
                         >
-                            <Fa icon={faTimes} />
-                        </button>
+                        <button
+                            class="btn"
+                            onclick={(e) => {
+                                cloneRequested = true;
+                                e.stopPropagation();
+                            }}><Fa icon={faCopy} /></button
+                        >
                     </div>
-                {/if}
+                    {#if removableRuns}
+                        <div class="me-2" class:ms-1={runs.length > 0} class:ms-auto={runs.length == 0}>
+                            <button
+                                class="btn"
+                                onclick={(e) => {
+                                    dispatch("testRunRemove", { testId: testId });
+                                    e.stopPropagation();
+                                }}
+                            >
+                                <Fa icon={faTimes} />
+                            </button>
+                        </div>
+                    {/if}
+                </div>
             </div>
-        </div>
+        {/if}
         {#if configureRequested}
             <JobConfigureModal
                 testName={testInfo.test.pretty_name || testInfo.test.name}
@@ -500,6 +513,7 @@
                                         runId={run.id}
                                         {testInfo}
                                         {tab}
+                                        {updateUrl}
                                         buildNumber={run.build_number}
                                         on:closeRun={handleTestRunClose}
                                         on:investigationStatusChange

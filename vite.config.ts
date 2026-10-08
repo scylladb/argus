@@ -54,6 +54,7 @@ export default defineConfig({
                 profileNotifications: "./frontend/profile-notifications.js",
                 profileSchedules: "./frontend/profile-schedules.js",
                 teams: "./frontend/teams.js",
+                issueLinks: "./frontend/issue-links.js",
             },
             output: {
                 entryFileNames: "[name].bundle.js",

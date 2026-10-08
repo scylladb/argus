@@ -29,13 +29,15 @@
         buildNumber?: any;
         testInfo?: any;
         tab?: string;
+        updateUrl?: boolean;
     }
 
     let {
         runId = "",
         buildNumber = $bindable(-1),
         testInfo = {},
-        tab = ""
+        tab = "",
+        updateUrl = true
     }: Props = $props();
     const dispatch = createEventDispatcher();
     let testRun = $state(undefined);
@@ -52,7 +54,7 @@
         if (tabName !== activeTab) {
             activeTab = tabName;
             visitedTabs[tabName] = true;
-            if (!window.location.pathname.startsWith("/workspace")) {
+            if (updateUrl && !window.location.pathname.startsWith("/workspace")) {
                 const newUrl = `/tests/${testInfo.test.plugin_name}/${runId}/${tabName}`;
                 history.replaceState({}, "", newUrl);
             }
