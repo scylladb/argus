@@ -15,12 +15,12 @@
 
     interface Props {
         scope: Release | null;
-        openTests?: string[];
+        openIds?: string[];
         statsFor?: (hit: SearchHit) => HitStats | undefined;
         onPick: (hit: SearchHit) => void;
     }
 
-    let { scope, openTests = [], statsFor, onPick }: Props = $props();
+    let { scope, openIds = [], statsFor, onPick }: Props = $props();
 
     const TYPE_LABELS: Record<SearchHit["type"], string> = {
         release: "Release",
@@ -39,12 +39,15 @@
     const liveScope = $derived(scope && scope.id !== widenedFrom ? scope : null);
     const activeScope = $derived(open && held ? held.scope : liveScope);
     const scopeId = $derived(activeScope?.id ?? null);
-    const openSet = $derived(new Set(openTests));
-    const emptyMessage = $derived(
-        !scopeId && /(^|\s)-?(status|istatus|assignee):/i.test(query)
-            ? "status:, istatus: and assignee: work inside one release. Open a release or add release:<name>."
-            : "Nothing matches"
-    );
+    const openSet = $derived(new Set(openIds));
+    const issueQuery = $derived(/(^|\s)issue:/i.test(query));
+    const emptyMessage = $derived.by(() => {
+        if (issueQuery) return "No runs are linked to that issue. issue: takes a Jira key such as SCT-1234.";
+        if (!scopeId && /(^|\s)-?(status|istatus|assignee):/i.test(query)) {
+            return "status:, istatus: and assignee: work inside one release. Open a release or add release:<name>.";
+        }
+        return "Nothing matches";
+    });
 
     export const focus = () => input?.focus();
 
@@ -102,7 +105,7 @@
         >
             {#snippet beforeInput()}
                 <span class="text-body-tertiary ps-1 pe-2" aria-hidden="true"><Fa icon={faMagnifyingGlass} /></span>
-                {#if activeScope}
+                {#if activeScope && !issueQuery}
                     <span class="badge text-bg-primary d-inline-flex align-items-center gap-1 me-1 text-nowrap">
                         in {displayName(activeScope)}
                         <button
@@ -146,7 +149,7 @@
                             <span class="d-flex mt-1"><StatusSummary stats={stats.counts} /></span>
                         {/if}
                     </span>
-                    {#if option.hit.type === "test" && openSet.has(option.hit.id)}
+                    {#if (option.hit.type === "test" || option.hit.type === "run") && openSet.has(option.hit.id)}
                         <span class="text-success-emphasis flex-shrink-0 mt-1" title="Open in the panel; pick it again to close it">
                             <Fa icon={faCheck} /><span class="visually-hidden">Open in the panel; pick it again to close it</span>
                         </span>

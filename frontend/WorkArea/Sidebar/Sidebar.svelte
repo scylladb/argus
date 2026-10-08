@@ -10,13 +10,15 @@
 
     interface Props {
         openTests?: string[];
+        openRuns?: Record<string, string[]>;
         onToggleTest: (testId: string) => void;
         onOpenTest: (testId: string) => void;
         onOpenTests: (testIds: string[]) => void;
         onOpenRun: (testId: string, runId: string) => void;
+        onCloseRun: (testId: string, runId: string) => void;
     }
 
-    let { openTests = [], onToggleTest, onOpenTest, onOpenTests, onOpenRun }: Props = $props();
+    let { openTests = [], openRuns = {}, onToggleTest, onOpenTest, onOpenTests, onOpenRun, onCloseRun }: Props = $props();
 
     type Entry =
         | { kind: "release"; item: Release }
@@ -54,6 +56,10 @@
     const activeIndex = $derived(Math.max(0, entries.findIndex((entry) => entry.item.id === activeId)));
     const duplicates = $derived(duplicateNames(entries.map((entry) => entry.item)));
     const openSet = $derived(new Set(openTests));
+    const openRunSet = $derived(
+        new Set(Object.entries(openRuns).flatMap(([testId, runIds]) => (openSet.has(testId) ? runIds : [])))
+    );
+    const openIds = $derived([...openSet, ...openRunSet]);
     const emptyMessage = $derived(
         sidebar.group ? "No tests in this group." : sidebar.release ? "No groups in this release." : "No releases."
     );
@@ -155,6 +161,11 @@
             onToggleTest(hit.id);
             return;
         }
+        const runTestId = hit.test_id ?? hit.test?.id;
+        if (hit.type === "run" && runTestId && openRunSet.has(hit.id)) {
+            onCloseRun(runTestId, hit.id);
+            return;
+        }
         const testId = sidebar.locate(hit);
         if (testId && hit.type === "test") onOpenTest(testId);
         if (testId && hit.type === "run") onOpenRun(testId, hit.id);
@@ -252,7 +263,7 @@
     </div>
     <div class="sidebar-panel d-flex flex-column flex-grow-1 bg-body border rounded shadow-sm">
         <div class="p-2 border-bottom">
-            <SidebarSearch bind:this={search} scope={sidebar.release} {openTests} statsFor={hitStats} onPick={pick} />
+            <SidebarSearch bind:this={search} scope={sidebar.release} {openIds} statsFor={hitStats} onPick={pick} />
         </div>
         <div class="d-flex align-items-center gap-2 px-3 py-2 border-bottom">
             <nav aria-label="breadcrumb" class="flex-grow-1 min-w-0">
