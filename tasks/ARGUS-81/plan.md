@@ -563,7 +563,58 @@ stays in every plan built from a spec.
 - [x] Run the verify sequence.
 - [x] Committed in 2c8193ff `feature(search)`, 514c66ac `improvement(cli/search)`, 4b5d50c6 `improvement(workspace)` and 8c54aab0 `docs(api-usage)`.
 
-## Task 10 — Documentation
+## Task 10 — Review fixes
+
+**Files:**
+- Modify:
+  - `argus/backend/service/test_lookup.py`
+  - `argus/backend/service/stats.py`
+  - `argus/backend/controller/admin_api.py`
+  - `cli/cmd/search/root.go`
+  - `frontend/WorkArea/WorkArea.svelte`
+  - `frontend/WorkArea/TestRuns.svelte`
+  - `frontend/WorkArea/Sidebar/Sidebar.svelte`
+  - `frontend/WorkArea/Sidebar/SidebarSearch.svelte`
+  - `frontend/AdminPanel/ReleaseEditor.svelte`
+  - `docs/api_usage.md`
+- Create: `frontend/WorkArea/workAreaState.svelte.ts`
+- Test:
+  - Backend: `test_query_parser.py`, `planner_api/test_planner_api.py`, `issues/test_issues.py`, `test_stats_summary.py`, `admin_api/test_admin_release_api.py`
+  - Frontend: `workAreaState.test.ts`, `TestRuns.test.ts`, `Sidebar/Sidebar.test.ts`, `Sidebar/SidebarSearch.test.ts`, `AdminPanel/ReleaseEditor.test.ts`
+
+**Internals:**
+- **Limits:** `MAX_QUERY_LENGTH = 1000`, `MAX_QUERY_TOKENS = 24` and
+  `MAX_CONFIG_FILTERS = 8` raise `DataValidationError`.
+  `_config_partition_runs` stops at `CONFIG_RUN_LIMIT` across all values.
+  `_narrow_by_configs` reads value by value.
+  `_match_and_rank` runs in `asyncio.to_thread`.
+- **Parser:** `ParsedQuery.issue_keys` replaces `issue_key`, and the issue
+  runs are merged. `has_positive_match()` gates the lookup. A negated UUID
+  becomes an excluded id, which `_matches` and `_run_matches` drop.
+- **NULL statuses:** `stats.status_value` and `investigation_status_value`
+  default a NULL or unknown value to `created` and `not_investigated`.
+- **Priority bounds:** `EditReleaseRequest.priority` is bounded to 0..2³¹−1.
+  `ReleaseEditor` refuses a value that is not a whole number of 0 or more.
+- **`WorkAreaState`:** holds `testRuns`, `additionalRuns` and the
+  open/close/toggle handlers. `WorkArea` binds to it.
+- **`TestRuns`:** refetches its runs when `additionalRuns` changes after the
+  test info has loaded.
+- **`Sidebar` focus:** moves focus only when it sits on the page body or
+  inside the drawer outside the search box. Navigating calls
+  `SidebarSearch.resetScope()`.
+- **Refresh at the release list:** retries the rows whose stats failed.
+- **`SidebarSearch`:** shows the server's message when the API refuses a
+  query.
+
+- [x] Write the failing tests for each fix.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Measure the capped query on the dev server: 24 values in 0.36 s, and a release list answered meanwhile in 0.16 s; 700 values are refused.
+- [x] Check in Chrome: a second run picked into an open test appears at once; the scope chip returns after navigating.
+- [x] Run the verify sequence.
+- [x] Committed in 0978840b `fix(stats)`, a8329e3a `fix(release)`, 47df2002 `fix(search)`, 94545e08 `improvement(cli/search)`, e85997aa `fix(workspace)`, and 14e35c9f `docs(api-usage)`.
+
+## Task 11 — Documentation
 
 **Files:**
 - Modify:
