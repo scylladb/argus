@@ -25,9 +25,13 @@ from argus.backend.models.web import (
 )
 from argus.backend.events.event_processors import EVENT_PROCESSORS
 from argus.backend.service.planner_service import PlanningService
-from argus.backend.util.common import chunk
+from argus.backend.util.common import chunk, version_key
 
 LOGGER = logging.getLogger(__name__)
+
+
+def release_sort_key(release: ArgusRelease) -> tuple:
+    return (release.dormant, -(release.priority or 0), version_key(release.name))
 
 
 @dataclass(init=True, frozen=True)
@@ -128,10 +132,7 @@ class ArgusService:
             return None
 
     async def get_releases(self):
-        releases = list(await ArgusRelease.find().all())
-        releases = sorted(releases, key=lambda r: r.name)
-        releases = sorted(releases, key=lambda r: r.dormant)
-        return releases
+        return sorted(await ArgusRelease.find().all(), key=release_sort_key)
 
     async def get_groups(self, release_id: UUID) -> list[ArgusGroup]:
         groups = list(await ArgusGroup.find(release_id=release_id).all())
