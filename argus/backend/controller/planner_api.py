@@ -52,16 +52,17 @@ async def grid_view_for_release(release_id: UUID, user: User = Depends(api_curre
 
 @router.get("/search", name="api.planning_api.search_tests")
 async def search_tests(query: str | None = Query(None), release_id: str | None = Query(None, alias="releaseId"),
-                 user: User = Depends(api_current_user)):
+                       limit: int | None = Query(None, ge=1), offset: int = Query(0, ge=0),
+                       user: User = Depends(api_current_user)):
     if query:
-        res = await TestLookup.test_lookup(query, release_id=release_id)
+        hits, total = await TestLookup.test_lookup(query, release_id=release_id, limit=limit, offset=offset)
     else:
-        res = []
+        hits, total = [], 0
     return APIResponse({
         "status": "ok",
         "response": {
-            "hits": res,
-            "total": len(res)
+            "hits": hits,
+            "total": total
         }
     })
 
