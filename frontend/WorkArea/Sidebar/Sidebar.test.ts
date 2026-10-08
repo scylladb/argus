@@ -78,6 +78,7 @@ const renderSidebar = (props: Record<string, unknown> = {}) => {
         onOpenTest: vi.fn(),
         onOpenTests: vi.fn(),
         onOpenRun: vi.fn(),
+        onCloseRun: vi.fn(),
     };
     render(Sidebar, { props: { ...callbacks, ...props } });
     return callbacks;
@@ -210,6 +211,30 @@ describe("Sidebar", () => {
         expect(onToggleTest).toHaveBeenCalledWith("t1");
         expect(onOpenTest).not.toHaveBeenCalled();
         expect(breadcrumb()).toBe("Releases");
+    });
+
+    it("closes an open run when its hit is picked again in the search", async () => {
+        const fetchMock = serve();
+        const runHit = {
+            id: "r1", type: "run", name: "alpha-test#3", pretty_name: null, status: "failed", test_id: "t1",
+            release_id: MASTER.id, group_id: "g1", release: MASTER, group: GROUPS[0], test: { id: "t1", name: "alpha-test" },
+        };
+        const base = fetchMock.getMockImplementation()!;
+        fetchMock.mockImplementation((url: string) =>
+            url.startsWith("/api/v1/planning/search") ? ok({ hits: [runHit], total: 1 }) : base(url));
+        const { onOpenRun, onCloseRun } = renderSidebar({ openTests: ["t1"], openRuns: { t1: ["r1"] } });
+        await waitFor(() => row("scylla-master"));
+
+        const input = document.getElementById("workspace-search") as HTMLInputElement;
+        await fireEvent.focus(input);
+        await fireEvent.input(input, { target: { value: "issue:SCT-1" } });
+        const option = await waitFor(() => screen.getByText("alpha-test#3", { selector: "ul.options *" }), { timeout: 2000 });
+        expect(option.closest("li")?.textContent).toContain("pick it again to close it");
+        await fireEvent.mouseUp(option);
+        await fireEvent.click(option);
+
+        expect(onCloseRun).toHaveBeenCalledWith("t1", "r1");
+        expect(onOpenRun).not.toHaveBeenCalled();
     });
 
     it("shows the loaded status of a test in the search results", async () => {
