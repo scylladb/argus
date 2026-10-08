@@ -195,6 +195,7 @@ type SCTEvent struct {
 	EventID           string           `json:"event_id"`
 	EventType         string           `json:"event_type"`
 	Message           string           `json:"message"`
+	Summary           string           `json:"summary,omitempty"`
 	DuplicateID       string           `json:"duplicate_id"`
 	Node              string           `json:"node"`
 	ReceivedTimestamp string           `json:"received_timestamp"`
@@ -790,17 +791,13 @@ type SCTEventsResponse struct {
 
 // Headers implements output.Tabular for SCTEventsResponse.
 func (SCTEventsResponse) Headers() []string {
-	return []string{"Severity", "Timestamp", "Type", "Node", "Nemesis", "Repeats", "Message"}
+	return []string{"Severity", "Timestamp", "Type", "Node", "Nemesis", "Repeats", "Message", "Summary"}
 }
 
 // Rows implements output.Tabular for SCTEventsResponse.
 func (r SCTEventsResponse) Rows() [][]string {
 	rows := make([][]string, 0, len(r.Events))
 	for _, e := range r.Events {
-		msg := e.Message
-		if len(msg) > 200 {
-			msg = msg[:200] + "..."
-		}
 		repeats := ""
 		if n := len(e.RepeatedAt); n > 0 {
 			repeats = strconv.Itoa(n)
@@ -812,10 +809,19 @@ func (r SCTEventsResponse) Rows() [][]string {
 			e.Node,
 			e.NemesisName,
 			repeats,
-			msg,
+			truncateEventText(e.Message),
+			truncateEventText(e.Summary),
 		})
 	}
 	return rows
+}
+
+// truncateEventText shortens a table cell to 200 bytes.
+func truncateEventText(s string) string {
+	if len(s) > 200 {
+		return s[:200] + "..."
+	}
+	return s
 }
 
 // MarshalJSON implements json.Marshaler so that the JSON outputter serialises

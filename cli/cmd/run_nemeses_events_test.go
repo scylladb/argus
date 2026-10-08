@@ -153,6 +153,32 @@ func TestDeduplicateEvents(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "original keeps its own summary",
+			events: []models.SCTEvent{
+				{EventID: "orig", Ts: "2024-01-01T00:00:00Z", Summary: "original summary"},
+				{EventID: "dup", Ts: "2024-01-01T01:00:00Z", DuplicateID: "orig", Summary: "duplicate summary"},
+			},
+			wantCount: 1,
+			wantChecks: func(t *testing.T, result []models.SCTEvent) {
+				if result[0].Summary != "original summary" {
+					t.Errorf("expected original summary, got %q", result[0].Summary)
+				}
+			},
+		},
+		{
+			name: "promoted orphan keeps its own summary",
+			events: []models.SCTEvent{
+				{EventID: "d2", Ts: "2024-01-01T02:00:00Z", DuplicateID: "gone", Summary: "second"},
+				{EventID: "d1", Ts: "2024-01-01T01:00:00Z", DuplicateID: "gone", Summary: "first"},
+			},
+			wantCount: 1,
+			wantChecks: func(t *testing.T, result []models.SCTEvent) {
+				if result[0].Summary != "first" {
+					t.Errorf("expected summary of earliest orphan, got %q", result[0].Summary)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
