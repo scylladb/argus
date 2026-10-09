@@ -94,3 +94,41 @@ describe("TestRuns run view", () => {
         expect(dispatcherProps().updateUrl).toBe(false);
     });
 });
+
+describe("TestRuns refresh", () => {
+    const runListFetches = () =>
+        vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith(`/api/v1/test/${TEST_ID}/runs`)).length;
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it("refreshes the run list every two minutes by default", async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        render(TestRuns, { props: { testId: TEST_ID, tab: "details" } });
+        await screen.findByRole("button", { name: "#412" });
+        expect(runListFetches()).toBe(1);
+
+        await vi.advanceTimersByTimeAsync(120 * 1000);
+
+        expect(runListFetches()).toBe(2);
+    });
+
+    it("does not refresh the run list when autoRefresh is false", async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        render(TestRuns, { props: { testId: TEST_ID, tab: "details", autoRefresh: false } });
+        await screen.findByRole("button", { name: "#412" });
+
+        await vi.advanceTimersByTimeAsync(120 * 1000);
+
+        expect(runListFetches()).toBe(1);
+    });
+
+    it("passes autoRefresh on to the run view", async () => {
+        render(TestRuns, { props: { testId: TEST_ID, tab: "details", additionalRuns: [RUNS[0].id], autoRefresh: false } });
+
+        await screen.findByRole("button", { name: "#412" });
+
+        expect(dispatcherProps().autoRefresh).toBe(false);
+    });
+});

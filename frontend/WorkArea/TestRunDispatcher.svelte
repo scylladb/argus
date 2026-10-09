@@ -5,7 +5,8 @@
         testInfo,
         buildNumber,
         tab,
-        updateUrl = true
+        updateUrl = true,
+        autoRefresh = true
     } = $props();
 
 
@@ -13,4 +14,4 @@
     const SvelteComponent = $derived(AVAILABLE_PLUGINS?.[testInfo.test.plugin_name] ?? AVAILABLE_PLUGINS.unknown);
 </script>
 
-<SvelteComponent {runId} {testInfo} {buildNumber} {tab} {updateUrl} on:closeRun on:investigationStatusChange on:runStatusChange on:cloneComplete />
+<SvelteComponent {runId} {testInfo} {buildNumber} {tab} {updateUrl} {autoRefresh} on:closeRun on:investigationStatusChange on:runStatusChange on:cloneComplete />

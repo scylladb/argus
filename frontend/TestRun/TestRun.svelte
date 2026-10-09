@@ -174,6 +174,7 @@
         testInfo: TestInfo;
         tab?: string;
         updateUrl?: boolean;
+        autoRefresh?: boolean;
     }
 
     let {
@@ -181,7 +182,8 @@
         buildNumber = $bindable(-1),
         testInfo,
         tab = "",
-        updateUrl = true
+        updateUrl = true,
+        autoRefresh = true
     }: Props = $props();
 
 
@@ -254,7 +256,7 @@
 
     onMount(() => {
         fetchTestRunData();
-        runRefreshInterval = setInterval(fetchTestRunData, 120_000);
+        if (autoRefresh) runRefreshInterval = setInterval(fetchTestRunData, 120_000);
         return () => {
             if (runRefreshInterval) clearInterval(runRefreshInterval);
         };

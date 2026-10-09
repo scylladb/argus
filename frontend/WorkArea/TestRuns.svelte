@@ -33,6 +33,7 @@
      * @property {any} [additionalRuns]
      * @property {boolean} [showTitleBar]
      * @property {boolean} [updateUrl]
+     * @property {boolean} [autoRefresh]
      */
 
     /** @type {Props} */
@@ -45,6 +46,7 @@
         additionalRuns = [],
         showTitleBar = true,
         updateUrl = true,
+        autoRefresh = true,
     } = $props();
     /**
      * @type {{roles: string[]}}
@@ -327,9 +329,11 @@
         await fetchTestInfo();
         if (testInfo) {
             fetchTestRuns();
-            runRefreshInterval = setInterval(async () => {
-                fetchTestRuns();
-            }, 120 * 1000);
+            if (autoRefresh) {
+                runRefreshInterval = setInterval(async () => {
+                    fetchTestRuns();
+                }, 120 * 1000);
+            }
         }
     };
 
@@ -514,6 +518,7 @@
                                         {testInfo}
                                         {tab}
                                         {updateUrl}
+                                        {autoRefresh}
                                         buildNumber={run.build_number}
                                         on:closeRun={handleTestRunClose}
                                         on:investigationStatusChange

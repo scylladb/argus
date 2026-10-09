@@ -66,6 +66,7 @@ describe("LinkedRun", () => {
         expect(props.tab).toBe("details");
         expect(props.showTitleBar).toBe(false);
         expect(props.updateUrl).toBe(false);
+        expect(props.autoRefresh).toBe(false);
 
         await fireEvent.click(toggle);
 
