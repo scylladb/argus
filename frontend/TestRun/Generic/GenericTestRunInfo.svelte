@@ -5,6 +5,7 @@
     import humanizeDuration from "humanize-duration";
     import Fa from "svelte-fa";
     import { timestampToISODate } from "../../Common/DateUtils";
+    import ReplayedFrom from "../ReplayedFrom.svelte";
     let {
         test_run = {},
         release,
@@ -60,6 +61,9 @@
                     <span class="fw-bold">Started by:</span>
                     {test_run.started_by ?? "Unknown, probably jenkins"}
                 </li>
+                {#if test_run.source_run_id}
+                    <ReplayedFrom sourceRunId={test_run.source_run_id} />
+                {/if}
                 <li>
                     <span class="fw-bold">Build job:</span>
                     <a href={test_run.build_job_url} target="_blank">

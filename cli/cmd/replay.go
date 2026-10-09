@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/rs/zerolog"
 	"github.com/scylladb/argus/cli/internal/api"
@@ -48,7 +50,27 @@ attaches any log archives that were uploaded but whose logs/submit was never
 recorded (e.g. loader/monitor/sct-runner bundles); pass --backfill-logs=false
 to skip that step. Use --target-url to replay against a different Argus
 instance; you must already hold credentials valid for that target (the CLI
-does not re-authenticate against a different host).`,
+does not re-authenticate against a different host).
+
+A local run (one run with no Jenkins build URL) goes to
+local-runs/<your Argus username>/<job> by default, where <job> is its first
+SCT config file, e.g. local-runs/jdoe/longevity-100gb-4h. Use --build-id to
+pick another build path, e.g. scylla-staging/<user>/<job>. Either way the
+server gives each run a new run ID, so every replay makes a new run, and
+recorded log links keep pointing at the original S3 objects. Each run takes
+the next free build number under the path; end --build-id with #<n> to
+choose it. For a replay into a build path, --as-me is on unless you turn it
+off, so the run belongs to your Argus user. The local-runs default also
+creates its release, group and test; --build-id creates a missing group and
+test only with --create-missing-tests. The new run records the original run ID, and its page links
+to the original run. Use --resume <run-id> to finish a --build-id replay that
+failed, in the run it made. Use --keep-run to replay a local run as
+recorded. --build-id must name an existing release; only the local-runs
+default creates its release. Without a build path, --as-me only makes you the
+assignee, and the run keeps its recorded starter.
+
+The summary lists each run with its Argus link. A retargeted run shows the
+run ID from the log next to the new one.`,
 	Example: `  # Replay all files for a run from the SCT results directory
   argus run replay --dir ~/sct-results/latest --run-id 550e8400-e29b-41d4-a716-446655440000
 
@@ -61,6 +83,14 @@ does not re-authenticate against a different host).`,
   # Replay a compressed single log
   argus run replay --file argus_replay_log_R_1.jsonl.zst
 
+  # Replay into your own folder as a new run that you own
+  argus run replay --file ~/sct-extract/sct-runner-events-abc.tar.zst \
+    --build-id scylla-staging/jdoe/my-argus-local-run
+
+  # The same, but keep the scheduled assignee and the recorded starter
+  argus run replay --file ~/sct-extract/sct-runner-events-abc.tar.zst \
+    --build-id scylla-staging/jdoe/my-argus-local-run --as-me=false
+
   # Dry-run preview
   argus run replay --dir ~/sct-results/latest --run-id 550e... --dry-run`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
@@ -72,10 +102,20 @@ does not re-authenticate against a different host).`,
 		runID, _ := cmd.Flags().GetString("run-id")
 		fileArgs, _ := cmd.Flags().GetStringArray("file")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
-		createMissingTests, _ := cmd.Flags().GetBool("create-missing-tests")
+		createMissingTests := optionalBool(cmd, "create-missing-tests")
 		backfillLogs, _ := cmd.Flags().GetBool("backfill-logs")
 		targetURL, _ := cmd.Flags().GetString("target-url")
 		reportFmt, _ := cmd.Flags().GetString("report")
+		buildID, _ := cmd.Flags().GetString("build-id")
+		asMe := optionalBool(cmd, "as-me")
+		resumeRunID, _ := cmd.Flags().GetString("resume")
+
+		if buildID != "" {
+			if err := checkBuildID(buildID); err != nil {
+				return err
+			}
+		}
+		keepRun, _ := cmd.Flags().GetBool("keep-run")
 
 		inputs, err := collectFiles(dir, runID, fileArgs)
 		if err != nil {
@@ -97,12 +137,22 @@ does not re-authenticate against a different host).`,
 			return err
 		}
 
-		summary, err := uploadReplay(ctx, client, files, dryRun, createMissingTests, backfillLogs, log)
+		opts := replayOptions{
+			DryRun:             dryRun,
+			CreateMissingTests: createMissingTests,
+			BackfillLogs:       backfillLogs,
+			BuildID:            buildID,
+			AsMe:               asMe,
+			ResumeRunID:        resumeRunID,
+			KeepRun:            keepRun,
+		}
+		summary, err := uploadReplay(ctx, client, files, opts, log)
 		if err != nil {
 			return err
 		}
 
-		return renderReplaySummary(cmd, reportFmt, summary)
+		report := replayReport{ReplayIngestSummary: summary, Runs: runLinks(client.BaseURL(), summary.Runs, dryRun)}
+		return renderReplaySummary(cmd, reportFmt, report)
 	},
 }
 
@@ -229,28 +279,84 @@ func replayClient(ctx context.Context, targetURL string) (*api.Client, error) {
 	return client, nil
 }
 
+// replayOptions are the query parameters of one replay-ingest request. A nil
+// CreateMissingTests or AsMe leaves the choice to the server, which turns both
+// on for a replay with a build ID.
+type replayOptions struct {
+	DryRun             bool
+	CreateMissingTests *bool
+	BackfillLogs       bool
+	BuildID            string
+	AsMe               *bool
+	ResumeRunID        string
+	KeepRun            bool
+}
+
+// checkBuildID applies the server's rule for a build ID before the archive
+// is uploaded: a path of two or more slash-separated names, none empty, none
+// holding whitespace, and an optional "#<n>" build number above zero. The
+// server also checks that the build number is free.
+func checkBuildID(buildID string) error {
+	path, number, hasNumber := strings.Cut(buildID, "#")
+	parts := strings.Split(path, "/")
+	if len(parts) < 2 {
+		return fmt.Errorf("--build-id %q: name a release and a test, e.g. scylla-staging/<user>/<job>", buildID)
+	}
+	for _, p := range parts {
+		if p == "" || strings.IndexFunc(p, unicode.IsSpace) >= 0 {
+			return fmt.Errorf("--build-id %q: every name must be non-empty and hold no whitespace", buildID)
+		}
+	}
+	if hasNumber {
+		if n, err := strconv.Atoi(number); err != nil || n < 1 || strconv.Itoa(n) != number {
+			return fmt.Errorf("--build-id %q: the build number after '#' must be a positive integer", buildID)
+		}
+	}
+	return nil
+}
+
+// optionalBool returns the value of a bool flag the user set, or nil.
+func optionalBool(cmd *cobra.Command, name string) *bool {
+	if !cmd.Flags().Changed(name) {
+		return nil
+	}
+	v, _ := cmd.Flags().GetBool(name)
+	return &v
+}
+
 // uploadReplay streams the tar.zst archive of files to the replay-ingest
 // endpoint and decodes the server's summary response.
 func uploadReplay(
 	ctx context.Context,
 	client *api.Client,
 	files []string,
-	dryRun bool,
-	createMissingTests bool,
-	backfillLogs bool,
+	opts replayOptions,
 	log zerolog.Logger,
 ) (*models.ReplayIngestSummary, error) {
 	route := api.ReplayIngest
 	q := url.Values{}
-	if dryRun {
+	if opts.DryRun {
 		q.Set("dry_run", "true")
 	}
-	if createMissingTests {
-		q.Set("create_missing_tests", "true")
+	if opts.CreateMissingTests != nil {
+		q.Set("create_missing_tests", strconv.FormatBool(*opts.CreateMissingTests))
 	}
 	// Backfill is on by default server-side; only send the param to disable it.
-	if !backfillLogs {
+	if !opts.BackfillLogs {
 		q.Set("backfill_logs", "false")
+	}
+	if opts.BuildID != "" {
+		q.Set("build_id", opts.BuildID)
+	}
+	if opts.AsMe != nil {
+		q.Set("as_me", strconv.FormatBool(*opts.AsMe))
+	}
+	if opts.ResumeRunID != "" {
+		q.Set("resume_run_id", opts.ResumeRunID)
+	}
+	// The CLI asks for the local-runs default unless the user keeps the run.
+	if !opts.KeepRun {
+		q.Set("local_runs", "true")
 	}
 	if encoded := q.Encode(); encoded != "" {
 		route += "?" + encoded
@@ -321,12 +427,66 @@ func uploadReplay(
 	return &summary, nil
 }
 
-// renderReplaySummary writes the summary either as JSON (--report json or the
-// default JSON output mode) or as a human-readable one-liner plus, when
-// non-empty, an errors table.
-func renderReplaySummary(cmd *cobra.Command, reportFmt string, summary *models.ReplayIngestSummary) error {
-	ctx := cmd.Context()
-	out := OutputterFrom(ctx)
+// replayRunLink is the Argus web link of one run that the replay touched.
+type replayRunLink struct {
+	Type        string `json:"type"`
+	ID          string `json:"id"`
+	SourceID    string `json:"source_id"`
+	BuildID     string `json:"build_id,omitempty"`
+	BuildNumber *int   `json:"build_number,omitempty"`
+	URL         string `json:"url,omitempty"`
+}
+
+// replayReport is the server summary plus the links of the replayed runs.
+type replayReport struct {
+	*models.ReplayIngestSummary
+	Runs []replayRunLink `json:"runs"`
+}
+
+// runLinks pairs each run with its Argus link. A dry run gets no link,
+// because the run IDs it names do not exist.
+func runLinks(base string, runs []models.ReplayRun, dryRun bool) []replayRunLink {
+	links := make([]replayRunLink, 0, len(runs))
+	for _, r := range runs {
+		link := replayRunLink{
+			Type:        r.Type,
+			ID:          r.ID,
+			SourceID:    r.SourceID,
+			BuildID:     r.BuildID,
+			BuildNumber: r.BuildNumber,
+		}
+		if !dryRun {
+			link.URL = api.RunPageURL(base, r.Type, r.ID)
+		}
+		links = append(links, link)
+	}
+	return links
+}
+
+// runLine is the text line of one run: the recorded and the new run ID, the
+// build, and the link. A dry run names the build that the run would become.
+func runLine(r replayRunLink) string {
+	build := ""
+	if r.BuildID != "" && r.BuildNumber != nil {
+		build = fmt.Sprintf(" (%s#%d)", r.BuildID, *r.BuildNumber)
+	}
+	switch {
+	case r.URL == "" && build != "":
+		return fmt.Sprintf("Run %s would replay as%s", r.SourceID, build)
+	case r.URL == "":
+		return ""
+	case r.SourceID != "" && r.SourceID != r.ID:
+		return fmt.Sprintf("Run %s -> %s%s: %s", r.SourceID, r.ID, build, r.URL)
+	default:
+		return fmt.Sprintf("Run %s: %s", r.ID, r.URL)
+	}
+}
+
+// renderReplaySummary writes the report either as JSON (--report json or the
+// default JSON output mode) or as a human-readable one-liner, the link of
+// each replayed run and, when non-empty, an errors table.
+func renderReplaySummary(cmd *cobra.Command, reportFmt string, report replayReport) error {
+	summary := report.ReplayIngestSummary
 
 	switch strings.ToLower(reportFmt) {
 	case "", "text":
@@ -334,6 +494,11 @@ func renderReplaySummary(cmd *cobra.Command, reportFmt string, summary *models.R
 			"Replay summary: total=%d processed=%d succeeded=%d failed=%d skipped=%d backfilled_logs=%d\n",
 			summary.Total, summary.Processed, summary.Succeeded, summary.Failed, summary.SkippedNoReplay, summary.BackfilledLogs,
 		)
+		for _, r := range report.Runs {
+			if line := runLine(r); line != "" {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), line)
+			}
+		}
 		if len(summary.Errors) == 0 {
 			return nil
 		}
@@ -341,7 +506,7 @@ func renderReplaySummary(cmd *cobra.Command, reportFmt string, summary *models.R
 		text := output.New(cmd.OutOrStdout(), true)
 		return text.Write(models.NewTabularSlice(summary.Errors))
 	case "json":
-		return out.Write(summary)
+		return OutputterFrom(cmd.Context()).Write(report)
 	default:
 		return fmt.Errorf("--report: unknown format %q (expected \"text\" or \"json\")", reportFmt)
 	}
@@ -355,19 +520,37 @@ func init() {
 	replayCmd.Flags().Bool("create-missing-tests", false,
 		"Ask the server to auto-create ArgusRelease/Group/Test rows for build_ids "+
 			"that have no curated test entity yet (parsed from build_id as release/group/test). "+
-			"When false (default), submit_run records whose test entity does not yet exist "+
+			"When false, submit_run records whose test entity does not yet exist "+
 			"are reported as failures naming the would-be release/group/test and which level "+
-			"is missing -- rather than silently inserting a broken run with empty test_id.")
+			"is missing -- rather than silently inserting a broken run with empty test_id. "+
+			"Default: on for the local-runs default, off otherwise.")
 	replayCmd.Flags().Bool("backfill-logs", true,
 		"After replaying, have the server list each run's S3 log prefix and submit links "+
 			"for any log archives that were uploaded but whose logs/submit was never recorded "+
 			"(e.g. loader/monitor/sct-runner bundles). Uses the server's existing read-only S3 "+
 			"credentials; idempotent. On by default; pass --backfill-logs=false to disable. "+
 			"Ignored with --dry-run.")
+	replayCmd.Flags().String("build-id", "",
+		"Replay into a new run under this build path, e.g. scylla-staging/<user>/<job>, optionally ending in #<n> "+
+			"to choose the build number (default: the next free one). "+
+			"The path names the release, the group and the test, and its last segment is the job name. "+
+			"Every replay with --build-id makes a new run, and turns on --as-me. "+
+			"Default for one local run: local-runs/<your Argus username>/<first SCT config file>.")
+	replayCmd.Flags().String("resume", "",
+		"Finish an earlier replay of the same log into the run it made, given by run ID, in place of a new run. "+
+			"The run must be the copy of this log's run under the same build path: the same --build-id, "+
+			"or the local-runs default when you gave none.")
+	replayCmd.Flags().Bool("keep-run", false,
+		"Replay a local run as recorded, with its original run ID and path, in place of the local-runs default")
+	replayCmd.Flags().Bool("as-me", false,
+		"Make your Argus user the assignee and the starter of every new run. Without --build-id, "+
+			"only the assignee changes. Default: on for a replay into a build path (--build-id or the local-runs default), off otherwise.")
 	replayCmd.Flags().String("target-url", "", "Override the base URL (replay against a different Argus instance)")
 	replayCmd.Flags().String("report", "text", `Output format: "text" or "json"`)
 
 	replayCmd.MarkFlagsMutuallyExclusive("dir", "file")
+	replayCmd.MarkFlagsMutuallyExclusive("keep-run", "build-id")
+	replayCmd.MarkFlagsMutuallyExclusive("keep-run", "resume")
 
 	runCmd.AddCommand(replayCmd)
 }

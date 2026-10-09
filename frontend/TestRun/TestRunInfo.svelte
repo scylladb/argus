@@ -19,6 +19,7 @@
     import JenkinsCloneModal from "./Jenkins/JenkinsCloneModal.svelte";
     import { createEventDispatcher } from "svelte";
     import { sendMessage } from "../Stores/AlertStore";
+    import ReplayedFrom from "./ReplayedFrom.svelte";
     let {
         test_run = {},
         release,
@@ -133,6 +134,9 @@
                     <span class="fw-bold">Started by:</span>
                     {test_run.started_by ?? "Unknown, probably jenkins"}
                 </li>
+                {#if test_run.source_run_id}
+                    <ReplayedFrom sourceRunId={test_run.source_run_id} />
+                {/if}
                 <li>
                     <span class="fw-bold">Build job:</span>
                     <a href={test_run.build_job_url} target="_blank">

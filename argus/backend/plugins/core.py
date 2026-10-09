@@ -55,6 +55,9 @@ class PluginModelBase(Document):
     build_number: Optional[int] = None
     product_version: Annotated[Optional[str], Indexed()] = None
     scylla_version: Optional[str] = None
+    # The run ID that a replay log recorded, when a replay into a build path
+    # made this run.
+    source_run_id: Optional[UUID] = None
 
     # Test Logs Collection
     logs: list[tuple[str, str]] = Field(default_factory=list)
