@@ -488,3 +488,29 @@ From the review of PR #1120.
 - [x] Run `yarn test` until it passes.
 - [x] In Chrome, with `setInterval` recorded: opening a run inline on `/issues/<key>` adds no 120 s
   or 300 s timer, and the run's own page still sets its two 120 s timers.
+
+## Task 12 — Fit the status badge and the buttons in their columns
+
+From the review of PR #1120. It replaces the `col-lg-1` status, `col-lg-5` test and `col-lg-2`
+actions columns of Tasks 4 and 5.
+
+**Files:**
+- Modify: `frontend/IssueLinks/LinkedRun.svelte` and `frontend/IssueLinks/IssueLinks.svelte`
+
+**Internals:**
+- The row and the header use `col-auto status-col` for the status, `col` for the test, and
+  `col-auto actions-col` for the buttons. The header gains an empty `actions-col` cell.
+- `IssueLinks.svelte` sizes both from the `lg` breakpoint, for the header and every row:
+  `@media (min-width: 992px)` with `.run-list :global(.status-col) { width: 7.5rem; }` and
+  `.run-list :global(.actions-col) { width: 12.5rem; }`.
+- Measured before: the `col-lg-1` status content is 68, 83 and 98 px at the `lg`, `xl` and `xxl`
+  widths. "NOT PLANNED" (104 px) overflowed it at all three, "TEST ERROR" (88 px) up to 1399 px,
+  "RUNNING" and "ABORTED" at `lg`. The 182 px button group overflowed its 143 px `col-lg-2` at
+  `lg` and covered the version.
+
+No unit test: jsdom does no layout.
+
+- [x] Change the columns.
+- [x] In Chrome, with the lookup answered by statuses `test_error`, `not_planned`, `aborted`,
+  `running` and `passed`, at 992, 1100, 1199, 1200, 1300, 1399, 1400 and 1920 px: every badge
+  and the button group stay inside their columns, and the header lines up with the rows.

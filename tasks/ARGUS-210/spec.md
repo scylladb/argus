@@ -228,3 +228,6 @@ interface Props { link: LinkedRun }
 - The run selector's ignore-runs dialog binds its own element instead of an
   id keyed by the test, so two inline selectors of one test each open their
   own dialog. (review)
+- From the `lg` breakpoint, the status and actions columns take fixed widths
+  that fit the widest status badge and the button group, and the test column
+  takes the rest. Grid fractions left both too narrow below 1400 px. (review)
