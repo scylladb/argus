@@ -54,11 +54,12 @@
             </div>
             <div class="run-list mx-2 p-2 d-flex flex-column gap-2 border rounded bg-light-three">
                 <div class="row g-2 px-2 small text-muted text-uppercase d-none d-lg-flex">
-                    <div class="col-lg-1">Status</div>
-                    <div class="col-lg-5">Test</div>
+                    <div class="col-auto status-col">Status</div>
+                    <div class="col">Test</div>
                     <div class="col-lg-1">Build</div>
                     <div class="col-lg-2">Started</div>
                     <div class="col-lg-1">Version</div>
+                    <div class="col-auto actions-col"></div>
                 </div>
                 {#each result.links as link (link.run_id)}
                     <LinkedRun {link} />
@@ -73,5 +74,15 @@
 <style>
     .run-list {
         box-shadow: var(--bs-box-shadow-inset);
+    }
+
+    @media (min-width: 992px) {
+        .run-list :global(.status-col) {
+            width: 7.5rem;
+        }
+
+        .run-list :global(.actions-col) {
+            width: 12.5rem;
+        }
     }
 </style>

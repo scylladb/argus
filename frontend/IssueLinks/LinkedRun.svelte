@@ -19,13 +19,13 @@
 
 <div class="linked-run bg-white rounded border px-2 py-1">
     <div class="row g-2 align-items-center">
-        <div class="col-auto col-lg-1">
+        <div class="col-auto status-col">
             <span
                 class="badge border text-uppercase {StatusBadgeCSSClassMap[link.status] ??
                     StatusBadgeCSSClassMap.unknown}">{titleCase(link.status.replaceAll("_", " "))}</span
             >
         </div>
-        <div class="col col-lg-5 min-w-0">
+        <div class="col min-w-0">
             <div class="fw-bold text-truncate" title={link.test_name}>{link.test_name}</div>
             <div class="small text-muted text-truncate">
                 {[location, linkedOn].filter(Boolean).join(" · ")}
@@ -35,7 +35,7 @@
         <div class="col-auto col-lg-1">#{link.build_number}</div>
         <div class="col-auto col-lg-2 text-nowrap">{timestampToISODate(link.start_time)}</div>
         <div class="col-auto col-lg-1 text-truncate" title={version}>{version || "—"}</div>
-        <div class="col-auto ms-auto col-lg-2 d-flex justify-content-end">
+        <div class="col-auto ms-auto actions-col d-flex justify-content-end">
             <div class="btn-group">
                 <a class="btn btn-sm btn-primary text-nowrap" href={link.url}><Fa icon={faExternalLinkAlt} /> Open run</a>
                 <button
