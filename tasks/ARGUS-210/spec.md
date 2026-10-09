@@ -173,7 +173,7 @@ interface Props { link: LinkedRun }
 
 | Risk | Response |
 |---|---|
-| Two runs of one test open inline share the selector's ignore-runs dialog id, so the dialog of the first one opens | Both act on the same test, so the result is the same. Run views key their ids by run id and collide only when one run is open twice |
+| One run expanded in two inline views of the same test repeats the element ids its run view keys by run id | It takes two rows of one test open and the same run picked in both. The selectors' ignore-runs dialogs bind their own element and do not collide |
 | Each open inline view refreshes its run list every 120 s | A view refreshes only while open; closing it stops the timer |
 | An issue with hundreds of links renders hundreds of rows | One request, plain rows, no run view until a row opens. Pagination follows the API when it gains parameters |
 | The new props change shared widgets | The defaults keep the title bar and the URL updates; tests cover both values |
@@ -219,3 +219,6 @@ interface Props { link: LinkedRun }
 - The Jira and GitHub issue cards drop their fixed column widths for a
   two-line layout. It fits narrow widths and gives the summary the full
   width. It lands in a commit of its own. (build)
+- The run selector's ignore-runs dialog binds its own element instead of an
+  id keyed by the test, so two inline selectors of one test each open their
+  own dialog. (review)

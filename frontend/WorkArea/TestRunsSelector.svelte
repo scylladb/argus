@@ -18,6 +18,7 @@
     let header = $state();
     let ignoreReason = $state("");
     let modal = $state();
+    let ignoreRunsDialog: HTMLElement | undefined = $state();
     let showGraphButton = $state(false);
     let innerWidth = $state(window.innerWidth);
     const smallScreen = $derived(innerWidth < 768);
@@ -113,7 +114,7 @@
             class="btn btn-light"
             title="Ignore failed runs"
             onclick={() => {
-                modal = new Modal(`#modalIgnoreRuns-${testInfo.test.id}`);
+                modal = new Modal(ignoreRunsDialog);
                 modal.show();
             }}
         >
@@ -131,7 +132,7 @@
     </div>
 </div>
 
-<div class="modal" id="modalIgnoreRuns-{testInfo.test.id}" tabindex="-1">
+<div class="modal" tabindex="-1" bind:this={ignoreRunsDialog}>
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">

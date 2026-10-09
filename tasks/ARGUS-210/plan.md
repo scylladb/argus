@@ -429,3 +429,30 @@ cards and keep passing. No new test: the change is layout.
   - Tasks 1–7 as `feature(issues): …`
   - Task 8 as `improvement(frontend/issues): …`
 - [ ] The PR body ends with `closes ARGUS-210`.
+
+## Task 10 — Give each run selector its own ignore-runs dialog
+
+From the review of PR #1120.
+
+**Files:**
+- Modify: `frontend/WorkArea/TestRunsSelector.svelte`
+- Test: `frontend/WorkArea/TestRunsSelector.test.ts`
+
+**Internals:**
+- `let ignoreRunsDialog: HTMLElement | undefined = $state();`, bound with `bind:this` on the
+  dialog's `<div class="modal">`, which drops its `id="modalIgnoreRuns-{testInfo.test.id}"`.
+- The ban button opens `new Modal(ignoreRunsDialog)` in place of the `#modalIgnoreRuns-…` selector,
+  which found the first selector of that test on the page.
+
+**Tests:**
+- `opens the dialog of the selector that was clicked`: two selectors with one `testInfo`. A click
+  on the second one's "Ignore failed runs" shows the second one's `.modal` and leaves the first one
+  hidden. Stubs: `IntersectionObserver`, and `fetch` for the `HEAD` on `/api/v1/test-results`.
+
+- [x] Write the test.
+- [x] Run `yarn vitest run frontend/WorkArea/TestRunsSelector.test.ts` and confirm the failure
+  (the first selector's dialog opens).
+- [x] Bind the dialog.
+- [x] Run it again until it passes.
+- [x] On `/issues/<key>`, open two runs of one test inline and click "Ignore failed runs" in the
+  second: only its dialog opens.
