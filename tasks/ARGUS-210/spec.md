@@ -19,8 +19,9 @@ each show an empty state.
 - The key comes from the URL path, so it reaches the template and the script
   escaped.
 - One request per page load. The response carries every field the rows show.
-- The inline view behaves as the run page does, with its run selector, tabs,
-  refresh and actions. It reuses that widget rather than a copy.
+- The inline view behaves as the run page does, with its run selector, tabs
+  and actions, but loads once, without refresh timers. It reuses that widget
+  rather than a copy.
 - The run selector serves the workspace, the run pages and the standalone test
   page. Their behavior does not change.
 - The page depends on the ARGUS-209 indexes, which `sync-models` creates on
@@ -42,7 +43,8 @@ each show an empty state.
   version. Then the run page link and the inline toggle. Opening the run mounts
   the run selector, and closing it unmounts the selector.
 - Run selector (`TestRuns`, existing): gains a switch that hides its title
-  bar, and one that stops its run views from rewriting the page URL. The title
+  bar, one that stops its run views from rewriting the page URL, and one that
+  turns off its refresh timers and those of its run views. The title
   bar holds the test name, the latest status, and the configure, rebuild and
   clone buttons. A run view rewrites the URL to `/tests/<plugin>/<run>/<tab>`
   on a tab change, outside the workspace.
@@ -110,17 +112,19 @@ The page, route name `main.issue_links`, behind `ui_current_user`:
 GET /issues/{key}    key: an issue key in any case, e.g. SCT-1234   → text/html
 ```
 
-The run selector gains two props. Existing callers omit them and keep the
-title bar and the URL updates:
+The run selector gains three props. Existing callers omit them and keep the
+title bar, the URL updates and the refresh timers:
 
 ```ts
 // frontend/WorkArea/TestRuns.svelte
 showTitleBar?: boolean   // default true; false hides the title bar, the run pills and run view stay
 updateUrl?: boolean      // default true; false keeps the page URL on a run view's tab change
+autoRefresh?: boolean    // default true; false turns off the run list and run view refresh timers
 
 // frontend/WorkArea/TestRunDispatcher.svelte and the four plugin run views
 // (TestRun, DriverMatrixTestRun, SirenadaTestRun, GenericTestRun)
 updateUrl?: boolean      // default true
+autoRefresh?: boolean    // default true
 ```
 
 Aborted takes its own status classes wherever a status renders:
@@ -174,9 +178,9 @@ interface Props { link: LinkedRun }
 | Risk | Response |
 |---|---|
 | One run expanded in two inline views of the same test repeats the element ids its run view keys by run id | It takes two rows of one test open and the same run picked in both. The selectors' ignore-runs dialogs bind their own element and do not collide |
-| Each open inline view refreshes its run list every 120 s | A view refreshes only while open; closing it stops the timer |
+| An open inline view shows the run as it was when the view opened | Closing and reopening the view, or reloading the page, loads it again. The Events and Discussion tabs keep their own refresh |
 | An issue with hundreds of links renders hundreds of rows | One request, plain rows, no run view until a row opens. Pagination follows the API when it gains parameters |
-| The new props change shared widgets | The defaults keep the title bar and the URL updates; tests cover both values |
+| The new props change shared widgets | The defaults keep the title bar, the URL updates and the refresh timers; tests cover both values |
 | The aborted color changes on every page that shows a status | The light theme keeps `$dark`. Only the dark theme changes, to a gray its backgrounds do not hide |
 | The card rework changes the issue cards on the run's issue tab and in the aggregated lists | Same content and actions; checked in both themes and at 600 px |
 
@@ -207,8 +211,8 @@ interface Props { link: LinkedRun }
   so the reader learns whether Argus holds the issue at all. (spec)
 - Each row links to the run through the `url` of the response, so the page
   builds no run URL of its own. (spec)
-- The widget fetches once and does not poll. The open inline views refresh
-  through the run selector. (spec)
+- The widget fetches once and does not poll. The inline views load once too:
+  the run selector and its run views keep their refresh timers off. (review)
 - Each row shows the run in aligned columns under a header, and its status as
   a text badge, so a reader scans many runs and does not rely on color.
   (build)

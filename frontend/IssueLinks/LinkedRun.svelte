@@ -60,6 +60,7 @@
                 tab="details"
                 showTitleBar={false}
                 updateUrl={false}
+                autoRefresh={false}
             />
         </div>
     {/if}

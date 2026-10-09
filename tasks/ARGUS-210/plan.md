@@ -456,3 +456,35 @@ From the review of PR #1120.
 - [x] Run it again until it passes.
 - [x] On `/issues/<key>`, open two runs of one test inline and click "Ignore failed runs" in the
   second: only its dialog opens.
+
+## Task 11 — Load inline runs without refresh timers
+
+From the review of PR #1120.
+
+**Files:**
+- Modify: `frontend/WorkArea/TestRuns.svelte`, `frontend/WorkArea/TestRunDispatcher.svelte`, the
+  four plugin run views and `frontend/IssueLinks/LinkedRun.svelte`
+- Test: `frontend/WorkArea/TestRuns.test.ts`, `frontend/IssueLinks/LinkedRun.test.ts`
+
+**Internals:**
+- `autoRefresh = true` next to `updateUrl` in `TestRuns`, `TestRunDispatcher` and each plugin run
+  view, passed down the same way.
+- `TestRuns` sets its 120 s run-list timer only when `autoRefresh` holds. Each plugin view sets
+  its run-data timer (120 s for SCT, 300 s for the others) only when it holds.
+- `LinkedRun` passes `autoRefresh={false}`.
+- The Events tab (stops itself on a finished run) and the Discussion tab keep their timers.
+
+**Tests:**
+- `refreshes the run list every two minutes by default`: with
+  `vi.useFakeTimers({ shouldAdvanceTime: true })`, one run-list fetch after the pill renders and
+  a second after `advanceTimersByTimeAsync(120_000)`.
+- `does not refresh the run list when autoRefresh is false`: still one fetch after 120 s.
+- `passes autoRefresh on to the run view`: the dispatcher gets `autoRefresh === false`.
+- `opens the run inline` in `LinkedRun.test.ts` also checks `autoRefresh === false`.
+
+- [x] Write the tests.
+- [x] Run them and confirm the three failures.
+- [x] Add the flag.
+- [x] Run `yarn test` until it passes.
+- [x] In Chrome, with `setInterval` recorded: opening a run inline on `/issues/<key>` adds no 120 s
+  or 300 s timer, and the run's own page still sets its two 120 s timers.

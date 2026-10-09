@@ -23,6 +23,7 @@
         testInfo?: any;
         tab?: string;
         updateUrl?: boolean;
+        autoRefresh?: boolean;
     }
 
     let {
@@ -30,7 +31,8 @@
         buildNumber = $bindable(-1),
         testInfo = {},
         tab = "",
-        updateUrl = true
+        updateUrl = true,
+        autoRefresh = true
     }: Props = $props();
     const dispatch = createEventDispatcher();
     let testRun = $state(undefined);
@@ -88,9 +90,11 @@
     onMount(() => {
         fetchTestRunData();
 
-        runRefreshInterval = setInterval(() => {
-            fetchTestRunData();
-        }, 1000 * 300);
+        if (autoRefresh) {
+            runRefreshInterval = setInterval(() => {
+                fetchTestRunData();
+            }, 1000 * 300);
+        }
     });
 
     onDestroy(() => {
