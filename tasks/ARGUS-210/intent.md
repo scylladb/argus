@@ -73,10 +73,6 @@ From the acceptance criteria of ARGUS-210:
   page.
 - The page works in a browser against a real Jira issue that has linked runs.
 
-The ticket words the URL as `/issues/jira/SCT-1234`, with the tracker as a path
-segment. ARGUS-209 settled the lookup on the key alone, with the tracker found
-from the key's format. The spec decides the URL shape against that.
-
 ## Out of scope
 
 - Changes to the lookup API or its response shape (ARGUS-209).

@@ -190,6 +190,8 @@ interface Props { link: LinkedRun }
 - The Jira write-back of ARGUS-220 can point an issue to this URL.
 - One shared layout for the Jira and GitHub issue cards, which duplicate each
   other.
+- Validation and enforcement of `build_number` on every run. The run page link
+  of each row is built from it.
 
 ## Decisions
 
