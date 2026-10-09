@@ -20,10 +20,11 @@ func NewIssueService(client *api.Client) *IssueService {
 	return &IssueService{client: client}
 }
 
-// Links returns the issue held under key and the runs linked to it, newest
-// first. The server uppercases the key and rejects one that fits no tracker's
-// key format; a well-formed key Argus does not hold yields a nil Issue and no
-// links.
+// Links returns the runs linked to the issue held under key, newest first, and
+// the payload as the API sent it in [models.IssueLinks.Raw]. The server
+// uppercases the key and rejects one that fits no tracker's key format. A
+// well-formed key Argus does not hold gives no links, and Raw holds
+// {"issue": null, "links": []}.
 func (s *IssueService) Links(ctx context.Context, key string) (models.IssueLinks, error) {
 	req, err := s.client.NewRequest(ctx, "GET", fmt.Sprintf(api.IssueLinks, url.PathEscape(key)), nil)
 	if err != nil {
