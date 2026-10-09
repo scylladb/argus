@@ -30,19 +30,24 @@ stays in every plan built from a spec.
 **Files:**
 - Modify: `cli/internal/models/issues.go`
 - Create: `cli/internal/models/issues_test.go`
+- Create: `cli/internal/models/rawjson.go`
+- Create: `cli/internal/models/rawjson_test.go`
 
 **Internals:**
-- `LinkedRun`: one element of `links`. Fields with their JSON names
-  `run_id`, `test_id`, `test_name`, `plugin_name`, `status`, `start_time`,
-  `build_id`, `build_number` (`*int`), `scylla_version`, `product_version`,
-  `linked_on`, `url`. `scylla_version`, `product_version` and `linked_on` are
-  `*string`, so a null from the API stays null under `--raw`.
-- `func (l LinkedRun) Version() string`: `scylla_version` when it is set and
-  not empty, else `product_version`, else `""`.
-- `IssueLinks{Issue map[string]any; Links []LinkedRun}` with JSON names
-  `issue` and `links`. `(*IssueLinks).UnmarshalJSON` decodes through a
-  `json.Decoder` with `UseNumber()`, so a number in the issue, such as a
-  label id, stays a `json.Number` and prints as sent under `--raw --text`.
+- `LinkedRun`: the fields of one element of `links` that a summary row
+  reads: `run_id`, `test_name`, `status`, `start_time`, `build_id`,
+  `build_number` (`*int`), `scylla_version`, `product_version`, `url`. A null
+  version decodes to `""`.
+- `func (l LinkedRun) Version() string`: `scylla_version` when it is not
+  empty, else `product_version`.
+- `IssueLinks{Links []LinkedRun; raw RawJSON}`. `(*IssueLinks).UnmarshalJSON`
+  decodes the links and keeps a copy of the payload bytes. `Raw()` returns
+  them for `--raw`.
+- `RawJSON []byte` in `rawjson.go`. `MarshalJSON` returns the bytes, or `null`
+  when empty. `Headers()` is `Key, Value`. `Rows()` decodes with `UseNumber()`
+  and flattens with `joinKey` from `tabular.go`: sorted object keys, indexed
+  array elements, and `null`, `[]` and `{}` as values. A value that is not
+  valid JSON is one row with an empty key.
 - `IssueRunSummary` with the fields of the spec contract, and
   `Headers()` → `Id, Test, Build Id, Build Number, Version, Status, Start Time, Argus URL`.
   `Rows()` renders the build number with `strconv.Itoa`, or `""` when nil, as
@@ -58,13 +63,12 @@ stays in every plan built from a spec.
 - `TestIssueLinks_Summaries`: two links. Asserts every mapped field, the order,
   and that `url` lands in `ArgusURL`.
 - `TestIssueLinks_Summaries_Version`: a Scylla version wins. A product
-  version fills in for a missing or empty Scylla version. No version gives
-  `""`.
-- `TestLinkedRun_KeepsNulls`: a link with every nullable field `null`
-  decodes and encodes back to the same JSON.
-- `TestIssueLinks_KeepsIssueNumbers`: a label id of `3903313650` renders as
-  `3903313650` in the key and value rows and in the JSON. The typed link fields
-  still decode.
+  version fills in for a missing Scylla version. No version gives `""`.
+- `TestIssueLinks_Raw`: a payload with a null, a large number and an unknown
+  field comes back byte for byte from `Raw()`, and the links still decode.
+- `rawjson_test.go`: the bytes marshal as sent, an empty value marshals to
+  `null`, the rows of a payload with `null`, `[]`, `{}` and a large number,
+  and the row of invalid JSON.
 - `TestIssueLinks_Summaries_Empty`: `IssueLinks{}` marshals its summaries to
   `[]`.
 - `TestIssueRunSummaries_Rows`: the headers, one row with a build number and
@@ -94,10 +98,12 @@ stays in every plan built from a spec.
 **Tests** (`package services_test`, the server wired as in `newJobsSvc` in
 `jobs_test.go`, with the `jsonOK` and `jsonErr` helpers of the package):
 - `TestIssueService_Links`: the mux serves `/api/v1/issues/SCT-1234/links`
-  with an issue and two links. Asserts `Issue["key"]`, both run ids in order,
-  the test name, the build number and the url.
+  with an issue and two links. Asserts that `Raw()` holds the issue key and
+  a link field that `LinkedRun` does not decode, both run ids in order, the
+  test name, the build number, the url and the version fallback.
 - `TestIssueService_Links_UnknownKey`: serves `{"issue": null, "links": []}`.
-  Asserts that `Issue` is nil and that the summaries marshal to `[]`.
+  Asserts that `Raw()` is that payload and that the summaries marshal to
+  `[]`.
 - `TestIssueService_Links_RejectedKey`: `jsonErr` with
   `Not an issue key: 'SCT1234'`. Asserts that the error holds the message.
 
@@ -129,8 +135,8 @@ stays in every plan built from a spec.
   `logging.For(LoggerFrom(ctx), "issue-runs")`: debug before the call, error
   on failure, info with the count. It calls
   `services.NewIssueService(client).Links(ctx, key)` with the key from
-  `issueKey`. With `--raw` it
-  writes `models.NewKVTabular(links)`. Otherwise it writes `links.Summaries()`.
+  `issueKey`. With `--raw` it writes `links.Raw()`. Otherwise it writes
+  `links.Summaries()`.
 - `init()`: `issueRunsCmd.Flags().Bool("raw", false, "Emit the issue and its links as returned by the API")`,
   and `issueCmd.AddCommand(issueAddCmd, issueListCmd, issueRunsCmd)`.
 
@@ -140,15 +146,18 @@ stays in every plan built from a spec.
   and accepts one key. The `--raw` flag exists, defaults to `false`, and has
   help text.
 - `runIssueRuns` runs `RunE` against an `httptest` stub that serves a payload
-  for `SCT-1234` and an empty result for any other key. It returns the JSON
-  output and the request paths. The tests that use it:
+  for `SCT-1234`, with a link field the CLI does not know, and an empty
+  result for any other key. It returns the output, JSON or `--text`, and the
+  request paths. The tests that use it:
   - `TestIssueRunsCmd_PrintsRunRows`: the two summary rows, version fallback
     included.
   - `TestIssueRunsCmd_TrimsTheKey`: `" SCT-1234 "` requests
     `/api/v1/issues/SCT-1234/links`.
   - `TestIssueRunsCmd_UnknownKeyPrintsEmptyList`: `[]`.
-  - `TestIssueRunsCmd_RawPrintsIssueAndLinks`: the issue key and the link
-    fields.
+  - `TestIssueRunsCmd_RawPrintsThePayloadAsSent`: the output equals the
+    stub payload, the unknown field included.
+  - `TestIssueRunsCmd_RawTextShowsNulls`: an unknown key under `--raw --text`
+    prints the rows `issue null` and `links []`.
 
 - [x] Write the failing test.
 - [x] Run `go test ./cmd/` and confirm the failure.

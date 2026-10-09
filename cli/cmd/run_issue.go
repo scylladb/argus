@@ -190,7 +190,7 @@ empty list. --raw emits the issue and every link field as returned by the API.`,
 
 		log.Info().Str("key", key).Int("count", len(links.Links)).Msg("issue runs fetched successfully")
 		if raw {
-			return out.Write(models.NewKVTabular(links))
+			return out.Write(links.Raw())
 		}
 		return out.Write(links.Summaries())
 	},

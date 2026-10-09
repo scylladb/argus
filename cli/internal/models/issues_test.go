@@ -10,18 +10,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func strPtr(s string) *string { return &s }
-
 func TestIssueLinks_Summaries(t *testing.T) {
 	t.Parallel()
 	links := models.IssueLinks{
-		Issue: map[string]any{"key": "SCT-1234"},
 		Links: []models.LinkedRun{
 			{
-				RunID: "run-2", TestID: "test-1", TestName: "longevity-100gb-4h", PluginName: "scylla-cluster-tests",
-				Status: "failed", StartTime: "2026-09-30T22:10:44.000Z", BuildID: "rel/g/longevity-100gb-4h",
-				BuildNumber: intPtr(412), ScyllaVersion: strPtr("2026.2.0~dev"), ProductVersion: strPtr("2026.2.0"),
-				LinkedOn: strPtr("2026-10-01T07:02:13.540Z"), URL: "https://argus/test/rel/g/longevity-100gb-4h/412",
+				RunID: "run-2", TestName: "longevity-100gb-4h", Status: "failed", StartTime: "2026-09-30T22:10:44.000Z",
+				BuildID: "rel/g/longevity-100gb-4h", BuildNumber: intPtr(412), ScyllaVersion: "2026.2.0~dev",
+				ProductVersion: "2026.2.0", URL: "https://argus/test/rel/g/longevity-100gb-4h/412",
 			},
 			{RunID: "run-1", TestName: "artifacts-ubuntu", BuildID: "rel/g/artifacts-ubuntu", Status: "passed"},
 		},
@@ -42,49 +38,31 @@ func TestIssueLinks_Summaries(t *testing.T) {
 func TestIssueLinks_Summaries_Version(t *testing.T) {
 	t.Parallel()
 	links := models.IssueLinks{Links: []models.LinkedRun{
-		{RunID: "scylla", ScyllaVersion: strPtr("2026.2.0~dev"), ProductVersion: strPtr("2026.2.0")},
-		{RunID: "product-only", ProductVersion: strPtr("2026.2.0")},
-		{RunID: "empty-scylla", ScyllaVersion: strPtr(""), ProductVersion: strPtr("2026.2.0")},
+		{RunID: "scylla", ScyllaVersion: "2026.2.0~dev", ProductVersion: "2026.2.0"},
+		{RunID: "product-only", ProductVersion: "2026.2.0"},
 		{RunID: "none"},
 	}}
 
 	got := links.Summaries()
 
-	require.Len(t, got, 4)
+	require.Len(t, got, 3)
 	assert.Equal(t, "2026.2.0~dev", got[0].Version)
 	assert.Equal(t, "2026.2.0", got[1].Version)
-	assert.Equal(t, "2026.2.0", got[2].Version)
-	assert.Equal(t, "", got[3].Version)
+	assert.Equal(t, "", got[2].Version)
 }
 
-func TestLinkedRun_KeepsNulls(t *testing.T) {
+func TestIssueLinks_Raw(t *testing.T) {
 	t.Parallel()
-	in := `{"run_id":"r","test_id":"t","test_name":"n","plugin_name":"generic","status":"passed",
-		"start_time":"2026-09-28T10:00:00.000Z","build_id":"b","build_number":null,"scylla_version":null,
-		"product_version":null,"linked_on":null,"url":"u"}`
-	var run models.LinkedRun
-	require.NoError(t, json.Unmarshal([]byte(in), &run))
-
-	out, err := json.Marshal(run)
-
-	require.NoError(t, err)
-	assert.JSONEq(t, in, string(out))
-}
-
-func TestIssueLinks_KeepsIssueNumbers(t *testing.T) {
-	t.Parallel()
-	in := `{"issue":{"key":"SCYLLADB-3959","labels":[{"id":3903313650,"name":"repair"}]},
-		"links":[{"run_id":"r","build_number":26}]}`
+	in := `{"issue":{"key":"SCYLLADB-3959","labels":[{"id":3903313650}]},"links":[{"run_id":"r","build_number":26,` +
+		`"scylla_version":null,"product_version":"2026.2.0","linked_on":null,"added_later":"kept"}]}`
 	var links models.IssueLinks
 	require.NoError(t, json.Unmarshal([]byte(in), &links))
 
-	assert.Contains(t, models.NewKVTabular(links).Rows(), []string{"issue.labels.0.id", "3903313650"})
+	assert.Equal(t, in, string(links.Raw()))
 	require.Len(t, links.Links, 1)
 	require.NotNil(t, links.Links[0].BuildNumber)
 	assert.Equal(t, 26, *links.Links[0].BuildNumber)
-	out, err := json.Marshal(links)
-	require.NoError(t, err)
-	assert.Contains(t, string(out), `"id":3903313650`)
+	assert.Equal(t, "2026.2.0", links.Links[0].Version())
 }
 
 func TestIssueLinks_Summaries_Empty(t *testing.T) {
