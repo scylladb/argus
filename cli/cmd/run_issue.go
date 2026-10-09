@@ -165,10 +165,8 @@ var issueRunsCmd = &cobra.Command{
 The key may be given in any case. A key that Argus holds no runs for prints an
 empty list. --raw emits the issue and every link field as returned by the API.`,
 	Args: cobra.MatchAll(cobra.ExactArgs(1), func(_ *cobra.Command, args []string) error {
-		if strings.TrimSpace(args[0]) == "" {
-			return errors.New("the issue key is empty")
-		}
-		return nil
+		_, err := issueKey(args[0])
+		return err
 	}),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
@@ -177,7 +175,10 @@ empty list. --raw emits the issue and every link field as returned by the API.`,
 		out := OutputterFrom(ctx)
 		log := logging.For(LoggerFrom(ctx), "issue-runs")
 
-		key := args[0]
+		key, err := issueKey(args[0])
+		if err != nil {
+			return err
+		}
 		raw, _ := cmd.Flags().GetBool("raw")
 		log.Debug().Str("key", key).Bool("raw", raw).Msg("listing runs linked to issue")
 
@@ -193,6 +194,19 @@ empty list. --raw emits the issue and every link field as returned by the API.`,
 		}
 		return out.Write(links.Summaries())
 	},
+}
+
+// issueKey returns arg without surrounding whitespace. It rejects a key that
+// is empty, "." or "..", which cannot form the path segment of the lookup.
+func issueKey(arg string) (string, error) {
+	key := strings.TrimSpace(arg)
+	switch key {
+	case "":
+		return "", errors.New("the issue key is empty")
+	case ".", "..":
+		return "", fmt.Errorf("not an issue key: %q", key)
+	}
+	return key, nil
 }
 
 // ---------------------------------------------------------------------------

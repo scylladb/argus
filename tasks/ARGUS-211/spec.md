@@ -20,8 +20,8 @@ empty list and exits 0.
 - A run row reuses the JSON names of the `my-jobs` row (`id`, `build_id`,
   `build_number`, `version`, `status`, `argus_url`), so a script reads the run
   rows of either command the same way.
-- The server owns the key format rule. The CLI sends a non-empty key as
-  typed, and the server uppercases it or rejects it.
+- The server owns the key format rule. The CLI trims the key and sends it,
+  and the server uppercases it or rejects it.
 - The lookup is never cached. A link added a minute ago shows up.
 
 ## Design
@@ -56,7 +56,8 @@ flowchart TD
 | The key is in lower case | The server uppercases it, and the result is the same |
 | The key fits no tracker's format (`SCT1234`) | The API message is printed, exit 1 |
 | The API is unreachable or rejects the credentials | As every command: the error, exit 1 |
-| No key argument, an empty or blank one, or more than one | Cobra usage error, exit 1 |
+| The key has surrounding whitespace | Trimmed before the lookup |
+| No key argument, more than one, or a key that is blank, `.` or `..` | Cobra usage error, exit 1 |
 | `--raw` with an unknown key | `{"issue": null, "links": []}`, exit 0 |
 
 ## Contracts
@@ -157,7 +158,7 @@ func (l IssueLinks) Summaries() IssueRunSummaries // never nil, so JSON prints [
 - `version` is the run's `scylla_version`, or its `product_version` when the
   run reports no Scylla version. Some runs report only the product version,
   and their row would show no version. (build)
-- The CLI checks only that the key is not empty. The server holds the format
-  rule, and its error message reaches the user unchanged. An empty key, from
-  an unset variable in a script, would otherwise reach the server as a bare
-  404. (review)
+- The CLI trims the key and checks only that it is not empty, `.` or `..`.
+  The server holds the format rule, and its error message reaches the user
+  unchanged. The three rejected keys cannot form the path segment of the
+  lookup and would reach the server as a bare 404. (review)

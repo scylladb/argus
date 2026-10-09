@@ -116,8 +116,11 @@ stays in every plan built from a spec.
 - `issueRunsCmd`:
   - `Use: "runs <issue-key>"`
   - `Short: "List the test runs linked to an issue"`
-  - `Args: cobra.MatchAll(cobra.ExactArgs(1), …)`: the second check rejects a
-    blank key with `the issue key is empty`.
+  - `Args: cobra.MatchAll(cobra.ExactArgs(1), …)`: the second check calls
+    `issueKey`.
+- `issueKey(arg string) (string, error)`: trims the argument. It rejects an
+  empty key with `the issue key is empty`, and `.` or `..` with
+  `not an issue key`, since `NewRequest` would resolve them as dot segments.
   - `Long` holds the example `argus issue runs SCT-1234` and says four things:
     the order is newest first, the key may be in any case, a key without runs
     prints an empty list, and `--raw` prints the issue and every link field.
@@ -125,16 +128,27 @@ stays in every plan built from a spec.
   and the outputter from the context, and logs through
   `logging.For(LoggerFrom(ctx), "issue-runs")`: debug before the call, error
   on failure, info with the count. It calls
-  `services.NewIssueService(client).Links(ctx, args[0])`. With `--raw` it
+  `services.NewIssueService(client).Links(ctx, key)` with the key from
+  `issueKey`. With `--raw` it
   writes `models.NewKVTabular(links)`. Otherwise it writes `links.Summaries()`.
 - `init()`: `issueRunsCmd.Flags().Bool("raw", false, "Emit the issue and its links as returned by the API")`,
   and `issueCmd.AddCommand(issueAddCmd, issueListCmd, issueRunsCmd)`.
 
 **Tests** (`package cmd`):
 - `TestIssueRunsCmd`: `issueRunsCmd` is a sub-command of `issueCmd`.
-  `Args` rejects zero arguments, two arguments and a blank key, and accepts
-  one key. The `--raw` flag
-  exists, defaults to `false`, and has help text.
+  `Args` rejects zero arguments, two arguments, a blank key, `.` and `..`,
+  and accepts one key. The `--raw` flag exists, defaults to `false`, and has
+  help text.
+- `runIssueRuns` runs `RunE` against an `httptest` stub that serves a payload
+  for `SCT-1234` and an empty result for any other key. It returns the JSON
+  output and the request paths. The tests that use it:
+  - `TestIssueRunsCmd_PrintsRunRows`: the two summary rows, version fallback
+    included.
+  - `TestIssueRunsCmd_TrimsTheKey`: `" SCT-1234 "` requests
+    `/api/v1/issues/SCT-1234/links`.
+  - `TestIssueRunsCmd_UnknownKeyPrintsEmptyList`: `[]`.
+  - `TestIssueRunsCmd_RawPrintsIssueAndLinks`: the issue key and the link
+    fields.
 
 - [x] Write the failing test.
 - [x] Run `go test ./cmd/` and confirm the failure.
