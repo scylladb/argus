@@ -20,7 +20,8 @@ each show an empty state.
   escaped.
 - One request per page load. The response carries every field the rows show.
 - The inline view behaves as the run page does, with its run selector, tabs
-  and actions, but loads once, without refresh timers. It reuses that widget
+  and actions. Its run list and run data load once, without the run page's
+  refresh timers; the timers inside its tabs stay. It reuses that widget
   rather than a copy.
 - The run selector serves the workspace, the run pages and the standalone test
   page. Their behavior does not change.
@@ -44,7 +45,8 @@ each show an empty state.
   the run selector, and closing it unmounts the selector.
 - Run selector (`TestRuns`, existing): gains a switch that hides its title
   bar, one that stops its run views from rewriting the page URL, and one that
-  turns off its refresh timers and those of its run views. The title
+  turns off the refresh timers of its run list and of its run views' run
+  data. The title
   bar holds the test name, the latest status, and the configure, rebuild and
   clone buttons. A run view rewrites the URL to `/tests/<plugin>/<run>/<tab>`
   on a tab change, outside the workspace.
@@ -119,7 +121,7 @@ title bar, the URL updates and the refresh timers:
 // frontend/WorkArea/TestRuns.svelte
 showTitleBar?: boolean   // default true; false hides the title bar, the run pills and run view stay
 updateUrl?: boolean      // default true; false keeps the page URL on a run view's tab change
-autoRefresh?: boolean    // default true; false turns off the run list and run view refresh timers
+autoRefresh?: boolean    // default true; false turns off the run-list and run-data refresh timers, tab timers stay
 
 // frontend/WorkArea/TestRunDispatcher.svelte and the four plugin run views
 // (TestRun, DriverMatrixTestRun, SirenadaTestRun, GenericTestRun)
@@ -178,7 +180,7 @@ interface Props { link: LinkedRun }
 | Risk | Response |
 |---|---|
 | One run expanded in two inline views of the same test repeats the element ids its run view keys by run id | It takes two rows of one test open and the same run picked in both. The selectors' ignore-runs dialogs bind their own element and do not collide |
-| An open inline view shows the run as it was when the view opened | Closing and reopening the view, or reloading the page, loads it again. The Events and Discussion tabs keep their own refresh |
+| An open inline view shows the run list and the run data as they were when the view opened | Closing and reopening the view, or reloading the page, loads them again. The tabs keep their own timers: Events every 60 s until the run finishes, Discussion every 60 s, and the Pytest subtest tab of a generic run every 5 s while the window has focus |
 | An issue with hundreds of links renders hundreds of rows | One request, plain rows, no run view until a row opens. Pagination follows the API when it gains parameters |
 | The new props change shared widgets | The defaults keep the title bar, the URL updates and the refresh timers; tests cover both values |
 | The aborted color changes on every page that shows a status | The light theme keeps `$dark`. Only the dark theme changes, to a gray its backgrounds do not hide |
@@ -211,8 +213,9 @@ interface Props { link: LinkedRun }
   so the reader learns whether Argus holds the issue at all. (spec)
 - Each row links to the run through the `url` of the response, so the page
   builds no run URL of its own. (spec)
-- The widget fetches once and does not poll. The inline views load once too:
-  the run selector and its run views keep their refresh timers off. (review)
+- The widget fetches once and does not poll. The inline views load their run
+  list and run data once too: the run selector and its run views keep those
+  refresh timers off. The timers inside the tabs stay. (review)
 - Each row shows the run in aligned columns under a header, and its status as
   a text badge, so a reader scans many runs and does not rely on color.
   (build)
