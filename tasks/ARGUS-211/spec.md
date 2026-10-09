@@ -58,7 +58,7 @@ flowchart TD
 | The API is unreachable or rejects the credentials | As every command: the error, exit 1 |
 | The key has surrounding whitespace | Trimmed before the lookup |
 | No key argument, more than one, or a key that is blank, `.` or `..` | Cobra usage error, exit 1 |
-| `--raw` with an unknown key | `{"issue": null, "links": []}`, exit 0 |
+| `--raw` with an unknown key | `{"issue": null, "links": []}`, or the rows `issue null` and `links []` under `--text`, exit 0 |
 
 ## Contracts
 
@@ -104,11 +104,11 @@ $ argus issue runs SCT-1234 --text
 Id | Test | Build Id | Build Number | Version | Status | Start Time | Argus URL
 ```
 
-`--raw` prints the response payload, `{"issue": {...}, "links": [...]}`, with
-the issue fields as the API returns them and each link decoded into the twelve
-fields of the Inputs block. A field that the API sends as `null` stays `null`.
-Under `--text` it prints a key and value table:
-`issue.key`, `links.0.run_id` and so on.
+`--raw` prints the response payload, `{"issue": {...}, "links": [...]}`,
+exactly as the API sent it: every field, including one the API adds later,
+with `null` and numbers as written. Under `--text` it prints a key and value
+table, `issue.key`, `links.0.run_id` and so on, with `null`, `[]` and `{}` as
+values.
 
 Consumer rules: an empty array means that Argus holds no runs for the key. It
 is not an error. Ignore unknown fields. A new column arrives as a new field.
@@ -124,10 +124,12 @@ func (s *IssueService) Links(ctx context.Context, key string) (models.IssueLinks
 package models
 
 type IssueLinks struct {
-	Issue map[string]any `json:"issue"`
-	Links []LinkedRun    `json:"links"`
+	Links []LinkedRun `json:"links"`
 }
 func (l IssueLinks) Summaries() IssueRunSummaries // never nil, so JSON prints [] for no links
+func (l IssueLinks) Raw() RawJSON                 // the payload exactly as the API sent it
+
+type RawJSON []byte // JSON output as sent; text output a key and value table
 ```
 
 ## Risks
@@ -150,9 +152,10 @@ func (l IssueLinks) Summaries() IssueRunSummaries // never nil, so JSON prints [
   key alone, and the group already holds the issue commands. (spec)
 - The default output is one summary row per run, and the JSON mirrors the
   table, as in `planner list`, `view list` and `my-jobs`. (spec)
-- `--raw` prints the issue and every link field, as `--raw` does for plans
-  and views. A script that needs the issue summary or `linked_on` takes it
-  from there. (spec)
+- `--raw` prints the response payload exactly as the API sent it, and its
+  text table shows `null` and empty lists. A script that needs the issue or
+  `linked_on` takes it from there, and a field the API adds later reaches it
+  without a CLI release. (review)
 - The run link is the API's `url`, passed through. The server already builds
   the build page link, and the CLI repeats no rule. (spec)
 - `version` is the run's `scylla_version`, or its `product_version` when the

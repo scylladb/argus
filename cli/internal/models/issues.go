@@ -1,7 +1,6 @@
 package models
 
 import (
-	"bytes"
 	"encoding/json"
 	"strconv"
 )
@@ -64,53 +63,50 @@ func unquote(raw json.RawMessage) string {
 	return s
 }
 
-// LinkedRun is one element of the links list returned by
-// GET /api/v1/issues/{key}/links: a run linked to the issue. URL is the
-// absolute Argus run page link built by the server. The pointer fields are
-// nil for a run that does not report them.
+// LinkedRun holds the fields of one element of the links list returned by
+// GET /api/v1/issues/{key}/links that a run summary row reads. URL is the
+// absolute Argus run page link built by the server.
 type LinkedRun struct {
-	RunID          string  `json:"run_id"`
-	TestID         string  `json:"test_id"`
-	TestName       string  `json:"test_name"`
-	PluginName     string  `json:"plugin_name"`
-	Status         string  `json:"status"`
-	StartTime      string  `json:"start_time"`
-	BuildID        string  `json:"build_id"`
-	BuildNumber    *int    `json:"build_number"`
-	ScyllaVersion  *string `json:"scylla_version"`
-	ProductVersion *string `json:"product_version"`
-	LinkedOn       *string `json:"linked_on"`
-	URL            string  `json:"url"`
+	RunID          string `json:"run_id"`
+	TestName       string `json:"test_name"`
+	Status         string `json:"status"`
+	StartTime      string `json:"start_time"`
+	BuildID        string `json:"build_id"`
+	BuildNumber    *int   `json:"build_number"`
+	ScyllaVersion  string `json:"scylla_version"`
+	ProductVersion string `json:"product_version"`
+	URL            string `json:"url"`
 }
 
 // Version is the run's Scylla version, or its product version when the run
-// reports no Scylla version, or empty when it reports neither.
+// reports no Scylla version.
 func (l LinkedRun) Version() string {
-	if l.ScyllaVersion != nil && *l.ScyllaVersion != "" {
-		return *l.ScyllaVersion
+	if l.ScyllaVersion != "" {
+		return l.ScyllaVersion
 	}
-	if l.ProductVersion != nil {
-		return *l.ProductVersion
-	}
-	return ""
+	return l.ProductVersion
 }
 
-// IssueLinks is the payload of GET /api/v1/issues/{key}/links. Issue holds the
-// issue fields as returned by the API and is nil for a key Argus does not
-// hold; Links is ordered newest run first.
+// IssueLinks is the payload of GET /api/v1/issues/{key}/links. Links is
+// ordered newest run first.
 type IssueLinks struct {
-	Issue map[string]any `json:"issue"`
-	Links []LinkedRun    `json:"links"`
+	Links []LinkedRun `json:"links"`
+	raw   RawJSON
 }
 
-// UnmarshalJSON keeps the numbers in Issue as [json.Number], exactly as the API
-// sent them.
+// UnmarshalJSON decodes the links and keeps the payload for [IssueLinks.Raw].
 func (l *IssueLinks) UnmarshalJSON(b []byte) error {
 	type plain IssueLinks
-	dec := json.NewDecoder(bytes.NewReader(b))
-	dec.UseNumber()
-	return dec.Decode((*plain)(l))
+	if err := json.Unmarshal(b, (*plain)(l)); err != nil {
+		return err
+	}
+	l.raw = append(RawJSON(nil), b...)
+	return nil
 }
+
+// Raw returns the payload exactly as the API sent it: the issue, or null for a
+// key Argus does not hold, and every field of every link.
+func (l IssueLinks) Raw() RawJSON { return l.raw }
 
 // Summaries maps every link to its display row, keeping the server order. The
 // result is never nil, so an issue without links marshals to an empty array.

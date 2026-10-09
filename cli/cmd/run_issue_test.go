@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -61,14 +60,14 @@ const issueLinksPayload = `{
 		{"run_id": "run-1", "test_id": "test-2", "test_name": "artifacts-ubuntu", "plugin_name": "generic",
 		 "status": "passed", "start_time": "2026-09-29T08:00:00.000Z", "build_id": "rel/g/artifacts-ubuntu",
 		 "build_number": 7, "scylla_version": null, "product_version": "2026.2.0", "linked_on": null,
-		 "url": "https://argus/test/rel/g/artifacts-ubuntu/7"}
+		 "url": "https://argus/test/rel/g/artifacts-ubuntu/7", "field_added_later": 3}
 	]
 }`
 
 // runIssueRuns executes `issue runs` with args against a stub API that serves
 // issueLinksPayload for SCT-1234 and an empty result for any other key. It
-// returns the JSON output and the request paths the stub received.
-func runIssueRuns(t *testing.T, raw bool, args ...string) (string, []string) {
+// returns the output, JSON or --text, and the request paths the stub received.
+func runIssueRuns(t *testing.T, raw, text bool, args ...string) (string, []string) {
 	t.Helper()
 	var paths []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -87,7 +86,7 @@ func runIssueRuns(t *testing.T, raw bool, args ...string) (string, []string) {
 	var buf bytes.Buffer
 	ctx := contextWithLogger(context.Background(), zerolog.Nop())
 	ctx = contextWithAPIClient(ctx, client)
-	ctx = contextWithOutputter(ctx, output.New(&buf, false))
+	ctx = contextWithOutputter(ctx, output.New(&buf, text))
 	issueRunsCmd.SetContext(ctx)
 	require.NoError(t, issueRunsCmd.Flags().Set("raw", strconv.FormatBool(raw)))
 	t.Cleanup(func() { _ = issueRunsCmd.Flags().Set("raw", "false") })
@@ -97,7 +96,7 @@ func runIssueRuns(t *testing.T, raw bool, args ...string) (string, []string) {
 }
 
 func TestIssueRunsCmd_PrintsRunRows(t *testing.T) {
-	out, paths := runIssueRuns(t, false, "SCT-1234")
+	out, paths := runIssueRuns(t, false, false, "SCT-1234")
 
 	assert.Equal(t, []string{"/api/v1/issues/SCT-1234/links"}, paths)
 	assert.JSONEq(t, `[
@@ -111,27 +110,26 @@ func TestIssueRunsCmd_PrintsRunRows(t *testing.T) {
 }
 
 func TestIssueRunsCmd_TrimsTheKey(t *testing.T) {
-	_, paths := runIssueRuns(t, false, " SCT-1234 ")
+	_, paths := runIssueRuns(t, false, false, " SCT-1234 ")
 
 	assert.Equal(t, []string{"/api/v1/issues/SCT-1234/links"}, paths)
 }
 
 func TestIssueRunsCmd_UnknownKeyPrintsEmptyList(t *testing.T) {
-	out, _ := runIssueRuns(t, false, "SCT-999999")
+	out, _ := runIssueRuns(t, false, false, "SCT-999999")
 
 	assert.JSONEq(t, `[]`, out)
 }
 
-func TestIssueRunsCmd_RawPrintsIssueAndLinks(t *testing.T) {
-	out, _ := runIssueRuns(t, true, "SCT-1234")
+func TestIssueRunsCmd_RawPrintsThePayloadAsSent(t *testing.T) {
+	out, _ := runIssueRuns(t, true, false, "SCT-1234")
 
-	var got struct {
-		Issue map[string]any   `json:"issue"`
-		Links []map[string]any `json:"links"`
-	}
-	require.NoError(t, json.Unmarshal([]byte(out), &got))
-	assert.Equal(t, "SCT-1234", got.Issue["key"])
-	require.Len(t, got.Links, 2)
-	assert.Equal(t, "run-2", got.Links[0]["run_id"])
-	assert.Equal(t, "https://argus/test/rel/g/artifacts-ubuntu/7", got.Links[1]["url"])
+	assert.JSONEq(t, issueLinksPayload, out)
+}
+
+func TestIssueRunsCmd_RawTextShowsNulls(t *testing.T) {
+	out, _ := runIssueRuns(t, true, true, "SCT-999999")
+
+	assert.Regexp(t, `│ issue\s+│ null\s+│`, out)
+	assert.Regexp(t, `│ links\s+│ \[\]\s+│`, out)
 }

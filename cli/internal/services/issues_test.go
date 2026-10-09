@@ -47,7 +47,8 @@ func TestIssueService_Links(t *testing.T) {
 	links, err := newIssueSvc(t, mux).Links(context.Background(), "SCT-1234")
 
 	require.NoError(t, err)
-	assert.Equal(t, "SCT-1234", links.Issue["key"])
+	assert.Contains(t, string(links.Raw()), `"key":"SCT-1234"`)
+	assert.Contains(t, string(links.Raw()), `"plugin_name":"generic"`)
 	require.Len(t, links.Links, 2)
 	assert.Equal(t, "run-2", links.Links[0].RunID)
 	assert.Equal(t, "longevity-100gb-4h", links.Links[0].TestName)
@@ -55,8 +56,6 @@ func TestIssueService_Links(t *testing.T) {
 	assert.Equal(t, 412, *links.Links[0].BuildNumber)
 	assert.Equal(t, "https://argus/test/rel/g/longevity-100gb-4h/412", links.Links[0].URL)
 	assert.Equal(t, "run-1", links.Links[1].RunID)
-	assert.Nil(t, links.Links[1].ScyllaVersion)
-	assert.Nil(t, links.Links[1].LinkedOn)
 	assert.Equal(t, "2026.2.0", links.Summaries()[1].Version)
 }
 
@@ -70,7 +69,7 @@ func TestIssueService_Links_UnknownKey(t *testing.T) {
 	links, err := newIssueSvc(t, mux).Links(context.Background(), "SCT-999999")
 
 	require.NoError(t, err)
-	assert.Nil(t, links.Issue)
+	assert.JSONEq(t, `{"issue": null, "links": []}`, string(links.Raw()))
 	raw, err := json.Marshal(links.Summaries())
 	require.NoError(t, err)
 	assert.JSONEq(t, `[]`, string(raw))
