@@ -61,4 +61,16 @@ describe("WorkAreaState", () => {
 
         expect(work.additionalRuns).toEqual({});
     });
+
+    it("drops the picked runs of tests that a restored history state no longer holds", () => {
+        const work = new WorkAreaState();
+        work.openRun("t1", "r1");
+        work.openRun("t2", "r2");
+
+        work.restore(["t2"]);
+        work.openTest("t1");
+
+        expect(work.testRuns).toEqual(["t2", "t1"]);
+        expect(work.additionalRuns).toEqual({ t2: ["r2"] });
+    });
 });

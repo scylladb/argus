@@ -8,14 +8,14 @@
     const work = new WorkAreaState();
 
     onMount(() => {
-        work.testRuns = stateDecoder();
+        work.restore(stateDecoder());
     });
 
 </script>
 
 <svelte:window
     onpopstate={() => {
-        work.testRuns = stateDecoder();
+        work.restore(stateDecoder());
     }}
 />
 
