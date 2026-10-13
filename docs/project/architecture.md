@@ -162,7 +162,7 @@ rules follow.
 |---|---|
 | ScyllaDB | Primary store. |
 | Jenkins | Job and build data. |
-| Jira | Issues linked to test runs. |
+| Jira | Issues linked to test runs. Argus sets the Seen Again Counter of a bug when a run is first linked to it or loses its last link. |
 | GitHub | Issues linked to test runs, and OAuth sign-in. |
 | Amazon S3 | Run artifacts. |
 | Anthropic | Event summaries. |

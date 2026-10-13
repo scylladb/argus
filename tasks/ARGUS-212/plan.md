@@ -114,29 +114,32 @@ stays in every plan built from a spec.
   `await self._adjust_seen_counter(issue.key, -1)`. `issue.key` is read from
   the row loaded at the top, so the orphan delete does not affect it.
 
-- [ ] Write the failing tests:
-  - [ ] `test_deleting_last_jira_link_lowers_seen_again_counter`: value 4 →
+- [x] Write the failing tests:
+  - [x] `test_deleting_last_jira_link_lowers_seen_again_counter`: value 4 →
         `update(fields={F: 3})`.
-  - [ ] `test_deleting_jira_link_at_zero_writes_nothing`: value 0 → no
+  - [x] `test_deleting_jira_link_at_zero_writes_nothing`: value 0 → no
         `update`.
-  - [ ] `test_deleting_one_of_two_rows_for_a_key_keeps_the_counter`: the run
+  - [x] `test_deleting_one_of_two_rows_for_a_key_keeps_the_counter`: the run
         is linked to the key through two rows, and one link is deleted → no
         `update`.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failure. Only
+      `test_deleting_last_jira_link_lowers_seen_again_counter` fails. The two
+      others pass before the change, because they check that nothing is
+      written.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 3 — Document the counter
 
 **Files:**
 - Modify: `docs/project/architecture.md` (the Jira row of `External Integrations`)
 
-- [ ] Change the Jira purpose to: "Issues linked to test runs. Argus
+- [x] Change the Jira purpose to: "Issues linked to test runs. Argus
       sets the Seen Again Counter of a bug when a run is first linked to it or
       loses its last link."
-- [ ] Run `uv run pre-commit run --all-files`.
-- [ ] Commit with the code.
+- [x] Run `uv run pre-commit run --all-files`.
+- [x] Commit with the code.
 
 ## Real-issue check
 
