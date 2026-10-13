@@ -98,7 +98,8 @@ flowchart TD
     F -->|no| C{cached and younger than 5 min, not forced?}
     C -->|yes| U[use cache]
     C -->|no| G{in flight?}
-    G -->|yes| W[await it]
+    G -->|yes, same or forced| W[await it]
+    G -->|plain one, forced asked| WF[await it, then GET with force]
     G -->|no| R[GET stats/summary]
 ```
 

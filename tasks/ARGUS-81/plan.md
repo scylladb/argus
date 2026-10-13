@@ -614,7 +614,28 @@ stays in every plan built from a spec.
 - [x] Run the verify sequence.
 - [x] Committed in 0978840b `fix(stats)`, a8329e3a `fix(release)`, 47df2002 `fix(search)`, 94545e08 `improvement(cli/search)`, e85997aa `fix(workspace)`, and 14e35c9f `docs(api-usage)`.
 
-## Task 11 — Documentation
+## Task 11 — Pull request review comments
+
+**Files:**
+- Modify: `frontend/WorkArea/Sidebar/sidebarState.svelte.ts`, `frontend/WorkArea/workAreaState.svelte.ts`, `frontend/WorkArea/WorkArea.svelte`
+- Test: `frontend/WorkArea/Sidebar/sidebarState.test.ts`, `frontend/WorkArea/workAreaState.test.ts`
+
+**Internals:**
+- **`StatsEntry.forced`:** marks a forced request in flight. A forced
+  `ensureStats` that finds a plain request in flight waits for it, then sends
+  its own `force=1` request; one already forced is shared.
+- **`WorkAreaState.restore(testIds)`:** sets the tests from the decoded URL
+  state and drops the picked runs of tests it no longer holds. `WorkArea` calls
+  it on mount and on `popstate`.
+
+- [x] Write the failing tests: a forced refresh behind a plain request; two forced refreshes sending one request; a history restore dropping the runs of a closed test.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Check in Chrome: pick run #8 from `issue:SCT-717`, go back, reopen the test from the sidebar; #8 is gone.
+- [x] Run the verify sequence.
+- [x] Committed in 788b626a and bbc26e3c `fix(workspace)`.
+
+## Task 12 — Documentation
 
 **Files:**
 - Modify:
