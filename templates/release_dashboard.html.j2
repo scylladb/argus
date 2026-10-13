@@ -7,7 +7,7 @@ Release: {{ release_name }}
 {% block javascripts %}
 {{ super() }}
 <script>
-    const releaseData = JSON.parse('{{ data | tojson | safe }}');
+    const releaseData = {{ data | tojson }};
 </script>
 <script defer type="module" src="/s/dist/releaseDashboard.bundle.js"></script>
 {% endblock javascripts %}

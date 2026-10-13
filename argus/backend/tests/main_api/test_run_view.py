@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from argus.backend.service.testrun import TestRunService
+from argus.backend.tests.util import script_value
 
 
 def _run(test_id: uuid.UUID | None) -> SimpleNamespace:
@@ -30,3 +31,12 @@ def test_run_view_renders_when_run_has_test(api_client):
 
     assert res.status_code == 200
     assert str(run.test_id) in res.text
+
+
+def test_run_view_keeps_tab_inside_its_string(api_client):
+    run = _run(test_id=uuid.uuid4())
+    with patch.object(TestRunService, "get_run", return_value=run):
+        res = api_client.get(f"/tests/scylla-cluster-tests/{run.id}/x%22%3Balert(1)%3B%22")
+
+    assert res.status_code == 200, res.text
+    assert script_value(res.text, "gTab") == 'x";alert(1);"'

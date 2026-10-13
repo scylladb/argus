@@ -2,7 +2,7 @@
 {% block javascripts %}
 {{ super() }}
     {% if current_route %}
-        <script>const gCurrentRoute = "{{ current_route }}";</script>
+        <script>const gCurrentRoute = {{ current_route | tojson }};</script>
     {% endif %}
     <script defer type="module" src="/s/dist/adminPanel.bundle.js"></script>
 {% endblock javascripts %}
