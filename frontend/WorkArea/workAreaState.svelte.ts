@@ -11,6 +11,13 @@ export class WorkAreaState {
         history.pushState({}, "", `?${queryString.stringify(params, { arrayFormat: "bracket" })}`);
     };
 
+    restore = (testIds: string[]): void => {
+        this.testRuns = testIds;
+        for (const testId of Object.keys(this.additionalRuns)) {
+            if (!testIds.includes(testId)) delete this.additionalRuns[testId];
+        }
+    };
+
     openTests = (testIds: string[]): void => {
         const added = testIds.filter((id) => !this.testRuns.includes(id));
         if (added.length === 0) return;
