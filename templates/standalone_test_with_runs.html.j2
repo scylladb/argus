@@ -8,7 +8,7 @@ Test Run
 {{ super() }}
 <script>
     const gTestId = "{{ test_id }}";
-    const additionalRuns = JSON.parse('{{ additional_runs | tojson | safe }}');
+    const additionalRuns = {{ additional_runs | tojson }};
 </script>
 <script defer type="module" src="/s/dist/testRunsStandalone.bundle.js"></script>
 {% endblock javascripts %}
