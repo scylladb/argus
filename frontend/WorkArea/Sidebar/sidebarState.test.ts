@@ -75,6 +75,43 @@ describe("SidebarState.ensureStats", () => {
         expect(statsCalls(fetchMock)[1]).toBe("/api/v1/release/stats/summary?release=scylla-master&force=1");
     });
 
+    it("refreshes with force after a plain request already in flight", async () => {
+        const first = deferred();
+        const fetchMock = vi.fn()
+            .mockImplementationOnce(() => first.promise.then(() => ok(SUMMARY)))
+            .mockResolvedValue(ok(SUMMARY));
+        vi.stubGlobal("fetch", fetchMock);
+        const state = new SidebarState();
+        const master = release("scylla-master");
+
+        const prefetch = state.ensureStats(master);
+        const refresh = state.ensureStats(master, { force: true });
+        first.resolve(null);
+        await Promise.all([prefetch, refresh]);
+
+        expect(statsCalls(fetchMock)).toEqual([
+            "/api/v1/release/stats/summary?release=scylla-master&force=0",
+            "/api/v1/release/stats/summary?release=scylla-master&force=1",
+        ]);
+    });
+
+    it("sends one forced request for two refreshes during a plain one", async () => {
+        const first = deferred();
+        const fetchMock = vi.fn()
+            .mockImplementationOnce(() => first.promise.then(() => ok(SUMMARY)))
+            .mockResolvedValue(ok(SUMMARY));
+        vi.stubGlobal("fetch", fetchMock);
+        const state = new SidebarState();
+        const master = release("scylla-master");
+
+        const prefetch = state.ensureStats(master);
+        const refreshes = [state.ensureStats(master, { force: true }), state.ensureStats(master, { force: true })];
+        first.resolve(null);
+        await Promise.all([prefetch, ...refreshes]);
+
+        expect(statsCalls(fetchMock).filter((url) => url.endsWith("force=1"))).toHaveLength(1);
+    });
+
     it("requests nothing for a dormant release", async () => {
         const fetchMock = vi.fn();
         vi.stubGlobal("fetch", fetchMock);
