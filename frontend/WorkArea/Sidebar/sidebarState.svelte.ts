@@ -48,6 +48,7 @@ export interface StatsEntry {
     fetchedAt: number;
     error?: string;
     promise?: Promise<void>;
+    forced?: boolean;
 }
 
 export type SearchOption = {
@@ -183,10 +184,13 @@ export class SidebarState {
     ensureStats(release: Release, { force = false } = {}): Promise<void> {
         if (release.dormant) return Promise.resolve();
         const entry = this.stats.get(release.name);
-        if (entry?.promise) return entry.promise;
+        if (entry?.promise) {
+            if (!force || entry.forced) return entry.promise;
+            return entry.promise.then(() => this.ensureStats(release, { force }));
+        }
         if (!force && entry?.data && Date.now() - entry.fetchedAt < STATS_TTL) return Promise.resolve();
         const promise = this.#fetchStats(release, force);
-        this.stats.set(release.name, { data: entry?.data, fetchedAt: entry?.fetchedAt ?? 0, promise });
+        this.stats.set(release.name, { data: entry?.data, fetchedAt: entry?.fetchedAt ?? 0, promise, forced: force });
         return promise;
     }
 
