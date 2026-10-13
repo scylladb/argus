@@ -265,6 +265,8 @@ class JiraService:
             await issue.delete()
 
         await invalidate_release_snapshots(link.release_id)
+        if not await self._run_links_key(run_id, issue.key):
+            await self._adjust_seen_counter(issue.key, -1)
         return {
             "deleted": issue_id if remaining_links == 0 else (link.run_id, link.issue_id)
         }

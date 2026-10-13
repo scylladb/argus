@@ -943,3 +943,39 @@ async def test_jira_link_with_jira_disabled_makes_no_remote_call(
     client.issue.assert_not_called()
     remote.update.assert_not_called()
     assert await linked_keys(mocked_issue_service, run) == [key]
+
+
+async def test_deleting_last_jira_link_lowers_seen_again_counter(run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):
+    key = unique_jira_key()
+    remote = counted_jira_issue(mocked_issue_service, key, seen_again=3.0)
+    submitted = await submit_jira_link(mocked_issue_service, run, logged_in_user, key)
+    setattr(remote.fields, SEEN_AGAIN_FIELD, 4.0)
+    remote.update.reset_mock()
+
+    await mocked_issue_service.delete(issue_id=submitted["id"], run_id=run.id, user=logged_in_user)
+
+    remote.update.assert_called_once_with(fields={SEEN_AGAIN_FIELD: 3})
+
+
+async def test_deleting_jira_link_at_zero_writes_nothing(run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):
+    key = unique_jira_key()
+    remote = counted_jira_issue(mocked_issue_service, key, seen_again=0.0)
+    submitted = await submit_jira_link(mocked_issue_service, run, logged_in_user, key)
+    remote.update.reset_mock()
+
+    await mocked_issue_service.delete(issue_id=submitted["id"], run_id=run.id, user=logged_in_user)
+
+    remote.update.assert_not_called()
+
+
+async def test_deleting_one_of_two_rows_for_a_key_keeps_the_counter(run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):
+    key = unique_jira_key()
+    remote = counted_jira_issue(mocked_issue_service, key, seen_again=3.0)
+    await submit_jira_link(mocked_issue_service, run, logged_in_user, key)
+    second = await submit_jira_link(mocked_issue_service, run, logged_in_user, key, url_suffix="/")
+    remote.update.reset_mock()
+
+    await mocked_issue_service.delete(issue_id=second["id"], run_id=run.id, user=logged_in_user)
+
+    remote.update.assert_not_called()
+    assert await linked_keys(mocked_issue_service, run) == [key]
