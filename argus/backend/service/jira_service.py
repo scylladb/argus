@@ -9,7 +9,9 @@ from unittest.mock import MagicMock
 from urllib.parse import urlparse
 from uuid import UUID
 from jira import JIRA
+from jira.exceptions import JIRAError
 from jira.resources import User as JiraUser
+from requests import RequestException
 
 from argus.backend.models.jira import JiraIssue
 from coodie.exceptions import DocumentNotFound
@@ -32,6 +34,8 @@ class JiraServiceException(Exception):
 
 class JiraService:
     LAST_RAN_KEY = "jira_service_last_issue_refresh"
+    SEEN_AGAIN_FIELD = "customfield_11252"
+    COUNTED_ISSUE_TYPE = "Bug"
     KEY_PATTERN = re.compile(r"[A-Z][A-Z0-9_]*-[0-9]+")
 
     plugins = AVAILABLE_PLUGINS
@@ -142,11 +146,39 @@ class JiraService:
     async def get_issues_by_key(self, key: str) -> list[JiraIssue]:
         return await JiraIssue.find(key=key).all()
 
+    async def _run_links_key(self, run_id: UUID, key: str) -> bool:
+        issue_ids = {issue.id for issue in await self.get_issues_by_key(key)}
+        return any(link.issue_id in issue_ids for link in await IssueLink.find(run_id=run_id).all())
+
+    async def _adjust_seen_counter(self, key: str, delta: int) -> None:
+        try:
+            jira = await self._client()
+            if not jira:
+                return
+            remote_issue = await asyncio.to_thread(
+                jira.issue, key, fields=f"{self.SEEN_AGAIN_FIELD},issuetype", expand="editmeta")
+            issue_type = remote_issue.fields.issuetype.name
+            if issue_type != self.COUNTED_ISSUE_TYPE:
+                LOGGER.info(
+                    "%s is a %s, not a %s, Seen Again Counter skipped", key, issue_type, self.COUNTED_ISSUE_TYPE)
+                return
+            if self.SEEN_AGAIN_FIELD not in remote_issue.raw.get("editmeta", {}).get("fields", {}):
+                LOGGER.info("%s has no Seen Again Counter, skipped", key)
+                return
+            current = getattr(remote_issue.fields, self.SEEN_AGAIN_FIELD, None) or 0
+            value = max(0, int(current) + delta)
+            if value == current:
+                return
+            await asyncio.to_thread(remote_issue.update, fields={self.SEEN_AGAIN_FIELD: value})
+        except (JIRAError, RequestException):
+            LOGGER.warning("Seen Again Counter update failed for %s", key, exc_info=True)
+
     async def submit_issue(self, issue_url: str, test_id: UUID, run_id: UUID, user: User, event_id: UUID | str = None):
         test: ArgusTest = await ArgusTest.get(id=test_id)
         plugin = self.get_plugin(plugin_name=test.plugin_name)
         run = await plugin.model.get(id=run_id)
         issue, state = await self.get_issue(issue_url, user)
+        first_link = not await self._run_links_key(run.id, issue.key)
 
         link = IssueLink.model_construct()
         link.run_id = run.id
@@ -177,6 +209,8 @@ class JiraService:
         )
 
         await invalidate_release_snapshots(test.release_id)
+        if first_link:
+            await self._adjust_seen_counter(issue.key, 1)
         response = {
             **issue.model_dump(),
             "summary": issue.summary,

@@ -11,11 +11,12 @@ import json
 import logging
 import time
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 from uuid import uuid4
 
 import pytest
 from coodie.exceptions import DocumentNotFound
+from jira.exceptions import JIRAError
 
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
@@ -32,6 +33,8 @@ from argus.backend.tests.conftest import get_fake_test_run
 LOGGER = logging.getLogger(__name__)
 
 JIRA_SERVER = "https://zxqtesting.atlassian.net"
+JIRA_LOGGER = "argus.backend.service.jira_service"
+SEEN_AGAIN_FIELD = JiraService.SEEN_AGAIN_FIELD
 
 
 # ---------------------------------------------------------------------------
@@ -91,19 +94,27 @@ def fake_github_assignee(login: str) -> SimpleNamespace:
 
 
 def fake_remote_jira_issue(key: str, status: str = "To Do", summary: str = "Remote Jira Issue",
-                           labels: list[str] | None = None, assignee: SimpleNamespace | None = None) -> SimpleNamespace:
-    """Mimics the subset of ``jira.Issue`` that JiraService reads."""
+                           labels: list[str] | None = None, assignee: SimpleNamespace | None = None,
+                           seen_again: float | None = None, counter_on_screen: bool = False,
+                           issue_type: str = "Bug") -> SimpleNamespace:
+    """Mimics the subset of ``jira.Issue`` that JiraService reads and updates."""
     project, _ = key.split("-")
+    fields = SimpleNamespace(
+        summary=summary,
+        status=SimpleNamespace(name=status),
+        project=SimpleNamespace(key=project),
+        labels=labels if labels is not None else [],
+        assignee=assignee,
+        issuetype=SimpleNamespace(name=issue_type),
+    )
+    setattr(fields, SEEN_AGAIN_FIELD, seen_again)
+    editmeta_fields = {SEEN_AGAIN_FIELD: {"name": "Seen Again Counter"}} if counter_on_screen else {}
     return SimpleNamespace(
         key=key,
         permalink=lambda: f"{JIRA_SERVER}/browse/{key}",
-        fields=SimpleNamespace(
-            summary=summary,
-            status=SimpleNamespace(name=status),
-            project=SimpleNamespace(key=project),
-            labels=labels if labels is not None else [],
-            assignee=assignee,
-        ),
+        fields=fields,
+        raw={"editmeta": {"fields": editmeta_fields}},
+        update=MagicMock(name="update"),
     )
 
 
@@ -165,7 +176,7 @@ async def test_submit_jira_issue_link_for_existing_issue(run: SCTTestRun, mocked
     result = await mocked_issue_service.submit(issue_url=url, test_id=run.test_id, run_id=run.id, user=logged_in_user)
 
     assert result["summary"] == "Example Issue"
-    mocked_issue_service.jira.jira.issue.assert_not_called()
+    assert call(key) not in mocked_issue_service.jira.jira.issue.call_args_list
 
     issue_with_links = await mocked_issue_service.get("run_id", run.id, True)
     assert len(issue_with_links) == 1
@@ -253,7 +264,7 @@ async def test_submit_unknown_jira_issue_fetches_from_remote(run: SCTTestRun, mo
 
     result = await mocked_issue_service.submit(issue_url=url, test_id=run.test_id, run_id=run.id, user=logged_in_user)
 
-    mocked_issue_service.jira.jira.issue.assert_called_once_with(key)
+    assert mocked_issue_service.jira.jira.issue.call_args_list[0] == call(key)
     mocked_issue_service.gh.gh.get_repo.assert_not_called()
 
     assert result["key"] == key
@@ -810,3 +821,125 @@ def test_issue_links_endpoint_rejects_a_value_that_is_no_issue_key(api_client):
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["status"] == "error"
+
+
+# ---------------------------------------------------------------------------
+# Seen Again Counter
+# ---------------------------------------------------------------------------
+
+
+def counted_jira_issue(service: IssueService, key: str, seen_again: float | None) -> SimpleNamespace:
+    remote = fake_remote_jira_issue(key, seen_again=seen_again, counter_on_screen=True)
+    service.jira.jira.issue.return_value = remote
+    return remote
+
+
+async def submit_jira_link(service: IssueService, run: SCTTestRun, user: User, key: str, url_suffix: str = "") -> dict:
+    return await service.submit(issue_url=f"{JIRA_SERVER}/browse/{key}{url_suffix}", test_id=run.test_id, run_id=run.id, user=user)
+
+
+async def linked_keys(service: IssueService, run: SCTTestRun) -> list[str]:
+    return [issue["key"] for issue in await service.get("run_id", run.id)]
+
+
+def logged(caplog: pytest.LogCaptureFixture, level: int, key: str) -> bool:
+    return any(record.levelno == level and key in record.getMessage() for record in caplog.records)
+
+
+async def test_first_jira_link_raises_seen_again_counter(run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):
+    key = unique_jira_key()
+    remote = counted_jira_issue(mocked_issue_service, key, seen_again=3.0)
+
+    await submit_jira_link(mocked_issue_service, run, logged_in_user, key)
+
+    remote.update.assert_called_once_with(fields={SEEN_AGAIN_FIELD: 4})
+
+
+async def test_first_jira_link_sets_seen_again_counter_from_empty(run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):
+    key = unique_jira_key()
+    remote = counted_jira_issue(mocked_issue_service, key, seen_again=None)
+
+    await submit_jira_link(mocked_issue_service, run, logged_in_user, key)
+
+    remote.update.assert_called_once_with(fields={SEEN_AGAIN_FIELD: 1})
+
+
+async def test_jira_link_skips_issue_without_seen_again_counter(
+        run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User, caplog: pytest.LogCaptureFixture):
+    key = unique_jira_key()
+    remote = fake_remote_jira_issue(key, seen_again=0.0, counter_on_screen=False)
+    mocked_issue_service.jira.jira.issue.return_value = remote
+
+    with caplog.at_level(logging.INFO, logger=JIRA_LOGGER):
+        await submit_jira_link(mocked_issue_service, run, logged_in_user, key)
+
+    remote.update.assert_not_called()
+    assert await linked_keys(mocked_issue_service, run) == [key]
+    assert logged(caplog, logging.INFO, key)
+
+
+async def test_jira_link_skips_issue_that_is_not_a_bug(
+        run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User, caplog: pytest.LogCaptureFixture):
+    key = unique_jira_key()
+    remote = fake_remote_jira_issue(key, seen_again=0.0, counter_on_screen=True, issue_type="Story")
+    mocked_issue_service.jira.jira.issue.return_value = remote
+
+    with caplog.at_level(logging.INFO, logger=JIRA_LOGGER):
+        await submit_jira_link(mocked_issue_service, run, logged_in_user, key)
+
+    remote.update.assert_not_called()
+    assert await linked_keys(mocked_issue_service, run) == [key]
+    assert logged(caplog, logging.INFO, key)
+
+
+async def test_resubmitted_jira_link_counts_once(run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):
+    key = unique_jira_key()
+    remote = counted_jira_issue(mocked_issue_service, key, seen_again=3.0)
+
+    await submit_jira_link(mocked_issue_service, run, logged_in_user, key)
+    await submit_jira_link(mocked_issue_service, run, logged_in_user, key)
+
+    remote.update.assert_called_once_with(fields={SEEN_AGAIN_FIELD: 4})
+
+
+async def test_jira_link_through_second_row_counts_once(run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):
+    key = unique_jira_key()
+    remote = counted_jira_issue(mocked_issue_service, key, seen_again=3.0)
+
+    await submit_jira_link(mocked_issue_service, run, logged_in_user, key)
+    await submit_jira_link(mocked_issue_service, run, logged_in_user, key, url_suffix="/")
+
+    assert len(await mocked_issue_service.jira.get_issues_by_key(key)) == 2
+    remote.update.assert_called_once_with(fields={SEEN_AGAIN_FIELD: 4})
+
+
+async def test_failed_seen_again_update_keeps_the_link(
+        run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User, caplog: pytest.LogCaptureFixture):
+    key = unique_jira_key()
+    remote = counted_jira_issue(mocked_issue_service, key, seen_again=3.0)
+    remote.update.side_effect = JIRAError(status_code=400, text=f"Field '{SEEN_AGAIN_FIELD}' cannot be set.")
+
+    with caplog.at_level(logging.WARNING, logger=JIRA_LOGGER):
+        await submit_jira_link(mocked_issue_service, run, logged_in_user, key)
+
+    assert await linked_keys(mocked_issue_service, run) == [key]
+    assert logged(caplog, logging.WARNING, key)
+
+
+async def test_jira_link_with_jira_disabled_makes_no_remote_call(
+        run: SCTTestRun, client_service: ClientService, testrun_service: TestRunService, fake_test: ArgusTest,
+        mocked_issue_service: IssueService, logged_in_user: User):
+    other_run = await submit_run(client_service, testrun_service, fake_test)
+    key = unique_jira_key()
+    remote = counted_jira_issue(mocked_issue_service, key, seen_again=3.0)
+    await submit_jira_link(mocked_issue_service, other_run, logged_in_user, key)
+    client = mocked_issue_service.jira.jira
+    client.reset_mock()
+    remote.update.reset_mock()
+    mocked_issue_service.jira.jira = None
+
+    await submit_jira_link(mocked_issue_service, run, logged_in_user, key)
+
+    client.issue.assert_not_called()
+    remote.update.assert_not_called()
+    assert await linked_keys(mocked_issue_service, run) == [key]
