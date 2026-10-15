@@ -154,7 +154,6 @@ type PerformanceHDRHistogram struct {
 // LogEntry represents a single log file attached to a test run.
 type LogEntry struct {
 	Name string `json:"name"`
-	URL  string `json:"url"`
 }
 
 // RunBase contains the fields from PluginModelBase that every plugin run

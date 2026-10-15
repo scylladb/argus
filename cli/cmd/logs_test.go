@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -13,7 +14,9 @@ import (
 	"testing"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/rs/zerolog"
 	"github.com/scylladb/argus/cli/internal/api"
+	"github.com/scylladb/argus/cli/internal/output"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -399,4 +402,18 @@ func TestExtractBody_ZstRejectsDamagedSecondFrame(t *testing.T) {
 
 	err := extractBody("node-1.log.zst", body, t.TempDir())
 	require.ErrorIs(t, err, zstd.ErrMagicMismatch)
+}
+
+func TestLogsListCmd_PrintsLogNamesOnly(t *testing.T) {
+	var buf bytes.Buffer
+	ctx := contextWithLogger(context.Background(), zerolog.Nop())
+	ctx = contextWithAPIClient(ctx, stubRunAPI(t))
+	ctx = contextWithOutputter(ctx, output.New(&buf, false))
+	logsListCmd.SetContext(ctx)
+	require.NoError(t, logsListCmd.Flags().Set("run-id", stubRunID))
+	t.Cleanup(func() { _ = logsListCmd.Flags().Set("run-id", "") })
+
+	require.NoError(t, logsListCmd.RunE(logsListCmd, nil))
+
+	assert.JSONEq(t, `[{"name": "db-cluster-5e7b3f0c.tar.zst"}, {"name": "sct-runner-events-5e7b3f0c.tar.zst"}]`, buf.String())
 }
