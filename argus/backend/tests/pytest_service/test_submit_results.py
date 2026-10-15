@@ -1,4 +1,5 @@
 from datetime import datetime, UTC
+from uuid import UUID
 
 import pytest
 
@@ -14,7 +15,7 @@ async def test_valid_results(client_service: ClientService, pv_service: PytestVi
         "timestamp": 1753687331.758162,
         "session_timestamp": 1753687331.758162,
         "test_type": "dtest",
-        "run_id": "879b516b-6e93-4c4c-9c86-dd0f2fda5c66",
+        "run_id": UUID("879b516b-6e93-4c4c-9c86-dd0f2fda5c66"),
         "status": "passed",
         "duration": 1.27434,
         "markers": ["dtest_full", "dtest"],
@@ -41,7 +42,7 @@ async def test_avg_duration(testrun_service: TestRunService, client_service: Cli
         "timestamp": 1753687331.758162,
         "session_timestamp": 1753687331.758162,
         "test_type": "dtest",
-        "run_id": "879b516b-6e93-4c4c-9c86-dd0f2fda5c66",
+        "run_id": UUID("879b516b-6e93-4c4c-9c86-dd0f2fda5c66"),
         "status": "passed",
         "duration": 1.27434,
         "markers": ["dtest_full", "dtest"],
@@ -69,7 +70,7 @@ async def test_avg_duration_with_status_query(testrun_service: TestRunService, c
         "timestamp": 1753687331.758162,
         "session_timestamp": 1753687331.758162,
         "test_type": "dtest",
-        "run_id": "879b516b-6e93-4c4c-9c86-dd0f2fda5c66",
+        "run_id": UUID("879b516b-6e93-4c4c-9c86-dd0f2fda5c66"),
         "status": "passed",
         "duration": 1.27434,
         "markers": ["dtest_full", "dtest"],
@@ -100,7 +101,7 @@ async def test_avg_duration_with_time_query(testrun_service: TestRunService, cli
         "timestamp": 1753687331.758162,
         "session_timestamp": 1753687331.758162,
         "test_type": "dtest",
-        "run_id": "879b516b-6e93-4c4c-9c86-dd0f2fda5c66",
+        "run_id": UUID("879b516b-6e93-4c4c-9c86-dd0f2fda5c66"),
         "status": "passed",
         "duration": 1.27434,
         "markers": ["dtest_full", "dtest"],
@@ -132,7 +133,7 @@ async def test_avg_duration_with_status_and_time_query(testrun_service: TestRunS
         "timestamp": 1753687331.758162,
         "session_timestamp": 1753687331.758162,
         "test_type": "dtest",
-        "run_id": "879b516b-6e93-4c4c-9c86-dd0f2fda5c66",
+        "run_id": UUID("879b516b-6e93-4c4c-9c86-dd0f2fda5c66"),
         "status": "passed",
         "duration": 1.27434,
         "markers": ["dtest_full", "dtest"],

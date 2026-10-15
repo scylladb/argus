@@ -165,7 +165,7 @@ async def test_invalidate_release_snapshot_swallows_db_exception(argus_db):
 async def test_index_version_written_on_submit_product_version(argus_db, fake_test, client_service, release):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    await client_service.submit_product_version(run_type, run_req.run_id, "9.9.9-test")
+    await client_service.submit_product_version(run_type, uuid.UUID(run_req.run_id), "9.9.9-test")
 
     versions = [r.version for r in await ReleaseDistinctVersions.find(release_id=release.id).all()]
     assert "9.9.9-test" in versions
@@ -175,8 +175,8 @@ async def test_index_version_written_on_submit_product_version(argus_db, fake_te
 async def test_index_version_written_on_finish_run(argus_db, fake_test, client_service, release):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    await client_service.submit_product_version(run_type, run_req.run_id, "8.8.8-test")
-    await client_service.finish_run(run_type, run_req.run_id)
+    await client_service.submit_product_version(run_type, uuid.UUID(run_req.run_id), "8.8.8-test")
+    await client_service.finish_run(run_type, uuid.UUID(run_req.run_id))
 
     versions = [r.version for r in await ReleaseDistinctVersions.find(release_id=release.id).all()]
     assert "8.8.8-test" in versions
@@ -297,8 +297,8 @@ async def test_different_versions_cached_under_separate_filter_keys(argus_db, fa
     run_type, req_b = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(req_a))
     await client_service.submit_run(run_type, asdict(req_b))
-    await client_service.submit_product_version(run_type, req_a.run_id, ver_a)
-    await client_service.submit_product_version(run_type, req_b.run_id, ver_b)
+    await client_service.submit_product_version(run_type, uuid.UUID(req_a.run_id), ver_a)
+    await client_service.submit_product_version(run_type, uuid.UUID(req_b.run_id), ver_b)
 
     for s in await get_snapshots(release.id):
         await s.delete()
@@ -326,8 +326,8 @@ async def test_finish_run_invalidates_only_matching_version_and_aggregate(argus_
     for k in (key_561, key_570, key_all):
         await write_snapshot(release.id, k)
 
-    await client_service.submit_product_version(run_type, run_req.run_id, "5.6.1")
-    await client_service.finish_run(run_type, run_req.run_id)
+    await client_service.submit_product_version(run_type, uuid.UUID(run_req.run_id), "5.6.1")
+    await client_service.finish_run(run_type, uuid.UUID(run_req.run_id))
 
     remaining = {s.filter_key for s in await get_snapshots(release.id)}
     assert key_561 not in remaining, "5.6.1 snapshot must be invalidated"
@@ -371,7 +371,7 @@ async def test_run_finishing_on_one_release_does_not_invalidate_another(argus_db
 
     run_type, run_req = get_fake_test_run(test_b)
     await client_service.submit_run(run_type, asdict(run_req))
-    await client_service.finish_run(run_type, run_req.run_id)
+    await client_service.finish_run(run_type, uuid.UUID(run_req.run_id))
 
     snap_a = await ReleaseStatsSnapshot.get(release_id=release.id, filter_key=key)
     assert json.loads(snap_a.payload) == {"release": "a"}
@@ -397,7 +397,7 @@ async def test_new_run_visible_in_stats_after_cache_invalidation(argus_db, fake_
 
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    await client_service.finish_run(run_type, run_req.run_id)
+    await client_service.finish_run(run_type, uuid.UUID(run_req.run_id))
 
     key_all = snapshot_filter_key(None, None, True, False)
     assert key_all not in {s.filter_key for s in await get_snapshots(release.id)}, \
@@ -416,8 +416,8 @@ async def test_unaffected_version_snapshot_stays_warm_when_other_version_run_fin
     run_type, req_570 = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(req_561))
     await client_service.submit_run(run_type, asdict(req_570))
-    await client_service.submit_product_version(run_type, req_561.run_id, "5.6.1")
-    await client_service.submit_product_version(run_type, req_570.run_id, "5.7.0")
+    await client_service.submit_product_version(run_type, uuid.UUID(req_561.run_id), "5.6.1")
+    await client_service.submit_product_version(run_type, uuid.UUID(req_570.run_id), "5.7.0")
 
     await ReleaseStatsCollector(release.name, release_version="5.6.1").collect(force=False, include_no_version=False)
     await ReleaseStatsCollector(release.name, release_version="5.7.0").collect(force=False, include_no_version=False)
@@ -426,7 +426,7 @@ async def test_unaffected_version_snapshot_stays_warm_when_other_version_run_fin
     assert any(s.filter_key == key_570 for s in await get_snapshots(release.id)), \
         "Pre-condition: 5.7.0 snapshot must be warm before test"
 
-    await client_service.finish_run(run_type, req_561.run_id)
+    await client_service.finish_run(run_type, uuid.UUID(req_561.run_id))
 
     remaining = {s.filter_key for s in await get_snapshots(release.id)}
     assert key_570 in remaining, "5.7.0 snapshot must survive 5.6.1 run finishing"

@@ -30,7 +30,7 @@ class BestResult:
     key: str
     value: float
     result_date: datetime
-    run_id: str
+    run_id: UUID
 
 
 @dataclass
@@ -570,7 +570,7 @@ class ResultsService:
 
     async def update_best_results(self, test_id: UUID, table_name: str, cells: list[Cell],
                                   table_metadata: ArgusGenericResultMetadata,
-                                  run_id: str) -> dict[str, List[BestResult]]:
+                                  run_id: UUID) -> dict[str, List[BestResult]]:
         """update best results for given test_id and table_name based on cells values - if any value is better than current best"""
         higher_is_better_map = {meta.name: meta.higher_is_better for meta in table_metadata.columns_meta}
         best_results = await self.get_best_results(test_id=test_id, name=table_name)

@@ -39,7 +39,7 @@ def submit_cells(client_service, fake_test, release, group):
         for column, row, value in cells:
             results.add_result(column=column, row=row, value=value, status=Status.UNSET)
         await client_service.submit_run(run_type, asdict(run))
-        await client_service.submit_results(run_type, run.run_id, results.as_dict())
+        await client_service.submit_results(run_type, UUID(run.run_id), results.as_dict())
         return UUID(run.run_id)
     return submit
 

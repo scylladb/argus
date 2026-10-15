@@ -17,10 +17,10 @@ def run_cost_service(argus_db) -> RunCostService:
     return RunCostService()
 
 
-async def _submitted_run(client_service: ClientService, fake_test: ArgusTest) -> tuple[str, str]:
+async def _submitted_run(client_service: ClientService, fake_test: ArgusTest) -> tuple[str, UUID]:
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    return run_type, run_req.run_id
+    return run_type, UUID(run_req.run_id)
 
 
 async def test_finalize_repairs_a_sum_left_stale(client_service: ClientService, run_cost_service: RunCostService,
@@ -29,9 +29,9 @@ async def test_finalize_repairs_a_sum_left_stale(client_service: ClientService, 
     await run_cost_service.submit_cost_items(run_id, [
         CostItemRequest(name="db-node-1", category="db_node", cost=10.0),
     ])
-    await RunCost.find(run_id=UUID(run_id)).update(actual_cost=999.0)
+    await RunCost.find(run_id=run_id).update(actual_cost=999.0)
 
-    await client_service.finish_run(run_type=run_type, run_id=str(run_id))
+    await client_service.finish_run(run_type=run_type, run_id=run_id)
 
     assert (await run_cost_service.get_run_cost(run_id))["actual_cost"] == pytest.approx(10.0)
 
@@ -42,7 +42,7 @@ async def test_finalize_takes_the_estimate_when_no_item_was_reported(client_serv
     run_type, run_id = await _submitted_run(client_service, fake_test)
     await run_cost_service.set_estimated_cost(run_id, 118.40)
 
-    await client_service.finish_run(run_type=run_type, run_id=str(run_id))
+    await client_service.finish_run(run_type=run_type, run_id=run_id)
 
     cost = await run_cost_service.get_run_cost(run_id)
     assert cost["actual_cost"] == pytest.approx(118.40)
@@ -58,7 +58,7 @@ async def test_finalize_survives_a_database_failure_in_the_recompute(client_serv
     ])
 
     with patch.object(RunCostService, "recompute_actual_cost", side_effect=NoHostAvailable("down", {})):
-        assert await client_service.finish_run(run_type=run_type, run_id=str(run_id)) == "Finalized"
+        assert await client_service.finish_run(run_type=run_type, run_id=run_id) == "Finalized"
 
 
 async def test_finalize_leaves_a_run_that_reported_no_cost_alone(client_service: ClientService,
@@ -66,7 +66,7 @@ async def test_finalize_leaves_a_run_that_reported_no_cost_alone(client_service:
                                                            fake_test: ArgusTest):
     run_type, run_id = await _submitted_run(client_service, fake_test)
 
-    assert await client_service.finish_run(run_type=run_type, run_id=str(run_id)) == "Finalized"
+    assert await client_service.finish_run(run_type=run_type, run_id=run_id) == "Finalized"
 
     cost = await run_cost_service.get_run_cost(run_id)
     assert cost["actual_cost"] is None

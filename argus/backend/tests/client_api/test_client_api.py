@@ -109,6 +109,12 @@ def test_heartbeat_sets_recent_timestamp(api_client, submitted_run_id):
     assert info["test_run"]["heartbeat"] == hb
 
 
+def test_heartbeat_rejects_malformed_run_id(api_client):
+    resp = api_client.post(f"{API_PREFIX}/testrun/{RUN_TYPE}/not-a-run-id/heartbeat")
+    assert resp.status_code == 200
+    assert resp.json()["response"]["exception"] == "RequestValidationError"
+
+
 def test_get_status_returns_initial_created(api_client, submitted_run_id):
     resp = api_client.get(f"{API_PREFIX}/testrun/{RUN_TYPE}/{submitted_run_id}/get_status")
     assert resp.status_code == 200
@@ -200,6 +206,29 @@ def test_submit_pytest_result_via_endpoint(api_client):
     body = resp.json()["response"]
     assert body["name"] == payload["name"]
     assert body["id"] is not None
+
+
+def test_submit_pytest_internal_error_result_without_message(api_client):
+    payload = _pytest_payload(f"client_api_pytest::test_{uuid4().hex}", status="internal-error")
+    payload["message"] = None
+    resp = api_client.post(
+        f"{API_PREFIX}/testrun/pytest/result/submit",
+        json=payload,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "ok", resp.text
+    assert resp.json()["response"]["name"] == payload["name"]
+
+
+def test_submit_pytest_result_rejects_malformed_run_id(api_client):
+    payload = _pytest_payload(f"client_api_pytest::test_{uuid4().hex}")
+    payload["run_id"] = "not-a-run-id"
+    resp = api_client.post(
+        f"{API_PREFIX}/testrun/pytest/result/submit",
+        json=payload,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["response"]["exception"] == "RequestValidationError"
 
 
 def test_pytest_field_stats_returns_avg_duration(api_client):
