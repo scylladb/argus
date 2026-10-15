@@ -10,7 +10,6 @@
         Issue,
         GithubSubtype,
         JiraSubtype,
-        StateFilter,
         TestRun,
         RichAssignee,
     } from "../Common/IssueTypes";
@@ -36,8 +35,8 @@
     import IssuesCopyModal from "./IssuesCopyModal.svelte";
     import queryString from 'query-string';
     import IssueCard from "../Common/IssueCard.svelte";
-    import type { Issue, GithubSubtype, JiraSubtype, Label, State, StateFilter } from "../Common/IssueTypes";
-    import { getTitle, getRepo, getNumber, label2color } from "../Common/IssueTypes";
+    import type { Issue, GithubSubtype, JiraSubtype, Label } from "../Common/IssueTypes";
+    import { getTitle, getRepo, label2color, priorityIndex } from "../Common/IssueTypes";
     import { untrack } from "svelte";
     interface Props {
         id?: string;
@@ -94,6 +93,10 @@
         }
     };
 
+    type FilterGroup = "state" | "priority" | "project";
+    const NO_PRIORITY = "none";
+    const uid = $props.id();
+
     let sortCriteria: "name" | "repo" | "date" = $state("date");
     let reverseSort = $state(true);
     let currentPage = $state(0);
@@ -101,18 +104,16 @@
     let filterString = $state("");
     let availableLabels: Label[] = [];
     let selectedLabels: Label[] = $state([]);
-    const stateFilter: Record<State, boolean> = $state({
-        open: true,
-        closed: true,
-        "in progress": true,
-        "in review": true,
-        "ready for merge": true,
-        "blocked": true,
-        "done": true,
-        "duplicate": true,
-        "won't fix": true,
-        todo: true,
-        new: true,
+    const excluded: Record<FilterGroup, Record<string, boolean>> = $state({ state: {}, priority: {}, project: {} });
+
+    const jiraIssues = $derived(issues.filter((issue) => issue.subtype === "jira") as JiraSubtype[]);
+    const distinct = (values: string[]) => [...new Set(values)].sort();
+    const optionPriority = (value: string) => priorityIndex(value === NO_PRIORITY ? null : value);
+    const filterOptions: Record<FilterGroup, string[]> = $derived({
+        state: distinct(issues.map((issue) => issue.state)),
+        priority: distinct(jiraIssues.map((issue) => issue.priority ?? NO_PRIORITY))
+            .sort((lhs, rhs) => optionPriority(lhs) - optionPriority(rhs) || 0),
+        project: distinct(jiraIssues.map((issue) => issue.project)),
     });
 
 
@@ -150,6 +151,11 @@
             selectedLabels.push(label);
             selectedLabels = selectedLabels;
         }
+    };
+
+    const toggleFilter = function(group: FilterGroup, value: string, checked: boolean) {
+        excluded[group][value] = !checked;
+        currentPage = 0;
     };
 
     const submitIssue = async function () {
@@ -190,7 +196,8 @@
     };
 
     const shouldFilter = function (issue: Issue, filterString: string) {
-        if (shouldFilterByState(issue, selectedLabels, stateFilter)) return true;
+        if (isExcluded(issue)) return true;
+        if (shouldFilterByLabels(issue, selectedLabels)) return true;
         if (!filterString) return false;
         if (!issue) return true;
         let allTerms = "";
@@ -205,8 +212,14 @@
         return allTerms.toLowerCase().search(filterString.toLowerCase()) == -1;
     };
 
-    const shouldFilterByState = function(issue: Issue, selectedLabels: Label[], stateFilter: StateFilter) {
-        if (!stateFilter[issue.state]) return true;
+    const isExcluded = function(issue: Issue) {
+        if (excluded.state[issue.state]) return true;
+        if (issue.subtype !== "jira") return false;
+        const jira = issue as JiraSubtype;
+        return !!(excluded.priority[jira.priority ?? NO_PRIORITY] || excluded.project[jira.project]);
+    };
+
+    const shouldFilterByLabels = function(issue: Issue, selectedLabels: Label[]) {
         if (selectedLabels.length == 0) return false;
         return !issue.labels.map(label => !!selectedLabels.find(selectedLabel => label.id == selectedLabel.id)).includes(true);
     };
@@ -235,6 +248,24 @@
         untrack(() => fetchIssues());
     });
 </script>
+
+{#snippet filterGroup(title: string, group: FilterGroup, values: string[])}
+    <div class="d-flex flex-wrap align-items-center mb-1" role="group" aria-label={title}>
+        <span class="me-2 small text-muted">{title}</span>
+        {#each values as value, idx (value)}
+            <div class="form-check form-check-inline mb-0">
+                <input
+                    class="form-check-input"
+                    type="checkbox"
+                    id="{uid}-{group}-{idx}"
+                    checked={!excluded[group][value]}
+                    onchange={(e) => toggleFilter(group, value, e.currentTarget.checked)}
+                />
+                <label class="form-check-label" for="{uid}-{group}-{idx}">{value}</label>
+            </div>
+        {/each}
+    </div>
+{/snippet}
 
 <div>
     {#if !submitDisabled}
@@ -306,24 +337,17 @@
                     <div class="mb-2">Options</div>
                     <div class="d-flex align-items-center mb-2">
                         <div class="ms-2 form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="issueOpenCheckbox" bind:checked={stateFilter.open}>
-                            <label class="form-check-label" for="issueOpenCheckbox">
-                                Open
-                            </label>
-                        </div>
-                        <div class="ms-2 form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="issueClosedCheckbox" bind:checked={stateFilter.closed}>
-                            <label class="form-check-label" for="issueClosedCheckbox">
-                                Closed
-                            </label>
-                        </div>
-                        <div class="ms-2 form-check form-switch">
                             <input class="form-check-input" type="checkbox" id="sortCheckOrder" bind:checked={reverseSort}>
                             <label class="form-check-label" for="sortCheckOrder">
                                 Descending order
                             </label>
                         </div>
                     </div>
+                    {@render filterGroup("Status", "state", filterOptions.state)}
+                    {#if jiraIssues.length > 0}
+                        {@render filterGroup("Priority", "priority", filterOptions.priority)}
+                        {@render filterGroup("Space", "project", filterOptions.project)}
+                    {/if}
                 </div>
                 <div class="col">
                     <select class="form-select" bind:value={sortCriteria}>
