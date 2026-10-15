@@ -96,7 +96,7 @@ ai = [
   "anthropic >= 1.4.0",
   "tiktoken >= 0.7.0",
   "numpy >= 2.2",
-  "onnxruntime >= 1.24",
+  "onnxruntime >= 1.23",
   "tokenizers >= 0.22",
 ]
 ai-eval = [
@@ -104,7 +104,7 @@ ai-eval = [
   "PyYAML ~= 6.0.0",
   "tiktoken >= 0.7.0",
   "numpy >= 2.2",
-  "onnxruntime >= 1.24",
+  "onnxruntime >= 1.23",
   "tokenizers >= 0.22",
 ]
 ```
@@ -137,7 +137,7 @@ def cosine(x: np.ndarray, y: np.ndarray) -> float: ...  # 1 - x·y / (‖x‖·�
 
 | Risk | Response |
 |---|---|
-| The lock refresh moves `onnxruntime` or `tokenizers` and changes the numerics | Refresh the lock without an upgrade, and check that the versions stay at 1.29.0 and 0.22.2 |
+| The lock refresh moves `onnxruntime` or `tokenizers` and changes the numerics | Refresh the lock without an upgrade, and check that Python 3.11 and newer keep 1.29.0 and 0.22.2 |
 | Code imports a package that only chromadb brought in | None does: pydantic, httpx and uvicorn come from `web-backend`, and numpy becomes a declared dependency. The bundle self-check and the `ai` CI job import the worker |
 | A host that has no model cannot reach S3 at its first start | Unchanged from today. The retries cover a transient failure |
 
@@ -162,5 +162,8 @@ def cosine(x: np.ndarray, y: np.ndarray) -> float: ...  # 1 - x·y / (‖x‖·�
   scylladb/qatools: `argus_legacy_ai_units` stops, disables and removes
   `argusai_event_similarity_processor.service`. This repository carries no
   host step. At deploy, check that argus-prod has no such unit. (spec)
+- The `onnxruntime` floor is 1.23. `requires-python` is `>=3.10`, and
+  1.24 publishes no cp310 wheel, so the 3.10 split resolves to 1.23.2.
+  Python 3.11 and newer keep 1.29.0. (build)
 - Komachi pre-approved the intent, the spec and the plan. The code waits
   for Komachi's review before it is committed. (spec)
