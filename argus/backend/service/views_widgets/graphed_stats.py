@@ -80,7 +80,7 @@ class GraphedStatsService:
 
         return release_data
 
-    async def get_runs_details(self, run_ids: list[str]):
+    async def get_runs_details(self, run_ids: list[UUID]):
         """Get detailed information for provided test runs including assignee and attached issues.
 
         Args:
@@ -93,8 +93,6 @@ class GraphedStatsService:
 
         if not run_ids:
             return result
-
-        run_ids = [UUID(r) if isinstance(r, str) else r for r in run_ids]
 
         async def fetch_test_run(run_id: UUID):
             try:
@@ -188,7 +186,7 @@ class GraphedStatsService:
                 }
             except Exception as e:
                 LOGGER.error(f"Error fetching details for run {run_id}: {str(e)}")
-                result[run_id] = {
+                result[str(run_id)] = {
                     "build_id": None,
                     "start_time": None,
                     "assignee": None,
