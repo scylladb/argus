@@ -374,12 +374,12 @@ class TestRunService:
                                user: User):
         message_stripped = strip_html_tags(message)
 
-        mention_ids = set(mentions)
         mentioned_users = await asyncio.gather(
+            *(User.find_one(id=mention_id) for mention_id in set(mentions)),
             *(User.exists_by_name(potential_mention.lstrip("@"))
               for potential_mention in re.findall(self.RE_MENTION, message_stripped))
         )
-        mention_ids.update(mentioned.id for mentioned in mentioned_users if mentioned and mentioned.id != user.id)
+        mention_ids = {mentioned.id for mentioned in mentioned_users if mentioned and mentioned.id != user.id}
 
         test: ArgusTest = await ArgusTest.get(id=test_id)
         plugin = self.get_plugin(test.plugin_name)

@@ -59,7 +59,7 @@ The flows that fail today and the typing that fixes them:
 | Flow | Today | After |
 |---|---|---|
 | SCT Gemini submit (status not `PASSED`), performance submit (regression) | The run event gets the string run ID and the save fails. | The route gives a `UUID`. |
-| Run comment submit and update with mentions | The string mentions reach a `list<uuid>` column, or `m.id` fails on a string. | `mentions: list[UUID]`. The receivers are the mentioned IDs plus the `@name` matches. |
+| Run comment submit and update with mentions | The string mentions reach a `list<uuid>` column, or `m.id` fails on a string. | `mentions: list[UUID]`. The receivers are the mentioned users that exist, plus the `@name` matches, without the author. |
 | Plan update with an owner | The string owner reaches a UUID column. | `owner: UUID \| None`. `ends_at` becomes `datetime \| None`. |
 | Plan copy with replacements | The lookup by `UUID` misses the string keys, and the mapped entities are dropped. | `replacements: dict[UUID, UUID]`. |
 | Runs details widget, a run that fails to load | The error entry has a `UUID` key, and the response fails. | The key is `str(run_id)`. |
@@ -148,7 +148,7 @@ class PlanDiffPayload:
 class CopyPlanPayload:
     replacements: dict[UUID, UUID]
     targetReleaseId: UUID
-    plan: TempPlanPayload                # owner: UUID, participants: list[UUID]
+    plan: TempPlanPayload                # every ID field UUID; id stays a plan reference
 ```
 
 The other typed bodies:
@@ -171,7 +171,7 @@ class PytestSubmitData(TypedDict):
     status: str                          # the reporter also sends "internal-error"
     message: NotRequired[str | None]
     duration: NotRequired[float | None]
-    markers: NotRequired[list[str]]
+    markers: list[str]
     user_fields: NotRequired[dict[str, Any]]
 
 class ScheduleCommentUpdateRequest(BaseModel):
@@ -217,7 +217,7 @@ and the `RunConfigParam.run_id` text column.
 | Risk | Response |
 |---|---|
 | A caller outside the routers passes a string to a retyped service method: a test, a migration script, argusAI. | The plan greps every caller, including `scripts/` and `argusAI/`. Tests pass a `UUID`. |
-| A route that used to accept a bad ID now rejects it. | The bad ID failed before with a `ValueError`. Only the exception name in the envelope changes. The clone test that sends `"release-1"` changes to real IDs. |
+| A route that used to accept a bad ID now rejects it. | The bad ID failed before with a `ValueError`. The exception name changes, and `arguments` carries the list of validation errors in place of one string. The Go CLI decodes `arguments` as strings, so it cannot read this envelope, as it already cannot for the routes typed before. A follow-up issue fixes the CLI decoder. The clone test that sends `"release-1"` changes to real IDs. |
 | `UUID` parsing lowercases an uppercase ID, so a response keyed by `str(id)` no longer echoes the client's spelling. | The frontend sends only IDs it read from the server, which are lowercase. |
 | A dashboard or an alert counts validation errors in the exception metric. | The metric then counted client mistakes as faults. The INFO log keeps the trace ID. |
 
@@ -248,3 +248,6 @@ and the `RunConfigParam.run_id` text column.
   body, so the copy and its replacements work from the UI. (build)
 - The plan trigger body is typed as well. Its `plan_id` is an ID in a
   fixed-shape body. (build)
+- The duplicate plan error carries the existing plan, not the request. A
+  typed request holds UUID-keyed maps, which the JSON encoder rejects, so
+  the error answered HTTP 500. (review)

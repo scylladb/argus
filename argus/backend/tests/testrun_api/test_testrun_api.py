@@ -276,6 +276,19 @@ def test_update_run_comment_keeps_mention_ids(api_client, submitted_run, fake_te
     assert [str(m) for m in comment["mentions"]] == [str(mentioned_user.id)]
 
 
+def test_post_run_comment_drops_a_mention_of_an_unknown_user(api_client, submitted_run, fake_test):
+    rid, _ = submitted_run
+    with patch("argus.backend.service.notification_manager.NotificationManagerService.send_notification") as send:
+        resp = api_client.post(
+            f"{API_PREFIX}/test/{fake_test.id}/run/{rid}/comments/submit",
+            json={"message": "nobody here", "reactions": {}, "mentions": [str(uuid4())]},
+        )
+    assert resp.json()["status"] == "ok", resp.text
+    [comment] = [c for c in resp.json()["response"] if c["message"] == "nobody here"]
+    assert comment["mentions"] == []
+    send.assert_not_called()
+
+
 def test_post_run_comment_rejects_malformed_mention(api_client, submitted_run, fake_test):
     rid, _ = submitted_run
     resp = api_client.post(
