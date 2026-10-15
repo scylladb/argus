@@ -259,6 +259,17 @@ def test_release_schedules_missing_release_id(api_client):
     assert resp.json()["status"] == "error"
 
 
+def test_release_schedule_comment_update_rejects_malformed_test_id(api_client, isolated_release, isolated_group):
+    payload = {
+        "releaseId": str(isolated_release.id),
+        "groupId": str(isolated_group.id),
+        "testId": "not-a-test-id",
+        "newComment": "never-stored",
+    }
+    resp = _api_post(api_client, f"{API_PREFIX}/release/schedules/comment/update", payload)
+    assert resp.json()["response"]["exception"] == "RequestValidationError"
+
+
 def test_release_schedule_comment_update(api_client, isolated_release, isolated_group, isolated_test):
     test_id = str(isolated_test.id)
     payload = {

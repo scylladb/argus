@@ -178,7 +178,7 @@ class DriverTestRun(PluginModelBase):
 
     @classmethod
     async def submit_driver_result(cls, run_id: UUID, driver_name: str, driver_type: TestTypeType, xml_data: str):
-        run: DriverTestRun = await cls.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
+        run: DriverTestRun = await cls.get(id=run_id)
 
         if any(c.name == driver_name for c in run.test_collection):
             return run
@@ -194,7 +194,7 @@ class DriverTestRun(PluginModelBase):
 
     @classmethod
     async def submit_driver_failure(cls, run_id: UUID, driver_name: str, driver_type: TestTypeType, fail_message: str):
-        run: DriverTestRun = await cls.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
+        run: DriverTestRun = await cls.get(id=run_id)
 
         if any(c.name == driver_name for c in run.test_collection):
             return run
@@ -216,7 +216,7 @@ class DriverTestRun(PluginModelBase):
 
     @classmethod
     async def submit_env_info(cls, run_id: UUID, env_data: str):
-        run: DriverTestRun = await cls.get(id=UUID(run_id) if isinstance(run_id, str) else run_id)
+        run: DriverTestRun = await cls.get(id=run_id)
         env = run.parse_build_environment(env_data)
 
         existing_keys = {ei.key for ei in run.environment_info}

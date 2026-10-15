@@ -797,7 +797,7 @@ async def test_similar_runs_info_lists_linked_github_issue(api_client, sct_run_i
     remote_client = MagicMock(name="GithubClient")
     remote_client.get_repo.return_value = remote_repo
     with patch.object(issue_service.gh, "gh", remote_client):
-        await issue_service.submit(issue_url=url, test_id=fake_test.id, run_id=sct_run_id, user=logged_in_user)
+        await issue_service.submit(issue_url=url, test_id=fake_test.id, run_id=UUID(sct_run_id), user=logged_in_user)
 
     resp = api_client.post(
         "/api/v1/client/sct/similar_runs_info",
@@ -866,7 +866,7 @@ async def test_coredump_events_in_one_batch_keep_every_log_link(api_client, sct_
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["response"] is True
-    run = await testrun_service.get_run("scylla-cluster-tests", sct_run_id)
+    run = await testrun_service.get_run("scylla-cluster-tests", UUID(sct_run_id))
     links = sorted(link for _, link in run.logs)
     assert links == [
         "https://storage.example.com/cores/node-1.core.zst",

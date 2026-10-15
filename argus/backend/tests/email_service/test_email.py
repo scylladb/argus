@@ -5,6 +5,7 @@ from io import BytesIO
 import json
 import logging
 from typing import IO
+from uuid import UUID
 
 from starlette.testclient import TestClient
 
@@ -24,7 +25,7 @@ LOGGER = logging.getLogger(__name__)
 async def test_send_default_email(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     response = api_client.post(
         f"/api/v1/client/testrun/report/email",
@@ -49,7 +50,7 @@ async def test_send_default_email(api_client: TestClient, fake_test: ArgusTest, 
 async def test_send_default_email_empty_sections_not_rendered(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     response = api_client.post(
         f"/api/v1/client/testrun/report/email",
@@ -75,7 +76,7 @@ async def test_send_default_email_empty_sections_not_rendered(api_client: TestCl
 async def test_send_email_custom_html(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     response = api_client.post(
         f"/api/v1/client/testrun/report/email",
@@ -107,7 +108,7 @@ async def test_send_email_custom_html(api_client: TestClient, fake_test: ArgusTe
 async def test_send_email_unsupported_section(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     response = api_client.post(
         f"/api/v1/client/testrun/report/email",
@@ -139,7 +140,7 @@ async def test_send_email_unsupported_section(api_client: TestClient, fake_test:
 async def test_send_email_attachments(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     data = base64.encodebytes(b"Hello World!")
     filename = "my_file.txt"
@@ -175,7 +176,7 @@ async def test_send_email_attachments(api_client: TestClient, fake_test: ArgusTe
 async def test_send_default_email_renders_package_versions(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, sct_service: SCTService, email_listener: EmailListener):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     await sct_service.submit_packages(run.id, [
         {"name": "kernel", "version": "6.8.0-1066-gcp", "date": "", "revision_id": "", "build_id": ""},

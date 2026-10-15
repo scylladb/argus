@@ -38,7 +38,6 @@ class NotificationManagerService:
                                             source_id, title, source_message, content_params)
 
     async def get_notificaton(self, receiver: UUID, notification_id: UUID) -> ArgusNotification:
-        notification_id = UUID(notification_id) if isinstance(notification_id, str) else notification_id
         return await ArgusNotification.get(receiver=receiver, id=notification_id)
 
     async def get_unread_count(self, receiver: UUID) -> int:
@@ -46,7 +45,6 @@ class NotificationManagerService:
             receiver=receiver, state=ArgusNotificationState.UNREAD.value).allow_filtering().count()
 
     async def read_notification(self, receiver: UUID, notification_id: UUID) -> ArgusNotification:
-        notification_id = UUID(notification_id) if isinstance(notification_id, str) else notification_id
         notification = await ArgusNotification.get(receiver=receiver, id=notification_id)
         notification.state = ArgusNotificationState.READ
         await notification.save()
@@ -55,7 +53,6 @@ class NotificationManagerService:
     async def get_notifications(self, receiver: UUID, limit: int = 20,
                                 after: UUID | None = None) -> list[ArgusNotification]:
         if after:
-            after = UUID(after) if isinstance(after, str) else after
             return await ArgusNotification.find(receiver=receiver, id__lte=after).limit(limit).all()
         return await ArgusNotification.find(receiver=receiver).limit(limit).all()
 

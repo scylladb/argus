@@ -1,4 +1,5 @@
 import logging
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -7,6 +8,7 @@ from pydantic import BaseModel
 from argus.backend.models.web import User
 from argus.backend.service.notification_manager import NotificationManagerService
 from argus.backend.service.user import api_current_user
+from argus.backend.util.common import NoneIfEmpty
 from argus.backend.util.encoders import APIResponse
 
 LOGGER = logging.getLogger(__name__)
@@ -41,9 +43,9 @@ async def get_unread_count(user: User = Depends(api_current_user)):
 
 
 @router.get("/summary", name="api.notifications.get_summary")
-async def get_summary(after: str | None = Query(None, alias="afterId"),
-                limit: int = Query(20),
-                user: User = Depends(api_current_user)):
+async def get_summary(after: Annotated[UUID | None, NoneIfEmpty, Query(alias="afterId")] = None,
+                      limit: int = Query(20),
+                      user: User = Depends(api_current_user)):
     service = NotificationManagerService()
     notifications = await service.get_notifications(
         receiver=user.id,
