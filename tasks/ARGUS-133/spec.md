@@ -98,7 +98,7 @@ filter.
 
 | Risk | Response |
 |---|---|
-| A script calls `argus run details` | It fails. `argus run get --full` prints the same output. The pull request names the change |
+| A caller runs `argus run details`: zeus (`health_scan.py`, the `sct`, `dtest` and `metrics` skills, `agents/past-runs.md`, the `Bash(argus run details:*)` permission) and the `perf-weekly-status-report` skill of scylla-cluster-tests | It exits 1 with `unknown flag: --run-id`. Each caller switches to `argus run get --full`, which prints the same JSON, before the CLI release. The pull request names the change |
 | A script reads `url` from `run logs list` | The key is gone. `run logs download <name>` fetches the log |
 | A caller of either pytest command expects every status | `--status ""` returns every status. The help of `--status` says so |
 | `pytest results --status "" --before …` | The server rejects the id range without a status, as today |
@@ -115,3 +115,6 @@ filter.
 - `--status` follows `my-jobs`, so the CLI keeps one filter grammar. (spec)
 - `run pytest-results` filters after the cache, so the cache keeps every
   result and a new `--status` needs no fetch. (spec)
+- The callers of `run details` in zeus and scylla-cluster-tests move to
+  `run get --full` before the CLI release. Each change is a rename of the
+  command, and the JSON stays the same. (review)
