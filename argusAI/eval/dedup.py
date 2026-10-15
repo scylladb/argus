@@ -15,10 +15,9 @@ from __future__ import annotations
 
 import logging
 
-from chromadb.utils.distance_functions import cosine
 from numpy import array
 
-from argusAI.utils.embedding import EventEmbedder
+from argusAI.utils.embedding import EventEmbedder, cosine
 
 from .events_source import EventSample
 

@@ -21,14 +21,13 @@ from threading import Event
 from uuid import UUID
 from datetime import datetime
 
-from chromadb.utils.distance_functions import cosine
 from numpy import array
 
 from argus.backend.models.argus_ai import SCTCriticalEventEmbedding, SCTErrorEventEmbedding
 from argus.backend.plugins.sct.testrun import SCTUnprocessedEvent, SCTEvent
 from argus.backend.util.logsetup import setup_application_logging
 from argusAI.utils.scylla_connection import ScyllaConnection
-from argusAI.utils.embedding import BgeSmallEnEmbeddingModel
+from argusAI.utils.embedding import BgeSmallEnEmbeddingModel, cosine
 from argusAI.utils.event_message_sanitizer import MessageSanitizer
 from argusAI.utils.summary_dispatcher import SummaryDispatcher
 

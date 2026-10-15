@@ -86,28 +86,36 @@ hidden-state array.
 - `test_retries_a_failed_request_then_succeeds`
 - `test_cosine_is_zero_for_parallel_and_one_for_orthogonal_vectors`
 
-- [ ] Write the tests and run them against the current chromadb subclass.
+- [x] Write the tests and run them against the current chromadb subclass.
       Confirm that they fail.
-- [ ] Rewrite `embedding.py`, and switch the two `cosine` imports.
-- [ ] Run `uv run pytest argusAI` and confirm that it passes.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Rewrite `embedding.py`, and switch the two `cosine` imports.
+- [x] Run `uv run pytest argusAI` and confirm that it passes.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 2 — Check parity with chromadb on real events
 
 No repository file changes. Run while chromadb is installed. The script
 lives in the scratchpad and is not committed.
 
-- [ ] Embed every `message` of `argusAI/eval/baseline/events.json` (27
+- [x] Embed every `message` of `argusAI/eval/baseline/events.json` (27
       production events), raw and after `MessageSanitizer(write_log=False)`.
       Embed with the new `BgeSmallEnEmbeddingModel` and with a chromadb
       `ONNXMiniLM_L6_V2` subclass that carries the same six class
       attributes. Assert `np.array_equal` for every vector, and report the
       largest cosine distance (spec bound: below 1e-6).
-- [ ] Run `deduplicate_by_similarity` on the baseline events with the old
+- [x] Run `deduplicate_by_similarity` on the baseline events with the old
       code (`git stash`) and with the new code. Confirm the same canonical
       set and the same `repeats` counts.
-- [ ] Write the results on this box: ___
+- [x] Write the results on this box. onnxruntime 1.29.0, tokenizers 0.22.2:
+      ```
+      raw      : 27 messages, 27 bitwise equal, max cosine distance 0.00e+00
+      sanitized: 27 messages, 27 bitwise equal, max cosine distance 0.00e+00
+      dedup    : chromadb 16 canonical, onnxruntime 16 canonical, identical=True
+      ```
+      The old code ran in the same process, with the chromadb embedder and
+      the chromadb `cosine` patched into `argusAI.eval.dedup`, in place of
+      a `git stash`.
 
 ## Task 3 — Delete V1 and drop chromadb from the dependencies
 
