@@ -69,7 +69,6 @@ class TestRunService:
         return self.plugins.get(plugin_name)
 
     async def get_run(self, run_type: str, run_id: UUID) -> PluginModelBase:
-        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
         plugin = self.plugins.get(run_type)
         if plugin:
             try:
@@ -470,7 +469,7 @@ class TestRunService:
 
     async def resolve_run_build_id_and_number_multiple(self, runs: list[tuple[UUID, UUID]]
                                                        ) -> dict[UUID, dict[str, Any]]:
-        test_ids = [UUID(r[0]) if isinstance(r[0], str) else r[0] for r in runs]
+        test_ids = [test_id for test_id, _ in runs]
         all_tests: list = []
         for id_slice in chunk(test_ids):
             all_tests.extend(await ArgusTest.find(id__in=id_slice).all())
@@ -483,7 +482,6 @@ class TestRunService:
             model = AVAILABLE_PLUGINS.get(plugin).model
             model_runs = []
             for run_id in run_ids:
-                run_id = UUID(run_id) if isinstance(run_id, str) else run_id
                 if (found := await model.find(id=run_id).only(
                         "build_id", "start_time", "build_job_url", "build_number", "id", "test_id").first()) is not None:
                     model_runs.append(found)
@@ -619,16 +617,14 @@ class TestRunService:
             }
         }
 
-    async def get_pytest_release_results(self, release_id: str | UUID) -> list[PytestResultTable]:
+    async def get_pytest_release_results(self, release_id: UUID) -> list[PytestResultTable]:
         """
             Unbound filter function, will return all tests for a specific release
         """
-        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
         return await PytestResultTable.find(release_id=release_id).all()
 
-    async def get_pytest_run_results(self, run_id: str | UUID) -> list[PytestResultTable]:
+    async def get_pytest_run_results(self, run_id: UUID) -> list[PytestResultTable]:
         """
             Unbound filter function, will return all tests for a specific release
         """
-        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
         return await PytestResultTable.find(run_id=run_id).all()

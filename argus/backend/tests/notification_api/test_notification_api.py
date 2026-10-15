@@ -101,6 +101,21 @@ async def test_get_summary_after_id_paginates(api_client, make_notification):
     assert page[0]["id"] == pivot
 
 
+async def test_get_summary_treats_an_empty_after_id_as_the_first_page(api_client, make_notification):
+    await make_notification(g.user.id)
+    full = api_client.get("/api/v1/notifications/summary").json()["response"]
+
+    page = api_client.get("/api/v1/notifications/summary?afterId=").json()
+
+    assert page["status"] == "ok", page
+    assert page["response"] == full
+
+
+def test_get_summary_rejects_malformed_after_id(api_client):
+    res = api_client.get("/api/v1/notifications/summary?afterId=not-a-notification-id").json()
+    assert res["response"]["exception"] == "RequestValidationError"
+
+
 async def test_get_notification_returns_full_dict(api_client, make_notification):
     n = await make_notification(g.user.id, title="full", content="body")
     res = api_client.get(f"/api/v1/notifications/get?id={n.id}").json()

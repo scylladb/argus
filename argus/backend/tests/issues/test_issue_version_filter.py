@@ -2,7 +2,7 @@ from dataclasses import asdict
 import itertools
 import logging
 from typing import TYPE_CHECKING
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -37,7 +37,7 @@ async def submit_run_with_version(
     """Submit a test run and optionally set its scylla_version."""
     run_type, run_request = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_request))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_request.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_request.run_id))
     if scylla_version is not None:
         run.scylla_version = scylla_version
         await run.save()
