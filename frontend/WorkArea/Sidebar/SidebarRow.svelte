@@ -86,22 +86,21 @@
                 {#if subtitle}
                     <span class="small text-body-secondary text-break">{subtitle}</span>
                 {/if}
-                {#if startTime}
-                    <span class="small text-body-secondary">{timestampToISODate(startTime)}</span>
-                {/if}
-                {#if stats}
-                    <span class="d-flex mt-1"><StatusSummary {stats} /></span>
-                {:else if statsLoading}
-                    <span class="mt-1">
+                <span class="detail-line d-flex align-items-center mt-1">
+                    {#if startTime}
+                        <span class="small text-body-secondary">{timestampToISODate(startTime)}</span>
+                    {:else if stats}
+                        <StatusSummary {stats} />
+                    {:else if statsLoading}
                         <span class="spinner-border spinner-border-sm text-secondary" role="status">
                             <span class="visually-hidden">Loading stats</span>
                         </span>
-                    </span>
-                {:else if statsError}
-                    <span class="mt-1 small text-danger-emphasis" title={statsError}>
-                        <Fa icon={faTriangleExclamation} /> Stats unavailable
-                    </span>
-                {/if}
+                    {:else if statsError}
+                        <span class="small text-danger-emphasis" title={statsError}>
+                            <Fa icon={faTriangleExclamation} /> Stats unavailable
+                        </span>
+                    {/if}
+                </span>
             </span>
             {#if assignees.length > 0}
                 <span class="flex-shrink-0"><AssigneeList {assignees} /></span>
@@ -167,6 +166,10 @@
     .row-toggle:focus-visible {
         outline: 2px solid var(--bs-primary);
         outline-offset: -2px;
+    }
+
+    .detail-line {
+        min-height: calc(0.875 * var(--bs-body-font-size) * var(--bs-body-line-height));
     }
 
     .is-hidden .sidebar-row {
