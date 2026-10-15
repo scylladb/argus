@@ -127,6 +127,41 @@ describe("Sidebar", () => {
         await waitFor(() => expect(rowNames()).toEqual(["scylla-2025.1", "scylla-master"]));
     });
 
+    it("hides a release until the hidden releases are shown", async () => {
+        serve();
+        renderSidebar();
+        await waitFor(() => expect(rowNames()).toEqual(["scylla-master", "scylla-2025.1"]));
+        expect(screen.queryByRole("button", { name: /Show hidden releases/ })).toBeNull();
+
+        await fireEvent.click(screen.getByRole("button", { name: "Hide scylla-2025.1" }));
+        await waitFor(() => expect(rowNames()).toEqual(["scylla-master"]));
+
+        const showHidden = screen.getByRole("button", { name: "Show hidden releases (1)" });
+        expect(showHidden.getAttribute("aria-pressed")).toBe("false");
+        await fireEvent.click(showHidden);
+        await waitFor(() => expect(rowNames()).toEqual(["scylla-master", "scylla-2025.1"]));
+        expect(showHidden.getAttribute("aria-pressed")).toBe("true");
+
+        const hideToggle = screen.getByRole("button", { name: "Hide scylla-2025.1" });
+        expect(hideToggle.getAttribute("aria-pressed")).toBe("true");
+        await fireEvent.click(hideToggle);
+        await waitFor(() => expect(screen.queryByRole("button", { name: /Show hidden releases/ })).toBeNull());
+        expect(rowNames()).toEqual(["scylla-master", "scylla-2025.1"]);
+    });
+
+    it("moves the focus to the next release after hiding one", async () => {
+        const fetchMock = serve();
+        fetchMock.mockImplementation((url: string) =>
+            url === "/api/v1/releases" ? ok([MASTER, OLD, { ...OLD, id: "older-id", name: "scylla-2024.2" }]) : ok({})
+        );
+        renderSidebar();
+        await waitFor(() => expect(rowNames()).toEqual(["scylla-master", "scylla-2025.1", "scylla-2024.2"]));
+
+        await fireEvent.click(screen.getByRole("button", { name: "Hide scylla-master" }));
+
+        await waitFor(() => expect(document.activeElement).toBe(row("scylla-2025.1")));
+    });
+
     it("swaps the list for the groups of a clicked release and shows the breadcrumb", async () => {
         serve();
         renderSidebar();

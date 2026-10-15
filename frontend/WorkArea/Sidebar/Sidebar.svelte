@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import Fa from "svelte-fa";
-    import { faBars, faChartPie, faFolderOpen, faRotate } from "@fortawesome/free-solid-svg-icons";
+    import { faBars, faChartPie, faEyeSlash, faFolderOpen, faRotate } from "@fortawesome/free-solid-svg-icons";
     import { displayName, duplicateNames, pinnedFirst, sortTests } from "./sidebarSort";
     import { SidebarState, type Group, type Release, type SearchHit, type Test } from "./sidebarState.svelte";
     import { hideDrawer, isDrawer, offcanvas, showDrawer } from "./offcanvas";
@@ -51,8 +51,13 @@
             return sortTests(current?.data as Test[] ?? [], groupSummary?.tests).map((item) => ({ kind: "test", item }));
         }
         if (sidebar.release) return (current?.data as Group[] ?? []).map((item) => ({ kind: "group", item }));
-        return pinnedFirst(current?.data as Release[] ?? [], sidebar.pinned).map((item) => ({ kind: "release", item }));
+        const releases = (current?.data as Release[] ?? []).filter(
+            (release) => sidebar.showHidden || !sidebar.hidden.has(release.id)
+        );
+        return pinnedFirst(releases, sidebar.pinned).map((item) => ({ kind: "release", item }));
     });
+
+    const hiddenCount = $derived((sidebar.releases.data ?? []).filter((release) => sidebar.hidden.has(release.id)).length);
 
     const activeIndex = $derived(Math.max(0, entries.findIndex((entry) => entry.item.id === activeId)));
     const duplicates = $derived(duplicateNames(entries.map((entry) => entry.item)));
@@ -156,6 +161,14 @@
     const togglePin = (release: Release) => {
         sidebar.togglePin(release);
         pending = { id: release.id, move: true };
+    };
+
+    const toggleHidden = (release: Release, index: number) => {
+        const leaving = !sidebar.showHidden && !sidebar.hidden.has(release.id);
+        const next = leaving ? (entries[index + 1] ?? entries[index - 1]) : entries[index];
+        sidebar.toggleHidden(release);
+        if (hiddenCount === 0) sidebar.showHidden = false;
+        pending = { id: next?.item.id ?? FIRST_ROW, move: true };
     };
 
     const hitStats = (hit: SearchHit) => {
@@ -317,6 +330,19 @@
                     <Fa icon={faFolderOpen} /><span class="visually-hidden">Open all tests</span>
                 </button>
             {/if}
+            {#if !sidebar.release && hiddenCount > 0}
+                <button
+                    type="button"
+                    class="btn btn-sm btn-outline-secondary text-nowrap"
+                    class:active={sidebar.showHidden}
+                    title={sidebar.showHidden ? "Hide the hidden releases" : "Show the hidden releases"}
+                    aria-label={`Show hidden releases (${hiddenCount})`}
+                    aria-pressed={sidebar.showHidden}
+                    onclick={() => (sidebar.showHidden = !sidebar.showHidden)}
+                >
+                    <Fa icon={faEyeSlash} /> {hiddenCount}
+                </button>
+            {/if}
             <button type="button" class="btn btn-sm btn-outline-secondary" title="Refresh" onclick={refresh}>
                 <Fa icon={faRotate} /><span class="visually-hidden">Refresh</span>
             </button>
@@ -353,6 +379,8 @@
                                 startTime={testStatus?.start_time}
                                 pinned={entry.kind === "release" ? sidebar.pinned.has(entry.item.id) : undefined}
                                 onTogglePin={entry.kind === "release" ? () => togglePin(entry.item) : undefined}
+                                hidden={entry.kind === "release" ? sidebar.hidden.has(entry.item.id) : undefined}
+                                onToggleHidden={entry.kind === "release" ? () => toggleHidden(entry.item, index) : undefined}
                                 dormant={entry.kind === "release" && entry.item.dormant}
                                 assignees={assigneesFor(entry)}
                                 focusRequest={focusTarget === entry.item.id ? focusRequest : 0}
