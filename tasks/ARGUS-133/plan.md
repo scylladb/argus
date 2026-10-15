@@ -94,7 +94,7 @@ cannot serve. `logEntriesFromMap` keeps the sorted names.
   `runPytestResultsCmd` filters the cached or fetched list. Both Long helps
   describe the default.
 
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - The default holds the six DTest statuses and none of `passed`,
     `skipped`, `xfailed`, `xpass`.
   - The parser trims, skips empty values, and rejects an unknown status.
@@ -105,7 +105,7 @@ cannot serve. `logEntriesFromMap` keeps the sorted names.
     none with `--status ""`.
   - `run pytest-results` against a stub drops the `passed` and `skipped`
     rows by default, and keeps them with `--status ""`.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.

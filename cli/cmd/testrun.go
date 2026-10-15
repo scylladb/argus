@@ -669,7 +669,11 @@ var runCommentsCmd = &cobra.Command{
 var runPytestResultsCmd = &cobra.Command{
 	Use:   "pytest-results",
 	Short: "List pytest results for a test run",
-	Long:  `Fetch all pytest results associated with a specific test run.`,
+	Long: `Fetch the pytest results of a specific test run.
+
+By default only the failed results are listed: the statuses the DTest tab
+shows by default. --status picks other statuses, and --status "" lists every
+result.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
 		ctx := cmd.Context()
@@ -679,13 +683,17 @@ var runPytestResultsCmd = &cobra.Command{
 		log := logging.For(LoggerFrom(ctx), "run-pytest-results")
 
 		runID, _ := cmd.Flags().GetString("run-id")
-		log.Debug().Str("run_id", runID).Msg("fetching pytest results")
+		statuses, err := pytestStatusFilter(cmd)
+		if err != nil {
+			return err
+		}
+		log.Debug().Str("run_id", runID).Strs("statuses", statuses).Msg("fetching pytest results")
 
 		cacheKey := cache.PytestResultsKey(runID)
 
 		if cached, _, err := cache.Get[models.PytestResultListResponse](c, cacheKey); isCacheable(err) {
 			log.Debug().Str("run_id", runID).Msg("pytest results served from cache")
-			return out.Write(models.NewTabularSlice(cached))
+			return out.Write(models.NewTabularSlice(filterPytestResults(cached, statuses)))
 		}
 
 		route := fmt.Sprintf(api.TestRunPytestResults, runID)
@@ -704,7 +712,7 @@ var runPytestResultsCmd = &cobra.Command{
 			log.Warn().Err(cacheErr).Str("run_id", runID).Msg("failed to cache pytest results")
 		}
 		log.Info().Str("run_id", runID).Int("count", len(result)).Msg("pytest results fetched successfully")
-		return out.Write(models.NewTabularSlice(result))
+		return out.Write(models.NewTabularSlice(filterPytestResults(result, statuses)))
 	},
 }
 
@@ -804,6 +812,7 @@ func init() {
 
 	// run pytest-results
 	runPytestResultsCmd.Flags().String("run-id", "", "Run UUID (required)")
+	addPytestStatusFlag(runPytestResultsCmd)
 	_ = runPytestResultsCmd.MarkFlagRequired("run-id")
 
 	// comment get
