@@ -205,10 +205,13 @@ the rest only.
   - `search_tests` `releaseId` (NoneIfEmpty)
   - `explode_group`, `get_plans_for_release` path IDs
   - `create_plan`, `update_plan` take the payload dataclasses as the body
+  - `trigger_jobs_for_plans` takes `PlanTriggerPayload` as the body
   - `ChangeOwnerRequest.newOwner`
 - Modify: `argus/backend/service/planner_service.py`
   - `CreatePlanPayload`, `TempPlanPayload`, `PlanDiffPayload`,
-    `CopyPlanPayload` as in the spec
+    `CopyPlanPayload`, `PlanTriggerPayload` as in the spec;
+    `TempPlanPayload.ends_at` and `.options` accept null and the stored
+    JSON string
   - `create_plan`, `update_plan` (`view_id` compare on `UUID`),
     `copy_plan`, `change_plan_owner`, `get_plans_for_release`,
     `get_assignments_for_*`, `_generate_plan_key`
@@ -218,15 +221,15 @@ the rest only.
   `argus/backend/tests/planner_api/test_planner_options.py` (build the
   payload dataclasses with `UUID`)
 
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - plan update with a new `owner` saves it
   - plan copy with `replacements` keeps the mapped test and group
   - search with a bare `releaseId=` returns results
   - plan update with `view_id` relinks the view
-- [ ] Run them and confirm the failures.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failures.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 7 — Views and widgets
 

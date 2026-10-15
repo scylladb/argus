@@ -104,6 +104,7 @@ planner_api   GET  /api/v1/planning/search?releaseId        optional, "" → Non
               GET  /api/v1/planning/release/{release_id}/all
               POST /api/v1/planning/plan/create, /plan/update, /plan/copy
               POST /api/v1/planning/plan/{plan_id}/owner/set   body: newOwner
+              POST /api/v1/planning/plan/trigger           body: plan_id (optional, "" → None)
 view_api      POST /api/v1/views/update                    body: viewId, updateData.plan_id
               POST /api/v1/views/delete                    body: viewId
               GET  /api/v1/views/stats?viewId
@@ -241,3 +242,9 @@ and the `RunConfigParam.run_id` text column.
   coodie document does not support, so every submission with an earlier
   run failed before the event write. It reads the attribute now, so the
   regression path and its run ID fix are reachable. (build)
+- The plan copy body rejected the plan as the frontend sends it: `ends_at`
+  arrives as null and `options` as the stored JSON string. `ends_at` and
+  `options` accept those values, since `copy_plan` reads neither from the
+  body, so the copy and its replacements work from the UI. (build)
+- The plan trigger body is typed as well. Its `plan_id` is an ID in a
+  fixed-shape body. (build)

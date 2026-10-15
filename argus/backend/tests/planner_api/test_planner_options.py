@@ -18,6 +18,8 @@ from argus.backend.tests.conftest import g
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.service.planner_service import (
     CopyPlanPayload,
+    CreatePlanPayload,
+    PlanDiffPayload,
     PlanningService,
     TempPlanPayload,
 )
@@ -37,20 +39,20 @@ async def delete_created_plans():
             await plan.delete()
 
 
-def _create_payload(release, tests=None, groups=None, options=None):
+def _create_payload(release, tests=None, groups=None, options=None) -> CreatePlanPayload:
     suffix = uuid.uuid4().hex[:8]
-    return {
-        "name": f"options_plan_{suffix}",
-        "description": "options test plan",
-        "owner": str(g.user.id),
-        "participants": [],
-        "target_version": f"1.0.0-{suffix}",
-        "release_id": str(release.id),
-        "tests": [str(t) for t in (tests or [])],
-        "groups": [str(gid) for gid in (groups or [])],
-        "assignments": {},
-        "options": options or {},
-    }
+    return CreatePlanPayload(
+        name=f"options_plan_{suffix}",
+        description="options test plan",
+        owner=g.user.id,
+        participants=[],
+        target_version=f"1.0.0-{suffix}",
+        release_id=release.id,
+        tests=list(tests or []),
+        groups=list(groups or []),
+        assignments={},
+        options=options or {},
+    )
 
 
 @pytest.mark.docker_required
@@ -77,13 +79,13 @@ async def test_update_plan_sets_and_removes_options(planning_service, release, f
         _create_payload(release, tests=[fake_test.id], groups=[group.id]), logged_in_user)
 
     # Set options for both a test and a group (collision-free shared keyspace).
-    await planning_service.update_plan({
-        "id": str(plan.id),
-        "options_set": {
+    await planning_service.update_plan(PlanDiffPayload(
+        id=str(plan.id),
+        options_set={
             str(fake_test.id): {"labels": ["needs-triage"]},
             str(group.id): {"labels": ["group-wide"]},
         },
-    }, logged_in_user)
+    ), logged_in_user)
     stored = await ArgusReleasePlan.get(id=uuid.UUID(str(plan.id)))
     assert json.loads(stored.options) == {
         str(fake_test.id): {"labels": ["needs-triage"]},
@@ -91,10 +93,10 @@ async def test_update_plan_sets_and_removes_options(planning_service, release, f
     }
 
     # Remove the test's options; the group's options remain untouched.
-    await planning_service.update_plan({
-        "id": str(plan.id),
-        "options_remove": [str(fake_test.id)],
-    }, logged_in_user)
+    await planning_service.update_plan(PlanDiffPayload(
+        id=str(plan.id),
+        options_remove=[str(fake_test.id)],
+    ), logged_in_user)
     stored = await ArgusReleasePlan.get(id=uuid.UUID(str(plan.id)))
     assert json.loads(stored.options) == {str(group.id): {"labels": ["group-wide"]}}
 
@@ -113,18 +115,18 @@ async def test_update_plan_prunes_options_for_removed_entities(planning_service,
         ), logged_in_user)
 
     # Dropping the test from the plan prunes its options entry.
-    await planning_service.update_plan({
-        "id": str(plan.id),
-        "tests_remove": [str(fake_test.id)],
-    }, logged_in_user)
+    await planning_service.update_plan(PlanDiffPayload(
+        id=str(plan.id),
+        tests_remove=[fake_test.id],
+    ), logged_in_user)
     stored = await ArgusReleasePlan.get(id=uuid.UUID(str(plan.id)))
     assert json.loads(stored.options) == {str(group.id): {"labels": ["g"]}}
 
     # Dropping the group prunes the remaining entry.
-    await planning_service.update_plan({
-        "id": str(plan.id),
-        "groups_remove": [str(group.id)],
-    }, logged_in_user)
+    await planning_service.update_plan(PlanDiffPayload(
+        id=str(plan.id),
+        groups_remove=[group.id],
+    ), logged_in_user)
     stored = await ArgusReleasePlan.get(id=uuid.UUID(str(plan.id)))
     assert json.loads(stored.options) == {}
 
@@ -163,13 +165,13 @@ async def test_copy_plan_remaps_options(planning_service, release_manager_servic
         name=f"copied_{ns}",
         completed=False,
         description="copied plan",
-        owner=str(g.user.id),
+        owner=g.user.id,
         key=plan.key,
         participants=[],
         target_version=f"2.0.0-{ns}",
         assignee_mapping={},
         release_id=target_release.id,
-        tests=[str(src_test.id)],
+        tests=[src_test.id],
         groups=[],
         creation_time="",
         last_updated="",
@@ -180,7 +182,7 @@ async def test_copy_plan_remaps_options(planning_service, release_manager_servic
         plan=temp_plan,
         keepParticipants=False,
         replacements={},
-        targetReleaseId=str(target_release.id),
+        targetReleaseId=target_release.id,
         targetReleaseName=target_release.name,
     )
     new_plan = await planning_service.copy_plan(payload, logged_in_user)
