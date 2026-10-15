@@ -3,12 +3,14 @@ package cmd
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/scylladb/argus/cli/internal/api"
 	"github.com/scylladb/argus/cli/internal/cache"
 	"github.com/scylladb/argus/cli/internal/logging"
 	"github.com/scylladb/argus/cli/internal/models"
+	"github.com/scylladb/argus/cli/internal/services"
 	"github.com/spf13/cobra"
 )
 
@@ -33,7 +35,9 @@ var pytestResultsCmd = &cobra.Command{
 time range, markers, user-defined fields, and free-text search.
 
 All flags are optional. Without any flags the endpoint returns the most
-recent 500 results across all tests.`,
+recent 500 failed results across all tests: the statuses the DTest tab shows
+by default. --status picks other statuses, and --status "" returns every
+status.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
 		ctx := cmd.Context()
@@ -47,10 +51,14 @@ recent 500 results across all tests.`,
 		limit, _ := cmd.Flags().GetInt("limit")
 		before, _ := cmd.Flags().GetInt64("before")
 		after, _ := cmd.Flags().GetInt64("after")
-		statuses, _ := cmd.Flags().GetStringSlice("status")
 		query, _ := cmd.Flags().GetString("query")
 		filters, _ := cmd.Flags().GetStringSlice("filter")
 		markers, _ := cmd.Flags().GetStringSlice("marker")
+
+		statuses, err := pytestStatusFilter(cmd)
+		if err != nil {
+			return err
+		}
 
 		// Build query string.
 		params := url.Values{}
@@ -115,21 +123,40 @@ recent 500 results across all tests.`,
 	},
 }
 
-// validPytestStatuses returns a comma-separated list of valid pytest status
-// values for use in help text.
-func validPytestStatuses() string {
-	return strings.Join([]string{
-		string(models.PytestStatusPassed),
-		string(models.PytestStatusFailure),
-		string(models.PytestStatusError),
-		string(models.PytestStatusSkipped),
-		string(models.PytestStatusXFailed),
-		string(models.PytestStatusXPass),
-		string(models.PytestStatusPassedError),
-		string(models.PytestStatusFailureError),
-		string(models.PytestStatusSkippedError),
-		string(models.PytestStatusErrorError),
-	}, ", ")
+// addPytestStatusFlag registers the --status filter that pytestStatusFilter
+// reads.
+func addPytestStatusFlag(cmd *cobra.Command) {
+	cmd.Flags().StringSlice("status", nil,
+		"Only results with these statuses (repeatable or comma-separated; default: "+
+			strings.Join(services.DefaultPytestStatuses(), ", ")+
+			"); an empty value (--status \"\") lifts the filter and returns every status: "+
+			strings.Join(services.PytestStatuses, ", "))
+}
+
+// pytestStatusFilter returns the statuses --status allows: the DTest default
+// when the flag is not given, and the given statuses otherwise. An empty
+// result allows every status.
+func pytestStatusFilter(cmd *cobra.Command) ([]string, error) {
+	if !cmd.Flags().Changed("status") {
+		return services.DefaultPytestStatuses(), nil
+	}
+	raw, _ := cmd.Flags().GetStringSlice("status")
+	return services.ParsePytestStatuses(raw)
+}
+
+// filterPytestResults keeps the results whose status is in statuses. An empty
+// statuses keeps every result.
+func filterPytestResults(results []models.PytestResult, statuses []string) []models.PytestResult {
+	if len(statuses) == 0 {
+		return results
+	}
+	kept := make([]models.PytestResult, 0, len(results))
+	for _, r := range results {
+		if slices.Contains(statuses, string(r.Status)) {
+			kept = append(kept, r)
+		}
+	}
+	return kept
 }
 
 func init() {
@@ -137,7 +164,7 @@ func init() {
 	pytestResultsCmd.Flags().Int("limit", 500, "Maximum number of results to return")
 	pytestResultsCmd.Flags().Int64("before", 0, "Only results before this Unix timestamp")
 	pytestResultsCmd.Flags().Int64("after", 0, "Only results after this Unix timestamp")
-	pytestResultsCmd.Flags().StringSlice("status", nil, "Filter by status (repeatable): "+validPytestStatuses())
+	addPytestStatusFlag(pytestResultsCmd)
 	pytestResultsCmd.Flags().String("query", "", "Regex search pattern across result name/message/markers")
 	pytestResultsCmd.Flags().StringSlice("filter", nil, "User-field filter (repeatable, format: [!]field=value)")
 	pytestResultsCmd.Flags().StringSlice("marker", nil, "Pytest marker filter (repeatable)")
