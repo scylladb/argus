@@ -47,6 +47,7 @@ const JIRA_ISSUE: JiraSubtype = {
     key: "FROBNICATOR-123",
     summary: "Improve performance",
     project: "FROBNICATOR",
+    priority: "P1",
     permalink: "https://zxqtesting.atlassian.net/browse/FROBNICATOR-123",
     assignees: [],
 };
@@ -93,6 +94,12 @@ describe("IssueCard with a GitHub issue", () => {
         const { getAllByText } = render(IssueCard, { issue: GITHUB_ISSUE, runId: "r-1" });
         expect(getAllByText("open").length).toBeGreaterThanOrEqual(1);
     });
+
+    it("renders label text in the color with the higher contrast", () => {
+        const issue = { ...GITHUB_ISSUE, labels: [{ id: "7", name: "orange", color: "f76121", description: "" }] };
+        const { getByRole } = render(IssueCard, { issue, runId: "r-1" });
+        expect(getByRole("button", { name: "orange" }).style.color).toBe("black");
+    });
 });
 
 describe("IssueCard with a Jira issue", () => {
@@ -110,6 +117,26 @@ describe("IssueCard with a Jira issue", () => {
     it("renders the issue state", () => {
         const { getAllByText } = render(IssueCard, { issue: JIRA_ISSUE, runId: "r-1" });
         expect(getAllByText("in progress").length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("renders the priority", () => {
+        const { getByTitle } = render(IssueCard, { issue: JIRA_ISSUE, runId: "r-1" });
+        expect(getByTitle("Priority").textContent).toBe("P1");
+    });
+
+    it("renders no priority when the issue has none", () => {
+        const { queryByTitle } = render(IssueCard, { issue: { ...JIRA_ISSUE, priority: null }, runId: "r-1" });
+        expect(queryByTitle("Priority")).toBeNull();
+    });
+
+    it("links to the runs of the issue", () => {
+        const { getByRole } = render(IssueCard, { issue: JIRA_ISSUE, runId: "r-1" });
+        expect(getByRole("link", { name: /Runs/ }).getAttribute("href")).toBe("/issues/FROBNICATOR-123");
+    });
+
+    it("leaves out the runs link when told to", () => {
+        const { queryByRole } = render(IssueCard, { issue: JIRA_ISSUE, runId: "r-1", showRunsLink: false });
+        expect(queryByRole("link", { name: /Runs/ })).toBeNull();
     });
 });
 

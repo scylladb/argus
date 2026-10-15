@@ -46,7 +46,7 @@
     {:else if !result.issue}
         <div class="alert alert-secondary">Argus holds no issue {issueKey.toUpperCase()}.</div>
     {:else}
-        <IssueCard issue={result.issue} runId="" deleteEnabled={false} />
+        <IssueCard issue={result.issue} runId="" deleteEnabled={false} showRunsLink={false} />
         {#if result.links.length > 0}
             <div class="mx-2 mt-3 mb-2">
                 <h5 class="mb-0">{plural(result.links.length, "linked run")}</h5>

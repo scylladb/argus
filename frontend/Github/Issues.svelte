@@ -10,7 +10,6 @@
         Issue,
         GithubSubtype,
         JiraSubtype,
-        StateFilter,
         TestRun,
         RichAssignee,
     } from "../Common/IssueTypes";
@@ -30,14 +29,13 @@
     import { PLUGIN_NAMES } from "../Common/PluginNames";
     import { newIssueDestinations } from "../Common/IssueDestinations";
     import { sendMessage } from "../Stores/AlertStore";
-    import { faChevronDown, faChevronUp, faCopy } from "@fortawesome/free-solid-svg-icons";
+    import { faCheck, faChevronDown, faChevronUp, faCopy } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
-    import Color from "color";
     import IssuesCopyModal from "./IssuesCopyModal.svelte";
     import queryString from 'query-string';
     import IssueCard from "../Common/IssueCard.svelte";
-    import type { Issue, GithubSubtype, JiraSubtype, Label, State, StateFilter } from "../Common/IssueTypes";
-    import { getTitle, getRepo, getNumber, label2color } from "../Common/IssueTypes";
+    import type { Issue, GithubSubtype, JiraSubtype, Label } from "../Common/IssueTypes";
+    import { getTitle, getRepo, label2color, labelTextColor, priorityIndex, priorityRank } from "../Common/IssueTypes";
     import { untrack } from "svelte";
     interface Props {
         id?: string;
@@ -94,25 +92,38 @@
         }
     };
 
-    let sortCriteria: "name" | "repo" | "date" = $state("date");
+    type SortCriteria = "name" | "repo" | "date" | "priority";
+    type FilterGroup = "state" | "priority" | "project";
+    const NO_PRIORITY = "none";
+    const uid = $props.id();
+
+    let sortCriteria: SortCriteria = $state("date");
     let reverseSort = $state(true);
     let currentPage = $state(0);
     let PAGE_SIZE = $state(10);
     let filterString = $state("");
-    let availableLabels: Label[] = [];
     let selectedLabels: Label[] = $state([]);
-    const stateFilter: Record<State, boolean> = $state({
-        open: true,
-        closed: true,
-        "in progress": true,
-        "in review": true,
-        "ready for merge": true,
-        "blocked": true,
-        "done": true,
-        "duplicate": true,
-        "won't fix": true,
-        todo: true,
-        new: true,
+    const excluded: Record<FilterGroup, Record<string, boolean>> = $state({ state: {}, priority: {}, project: {} });
+
+    const jiraIssues = $derived(issues.filter((issue) => issue.subtype === "jira") as JiraSubtype[]);
+    const distinct = (values: string[]) => [...new Set(values)].sort();
+    const optionPriority = (value: string) => priorityIndex(value === NO_PRIORITY ? null : value);
+    const filterOptions: Record<FilterGroup, string[]> = $derived({
+        state: distinct(issues.map((issue) => issue.state)),
+        priority: distinct(jiraIssues.map((issue) => issue.priority ?? NO_PRIORITY))
+            .sort((lhs, rhs) => optionPriority(lhs) - optionPriority(rhs) || 0),
+        project: distinct(jiraIssues.map((issue) => issue.project)),
+    });
+
+    const availableLabels = $derived.by(() => {
+        const labels = new Map<string, { label: Label; color: string }>();
+        for (const issue of issues) {
+            for (const label of issue.labels ?? []) {
+                if (labels.has(label.name)) continue;
+                labels.set(label.name, { label, color: issue.subtype === "github" ? `#${label.color}` : label2color(label) });
+            }
+        }
+        return [...labels.values()].sort((lhs, rhs) => lhs.label.name.localeCompare(rhs.label.name));
     });
 
 
@@ -131,25 +142,38 @@
             field: "added_on",
             friendlyString: "By date",
             f: (lhs: Issue, rhs: Issue) => reverseSort ? Date.parse(rhs.added_on) - Date.parse(lhs.added_on) : Date.parse(lhs.added_on) - Date.parse(rhs.added_on)
+        },
+        priority: {
+            field: "priority",
+            friendlyString: "By priority",
+            f: (lhs: Issue, rhs: Issue) => {
+                const lhsRank = priorityRank(lhs);
+                const rhsRank = priorityRank(rhs);
+                if (lhsRank === rhsRank) return Date.parse(rhs.added_on) - Date.parse(lhs.added_on);
+                if (lhsRank === Infinity) return 1;
+                if (rhsRank === Infinity) return -1;
+                return reverseSort ? lhsRank - rhsRank : rhsRank - lhsRank;
+            }
         }
     };
 
-    /**
-     *
-     * @param {number} id
-     * @param {Object[]} selectedLabels
-     */
-    const labelActive = function(id: string, selectedLabels: Label[]) {
-        return !!selectedLabels.find(l => l.id == id);
+    const labelActive = function(name: string, selectedLabels: Label[]) {
+        return selectedLabels.some(l => l.name == name);
     };
 
     const handleLabelClick = function(label: Label) {
-        if (labelActive(label.id, selectedLabels)) {
-            selectedLabels = selectedLabels.filter((l: Label) => l.id != label.id);
+        if (labelActive(label.name, selectedLabels)) {
+            selectedLabels = selectedLabels.filter((l: Label) => l.name != label.name);
         } else {
             selectedLabels.push(label);
             selectedLabels = selectedLabels;
         }
+        currentPage = 0;
+    };
+
+    const toggleFilter = function(group: FilterGroup, value: string, checked: boolean) {
+        excluded[group][value] = !checked;
+        currentPage = 0;
     };
 
     const submitIssue = async function () {
@@ -190,7 +214,8 @@
     };
 
     const shouldFilter = function (issue: Issue, filterString: string) {
-        if (shouldFilterByState(issue, selectedLabels, stateFilter)) return true;
+        if (isExcluded(issue)) return true;
+        if (shouldFilterByLabels(issue, selectedLabels)) return true;
         if (!filterString) return false;
         if (!issue) return true;
         let allTerms = "";
@@ -205,13 +230,19 @@
         return allTerms.toLowerCase().search(filterString.toLowerCase()) == -1;
     };
 
-    const shouldFilterByState = function(issue: Issue, selectedLabels: Label[], stateFilter: StateFilter) {
-        if (!stateFilter[issue.state]) return true;
-        if (selectedLabels.length == 0) return false;
-        return !issue.labels.map(label => !!selectedLabels.find(selectedLabel => label.id == selectedLabel.id)).includes(true);
+    const isExcluded = function(issue: Issue) {
+        if (excluded.state[issue.state]) return true;
+        if (issue.subtype !== "jira") return false;
+        const jira = issue as JiraSubtype;
+        return !!(excluded.priority[jira.priority ?? NO_PRIORITY] || excluded.project[jira.project]);
     };
 
-    const paginateIssues = function(issues: Issue[], sortCriteria: "name" | "repo" | "date" = "name", reverse = false, filterString = "") {
+    const shouldFilterByLabels = function(issue: Issue, selectedLabels: Label[]) {
+        if (selectedLabels.length == 0) return false;
+        return !(issue.labels ?? []).some(label => labelActive(label.name, selectedLabels));
+    };
+
+    const paginateIssues = function(issues: Issue[], sortCriteria: SortCriteria = "name", reverse = false, filterString = "") {
         if (issues.length == 0) return [];
         const sorted = Array.from(issues).sort(SORT_ORDERS[sortCriteria].f);
         const filtered = sorted.filter(v => !shouldFilter(v, filterString));
@@ -235,6 +266,24 @@
         untrack(() => fetchIssues());
     });
 </script>
+
+{#snippet filterGroup(title: string, group: FilterGroup, values: string[])}
+    <div class="d-flex flex-wrap align-items-center mb-1" role="group" aria-label={title}>
+        <span class="me-2 small text-muted">{title}</span>
+        {#each values as value, idx (value)}
+            <div class="form-check form-check-inline mb-0">
+                <input
+                    class="form-check-input"
+                    type="checkbox"
+                    id="{uid}-{group}-{idx}"
+                    checked={!excluded[group][value]}
+                    onchange={(e) => toggleFilter(group, value, e.currentTarget.checked)}
+                />
+                <label class="form-check-label" for="{uid}-{group}-{idx}">{value}</label>
+            </div>
+        {/each}
+    </div>
+{/snippet}
 
 <div>
     {#if !submitDisabled}
@@ -306,27 +355,20 @@
                     <div class="mb-2">Options</div>
                     <div class="d-flex align-items-center mb-2">
                         <div class="ms-2 form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="issueOpenCheckbox" bind:checked={stateFilter.open}>
-                            <label class="form-check-label" for="issueOpenCheckbox">
-                                Open
-                            </label>
-                        </div>
-                        <div class="ms-2 form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="issueClosedCheckbox" bind:checked={stateFilter.closed}>
-                            <label class="form-check-label" for="issueClosedCheckbox">
-                                Closed
-                            </label>
-                        </div>
-                        <div class="ms-2 form-check form-switch">
                             <input class="form-check-input" type="checkbox" id="sortCheckOrder" bind:checked={reverseSort}>
                             <label class="form-check-label" for="sortCheckOrder">
                                 Descending order
                             </label>
                         </div>
                     </div>
+                    {@render filterGroup("Status", "state", filterOptions.state)}
+                    {#if jiraIssues.length > 0}
+                        {@render filterGroup("Priority", "priority", filterOptions.priority)}
+                        {@render filterGroup("Space", "project", filterOptions.project)}
+                    {/if}
                 </div>
                 <div class="col">
-                    <select class="form-select" bind:value={sortCriteria}>
+                    <select class="form-select" aria-label="Sort issues" bind:value={sortCriteria}>
                         {#each Object.entries(SORT_ORDERS) as [sortName, meta]}
                             <option value="{sortName}">{meta.friendlyString}</option>
                         {/each}
@@ -340,24 +382,29 @@
                     </select>
                 </div>
             </div>
-            <div class="row">
-                <div class="rounded border p-2 bg-light-one">
-                    <div role="button" tabindex="0" class="mb-1 w-100" onkeypress={() => (showAllLabels = !showAllLabels)} onclick={() => (showAllLabels = !showAllLabels)}>All Labels <Fa icon={showAllLabels ? faChevronUp : faChevronDown}/></div>
-                    <div class="collapse" class:show={showAllLabels}>
-                        <div class="d-flex p-2 bg-dark rounded shadow-sm flex-wrap">
-                            {#each availableLabels as label}
-                                <button
-                                    class="ms-2 btn btn-sm btn-secondary m-1"
-                                    style="border-color: #{label.color}; color: #{label.color}; background-color: {labelActive(label.id, selectedLabels) ? Color(`#${label.color}`).darken(0.75) : "rgba(1,1,1,0)"}"
-                                    onclick={() => handleLabelClick(label)}
-                                >
-                                    {label.name}
-                                </button>
-                            {/each}
+            {#if availableLabels.length > 0}
+                <div class="row">
+                    <div class="rounded border p-2 bg-light-one">
+                        <div role="button" tabindex="0" class="mb-1 w-100" onkeypress={() => (showAllLabels = !showAllLabels)} onclick={() => (showAllLabels = !showAllLabels)}>All Labels <Fa icon={showAllLabels ? faChevronUp : faChevronDown}/></div>
+                        <div class="collapse" class:show={showAllLabels}>
+                            <div class="d-flex p-2 bg-dark rounded shadow-sm flex-wrap" role="group" aria-label="All labels">
+                                {#each availableLabels as { label, color } (label.name)}
+                                    {@const active = labelActive(label.name, selectedLabels)}
+                                    <button
+                                        class="btn btn-sm m-1 border {active ? 'border-2 border-light' : 'border-dark'}"
+                                        style="background-color: {color}; color: {labelTextColor(color)};"
+                                        aria-pressed={active}
+                                        onclick={() => handleLabelClick(label)}
+                                    >
+                                        {#if active}<Fa icon={faCheck} />{/if}
+                                        {label.name}
+                                    </button>
+                                {/each}
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            {/if}
             <div class="row">
                 {#each sortedIssues[currentPage] ?? [] as issue, idx (issue.id)}
                     <IssueCard {runId} issue={sortedIssues[currentPage][idx]} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:submitToCurrent on:issueDeleted={fetchIssues} on:labelClick={(e: any) => handleLabelClick(e.detail)}/>

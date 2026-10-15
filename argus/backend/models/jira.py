@@ -16,6 +16,7 @@ class JiraIssue(Document):
     key: Annotated[str, Indexed()]
     state: str
     project: str
+    priority: str | None = None
     permalink: Annotated[str, Indexed()]
     labels: list[IssueLabel] = Field(default_factory=list)
     assignees: list[str] = Field(default_factory=list)

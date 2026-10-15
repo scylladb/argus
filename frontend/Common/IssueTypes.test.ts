@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import Color from "color";
 import {
     getTitle,
     getRepo,
@@ -8,6 +9,7 @@ import {
     getKey,
     getAssigneesRich,
     label2color,
+    labelTextColor,
     resolveFirstUserForAggregation,
     resolveRuns,
     deleteIssue,
@@ -15,6 +17,8 @@ import {
     GithubIssueIcon,
     JiraIssueColorMap,
     JiraIssueIcon,
+    priorityClass,
+    priorityRank,
 } from "./IssueTypes";
 import type { GithubSubtype, JiraSubtype, Issue, Label, Link } from "./IssueTypes";
 
@@ -51,6 +55,7 @@ const JIRA_ISSUE: JiraSubtype = {
     key: "FROBNICATOR-123",
     summary: "Improve performance",
     project: "FROBNICATOR",
+    priority: "P1",
     permalink: "https://zxqtesting.atlassian.net/browse/FROBNICATOR-123",
     assignees: ["bob"],
 };
@@ -188,9 +193,28 @@ describe.each([
 const BUG_LABEL: Label = { id: "1", name: "bug", color: "ff0000", description: "" };
 const FEATURE_LABEL: Label = { id: "2", name: "feature", color: "00ff00", description: "" };
 
+const hueOf = (color: string) => Number(/^hsl\((\d+), /.exec(color)?.[1]);
+const hueDistance = (lhs: number, rhs: number) => Math.min(Math.abs(lhs - rhs), 360 - Math.abs(lhs - rhs));
+
 describe("label2color", () => {
-    it.each([BUG_LABEL, FEATURE_LABEL])("returns a valid rgb() string for label '$name'", (label) => {
-        expect(label2color(label)).toMatch(/^rgb\(\d+, \d+, \d+\)$/);
+    it.each([BUG_LABEL, FEATURE_LABEL])("returns an hsl() string for label '$name'", (label) => {
+        expect(label2color(label)).toMatch(/^hsl\(\d+, 65%, \d+%\)$/);
+    });
+
+    it("keeps the labels of one scope in one color family", () => {
+        const names = ["backport/2025.1", "backport/2025.1-done", "backport/6.2", "backport/6.2-done", "Backport/none"];
+        const hues = names.map((name) => hueOf(label2color({ ...BUG_LABEL, name })));
+
+        const spread = Math.max(...hues.flatMap((lhs) => hues.map((rhs) => hueDistance(lhs, rhs))));
+        expect(spread).toBeLessThanOrEqual(24);
+    });
+
+    it("keeps label text at a contrast ratio of at least 4.5:1", () => {
+        for (let i = 0; i < 2000; i++) {
+            const name = i % 2 ? `scope-${i % 37}/label-${i}` : `label-${i}`;
+            const background = label2color({ ...BUG_LABEL, name });
+            expect(Color(background).contrast(Color(labelTextColor(background)))).toBeGreaterThanOrEqual(4.5);
+        }
     });
 
     it("is deterministic — same label name produces same color", () => {
@@ -199,6 +223,17 @@ describe("label2color", () => {
 
     it("produces distinct colors for different label names", () => {
         expect(label2color(BUG_LABEL)).not.toBe(label2color(FEATURE_LABEL));
+    });
+});
+
+describe("labelTextColor", () => {
+    it.each([
+        ["#F76121", "black"],
+        ["rgb(0, 32, 255)", "white"],
+        ["#ffffff", "black"],
+        ["#000000", "white"],
+    ])("gives %s %s text", (background, text) => {
+        expect(labelTextColor(background)).toBe(text);
     });
 });
 
@@ -239,6 +274,40 @@ it.each(ALL_JIRA_STATES)("JiraIssueColorMap has a CSS class for state '%s'", (st
 
 it.each(ALL_JIRA_STATES)("JiraIssueIcon has an icon for state '%s'", (state) => {
     expect(JiraIssueIcon[state]).toBeDefined();
+});
+
+// ---------------------------------------------------------------------------
+// Priority helpers
+// ---------------------------------------------------------------------------
+
+describe("priorityRank", () => {
+    it.each([
+        ["P0", 0],
+        ["P2", 2],
+        ["P4", 4],
+        ["Critical", 5],
+    ])("ranks Jira priority %s at %s", (priority, rank) => {
+        expect(priorityRank({ ...JIRA_ISSUE, priority })).toBe(rank);
+    });
+
+    it("ranks a Jira issue without a priority last", () => {
+        expect(priorityRank({ ...JIRA_ISSUE, priority: null })).toBe(Infinity);
+    });
+
+    it("ranks a GitHub issue last", () => {
+        expect(priorityRank(GITHUB_ISSUE)).toBe(Infinity);
+    });
+});
+
+describe("priorityClass", () => {
+    it.each([
+        ["P0", "text-bg-danger"],
+        ["P1", "text-bg-warning"],
+        ["P4", "text-bg-light"],
+        ["Critical", "text-bg-secondary"],
+    ])("gives priority %s the badge class %s", (priority, badgeClass) => {
+        expect(priorityClass(priority)).toBe(badgeClass);
+    });
 });
 
 // ---------------------------------------------------------------------------

@@ -5,7 +5,6 @@
     import { run as run_1 } from 'svelte/legacy';
 
     import { createEventDispatcher } from "svelte";
-    import Color from "color";
     import Fa from "svelte-fa";
     import { faGithub } from "@fortawesome/free-brands-svg-icons";
     import {
@@ -17,7 +16,7 @@
     import { timestampToISODate } from "../Common/DateUtils";
     import { stateEncoder } from "../Common/StateManagement";
     import type { GithubSubtype, Link, TestRun } from '../Common/IssueTypes';
-    import { GithubIssueColorMap, GithubIssueIcon, resolveRuns as resolveRunsHelper, resolveFirstUserForAggregation as resolveFirstUserHelper, deleteIssue as deleteIssueHelper } from '../Common/IssueTypes';
+    import { GithubIssueColorMap, GithubIssueIcon, labelTextColor, resolveRuns as resolveRunsHelper, resolveFirstUserForAggregation as resolveFirstUserHelper, deleteIssue as deleteIssueHelper } from '../Common/IssueTypes';
     import { getUser } from '../Common/UserUtils';
 
     const dispatch = createEventDispatcher();
@@ -104,7 +103,7 @@
             {#each issue.labels as label (label.id)}
                 <button
                     class="align-items-center px-2 label-text border border-dark cursor-pointer"
-                    style="color: {Color(`#${label.color}`).isDark() ? 'white' : 'black'}; background-color: #{label.color};"
+                    style="color: {labelTextColor(`#${label.color}`)}; background-color: #{label.color};"
                     onclick={() => {
                         dispatch("labelClick", label);
                     }}
