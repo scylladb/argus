@@ -39,13 +39,13 @@ passes `fetchFullRun`. `getRunCmd` reads `--full`. After the type
 resolution, `--full` writes `models.NewKVTabular(fetchFullRun(...))`. The
 summary path stays as it is. The Long help names `--full`.
 
-- [ ] Write the failing tests: `run get --full` against a stub SCT run
+- [x] Write the failing tests: `run get --full` against a stub SCT run
   prints a field only the whole run holds (`packages`), `run get` without
   the flag does not print it, and `runCmd` has no `details` sub-command.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 2 — `run logs list` prints the names only
 
