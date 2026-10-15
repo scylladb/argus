@@ -207,6 +207,12 @@ func RunURL(base, buildID string, number int) string {
 	return strings.TrimRight(base, "/") + "/test/" + buildID + "/" + strconv.Itoa(number)
 }
 
+// RunPageURL builds the Argus web link for a run from the base URL, the
+// plugin name of the run and its run ID.
+func RunPageURL(base, pluginName, runID string) string {
+	return strings.TrimRight(base, "/") + "/tests/" + url.PathEscape(pluginName) + "/" + url.PathEscape(runID)
+}
+
 // NewRequest constructs an [http.Request] for the given method and path.
 // If body is non-nil it is JSON-encoded and the Content-Type header is set to
 // "application/json". The configured session cookie and/or API token are

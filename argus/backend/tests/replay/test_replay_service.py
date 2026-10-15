@@ -14,12 +14,14 @@ import tarfile
 import zipfile
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import UUID
 
 import pytest
 import zstandard as zstd
 
 from coodie.exceptions import DocumentNotFound
 
+from argus.backend.error_handlers import DataValidationError
 from argus.backend.service.replay_service import (
     CLIENT_ROUTE_PREFIX,
     FINALIZE_ENDPOINT,
@@ -108,7 +110,12 @@ def _make_service(
     create_missing_tests: bool = False,
     auth_header: str | None = None,
     backfill_logs: bool = False,
+    caller=None,
+    as_me: bool | None = None,
+    local_runs: bool = False,
+    test_name: str | None = None,
     s3_client=None,
+    argus_url: str = "https://argus.example.com",
 ) -> ReplayService:
     """Service wired to a recording mock client (default: always-200)."""
     if client is None:
@@ -119,7 +126,12 @@ def _make_service(
         auth_header=auth_header,
         create_missing_tests=create_missing_tests,
         backfill_logs=backfill_logs,
+        caller=caller,
+        as_me=as_me,
+        local_runs=local_runs,
+        test_name=test_name,
         s3_client=s3_client,
+        argus_url=argus_url,
     )
 
 
@@ -987,3 +999,578 @@ def test_log_name_from_key_strips_archive_suffix():
     assert ReplayService._log_name_from_key(
         f"{_RUN_ID}/ts/history.jsonl.tar.gz") == "history.jsonl"
     assert ReplayService._log_name_from_key(f"{_RUN_ID}/ts/plain.log") == "plain.log"
+
+
+# ---------------------------------------------------------------------------
+# the local-runs path, build numbers, and the stamp step
+# ---------------------------------------------------------------------------
+
+_LOCAL_PATH = "local-runs/jdoe/longevity-100gb-4h"
+_OWNER = SimpleNamespace(id=UUID("11111111-1111-1111-1111-111111111111"), username="jdoe")
+_TEST_ID = UUID("44444444-4444-4444-4444-444444444444")
+_JENKINS_SUBMIT = {
+    "job_name": "scylla-master/longevity/longevity-100gb-4h",
+    "job_url": "https://jenkins.scylladb.com/job/scylla-master/job/longevity/12/",
+}
+
+
+def _submit_body(run_id: str = _RUN_ID, **overrides) -> dict:
+    """The submit_run body of a local SCT run."""
+    body = {
+        "run_id": run_id,
+        "job_name": "local_run",
+        "job_url": "",
+        "started_by": "linux_user=jdoe",
+        "sct_config": {
+            "config_files": [
+                "test-cases/longevity/longevity-100gb-4h.yaml",
+                "configurations/minicloud/cs-baseline.yaml",
+            ]
+        },
+    }
+    body.update(overrides)
+    return body
+
+
+def _run_archive(log_keys: list[str] | None = None, run_id: str = _RUN_ID, **submit) -> list[dict]:
+    """A local run: a submit_run, an event that names the run in its body,
+    and a logs/submit."""
+    return [
+        _rec(
+            "/testrun/$type/submit",
+            ts=1,
+            location_params={"type": "scylla-cluster-tests"},
+            body=_submit_body(run_id, **submit),
+        ),
+        _rec(
+            "/sct/$id/event/submit",
+            ts=2,
+            location_params={"id": run_id},
+            body={"data": {"run_id": run_id, "message": f"run {run_id} started"}},
+        ),
+        _rec(
+            "/testrun/$type/$id/logs/submit",
+            ts=3,
+            location_params={"type": "scylla-cluster-tests", "id": run_id},
+            body={"logs": [{"log_name": k.rsplit("/", 1)[-1], "log_link": _s3_url(k)} for k in (log_keys or [])]},
+        ),
+    ]
+
+
+def _archive(*runs: list[dict]) -> bytes:
+    return _make_archive({"argus_replay_log_run.jsonl": [r for run in runs for r in run]})
+
+
+def _dispatched(client) -> list[tuple[str, dict]]:
+    return [(c.args[1], c.kwargs["json"]) for c in client.request.call_args_list]
+
+
+def _ok_client():
+    client = AsyncMock()
+    client.request.return_value = _Response(200, b'{"status":"ok"}')
+    return client
+
+
+def _local_service(client=None, *, as_me: bool | None = False, **kwargs) -> ReplayService:
+    """A replay of a local run into local-runs/<caller>/<test>. The owner is
+    off unless a test turns it on."""
+    return _make_service(client, caller=_OWNER, local_runs=True, as_me=as_me, **kwargs)
+
+
+class _StoredRun:
+    """A stored SCT run: the fields the stamp step reads and writes."""
+
+    model_fields = {"started_by": None}
+
+    def __init__(self):
+        self.id = UUID(_RUN_ID)
+        self.test_id = _TEST_ID
+        self.build_id = _LOCAL_PATH
+        self.build_number = 3
+        self.assignee = None
+        self.started_by = "linux_user=jdoe"
+        self.save = AsyncMock()
+
+
+class _StoredRunWithoutStarter(_StoredRun):
+    """A stored run of a plugin whose model has no started_by field."""
+
+    model_fields = {}
+
+
+@pytest.fixture
+def run_store():
+    """The test entity exists, the build path holds builds #1 and #4, and
+    every run model read returns one stored run. The run is new to Argus
+    unless a test sets ``exists``."""
+    run = _StoredRun()
+    model = MagicMock()
+    model.get = AsyncMock(return_value=run)
+    model.find.return_value.only.return_value.values_list.return_value.all = AsyncMock(
+        return_value=[(1,), (4,), (None,)]
+    )
+    with (
+        patch.object(ReplayService, "_diagnose_missing_hierarchy", return_value=None),
+        patch.object(ReplayService, "_run_models", return_value=[model]),
+        patch.object(ReplayService, "_run_exists", AsyncMock(return_value=False)) as exists,
+        patch("argus.backend.service.test_hierarchy.ensure_test_hierarchy"),
+        patch("argus.backend.service.replay_service.TestRunService") as testrun_cls,
+        patch("argus.backend.service.replay_service.ClientService") as service_cls,
+    ):
+        service_cls.return_value.get_model.return_value = model
+        testrun_cls.return_value.change_run_assignee = AsyncMock()
+        yield SimpleNamespace(
+            run=run, model=model, service_cls=service_cls, exists=exists,
+            change_assignee=testrun_cls.return_value.change_run_assignee,
+        )
+
+
+async def test_runs_listed_without_a_build_path(run_store):
+    summary = await _make_service().ingest(_archive(_run_archive()))
+
+    assert summary.runs == [
+        {"type": "scylla-cluster-tests", "id": _RUN_ID, "build_id": None, "build_number": None, "failed": False}
+    ]
+    assert summary.as_dict()["runs"] == summary.runs
+
+
+async def test_local_run_keeps_its_run_id(run_store):
+    client = _ok_client()
+    summary = await _local_service(client).ingest(_archive(_run_archive()))
+
+    assert [r["id"] for r in summary.runs] == [_RUN_ID]
+    (submit_url, submit_body), (event_url, event_body), (logs_url, _) = _dispatched(client)
+    assert submit_url == f"{CLIENT_ROUTE_PREFIX}/testrun/scylla-cluster-tests/submit"
+    assert submit_body["run_id"] == _RUN_ID
+    assert submit_body["job_name"] == _LOCAL_PATH
+    assert event_url == f"{CLIENT_ROUTE_PREFIX}/sct/{_RUN_ID}/event/submit"
+    assert event_body["data"]["run_id"] == _RUN_ID
+    assert logs_url == f"{CLIENT_ROUTE_PREFIX}/testrun/scylla-cluster-tests/{_RUN_ID}/logs/submit"
+
+
+@pytest.mark.parametrize(
+    ("body", "path_key", "url_key", "test"),
+    [
+        ({"job_name": "local_run", "job_url": ""}, "job_name", "job_url", "local_run"),
+        ({"build_id": "local/dtest", "build_url": ""}, "build_id", "build_url", "dtest"),
+        ({"build_id": "local/sirenada", "build_job_url": ""}, "build_id", "build_job_url", "sirenada"),
+    ],
+)
+async def test_local_run_refiles_submit_under_the_plugin_keys(run_store, body, path_key, url_key, test):
+    client = _ok_client()
+    archive = _archive(
+        [_rec("/testrun/$type/submit", ts=1, location_params={"type": "generic"}, body={"run_id": _RUN_ID, **body})]
+    )
+
+    await _local_service(client).ingest(archive)
+
+    submit_body = _dispatched(client)[0][1]
+    assert submit_body[path_key] == f"local-runs/jdoe/{test}"
+    assert submit_body[url_key] == f"https://argus.example.com/test/local-runs/jdoe/{test}/5/"
+
+
+async def test_existing_run_replays_as_recorded(run_store):
+    run_store.exists.return_value = True
+    client = _ok_client()
+    summary = await _local_service(client).ingest(_archive(_run_archive()))
+
+    # submit_run keeps an existing run, so the replay gives it no path and no number.
+    assert summary.runs == [
+        {"type": "scylla-cluster-tests", "id": _RUN_ID, "build_id": None, "build_number": None, "failed": False}
+    ]
+    submit_body = _dispatched(client)[0][1]
+    assert submit_body["job_name"] == "local_run"
+    assert submit_body["job_url"] == ""
+    run_store.model.find.assert_not_called()
+
+
+async def test_local_run_backfill_lists_its_s3_prefix(run_store):
+    recorded = f"{_RUN_ID}/20260526_115014/db-node-0-1-15bb6cad.tar.zst"
+    loader = f"{_RUN_ID}/20260526_115014/loader-set-15bb6cad.tar.zst"
+    s3 = _mock_s3([recorded, loader])
+    client = _ok_client()
+
+    summary = await _local_service(client, backfill_logs=True, s3_client=s3).ingest(_archive(_run_archive([recorded])))
+
+    s3.list_objects_v2.assert_called_once_with(Bucket=_BUCKET, Prefix=f"{_RUN_ID}/")
+    backfill_url, backfill_body = _dispatched(client)[-1]
+    assert backfill_url == f"{CLIENT_ROUTE_PREFIX}/testrun/scylla-cluster-tests/{_RUN_ID}/logs/submit"
+    assert [log["log_link"] for log in backfill_body["logs"]] == [_s3_url(loader)]
+    assert summary.backfilled_logs == 1
+
+
+async def test_local_run_without_recorded_logs_gets_its_s3_logs(run_store):
+    # A local run with Argus off records no logs/submit: hydra collect-logs uploads to S3 only.
+    runner = f"{_RUN_ID}/20260526_115014/sct-runner-events-15bb6cad.tar.zst"
+    s3 = _mock_s3([runner])
+    client = _ok_client()
+    archive = _archive(_run_archive()[:2])
+
+    summary = await _local_service(client, backfill_logs=True, s3_client=s3).ingest(archive)
+
+    s3.list_objects_v2.assert_called_once_with(Bucket=_BUCKET, Prefix=f"{_RUN_ID}/")
+    backfill_url, backfill_body = _dispatched(client)[-1]
+    assert backfill_url == f"{CLIENT_ROUTE_PREFIX}/testrun/scylla-cluster-tests/{_RUN_ID}/logs/submit"
+    assert backfill_body["logs"] == [
+        {"log_name": "sct-runner-events-15bb6cad", "log_link": _s3_url(runner)}
+    ]
+    assert summary.backfilled_logs == 1
+
+
+async def test_build_number_takes_the_next_free_number(run_store):
+    summary = await _local_service().ingest(_archive(_run_archive()))
+
+    run_store.model.find.assert_called_with(build_id=_LOCAL_PATH)
+    assert summary.runs[0]["build_id"] == _LOCAL_PATH
+    assert summary.runs[0]["build_number"] == 5
+
+
+async def test_build_number_is_shown_on_dry_run(run_store):
+    summary = await _local_service().ingest(_archive(_run_archive()), dry_run=True)
+
+    assert summary.runs[0]["build_number"] == 5
+    run_store.run.save.assert_not_awaited()
+
+
+async def test_build_numbers_of_every_plugin_count(run_store):
+    other_plugin = MagicMock()
+    other_plugin.find.return_value.only.return_value.values_list.return_value.all = AsyncMock(return_value=[(12,)])
+
+    with patch.object(ReplayService, "_run_models", return_value=[run_store.model, other_plugin]):
+        summary = await _local_service().ingest(_archive(_run_archive()))
+
+    # The archive holds an SCT run only, and the path also holds a #12 of another plugin.
+    assert summary.runs[0]["build_number"] == 13
+
+
+async def test_unknown_run_type_is_a_validation_error():
+    archive = _archive(
+        [_rec("/testrun/$type/submit", ts=1, location_params={"type": "no-such-plugin"}, body=_submit_body())]
+    )
+    with pytest.raises(DataValidationError, match="no-such-plugin"):
+        await _local_service().ingest(archive)
+
+
+async def test_new_run_is_created_with_its_absolute_build_url(run_store):
+    client = _ok_client()
+    await _local_service(client).ingest(_archive(_run_archive()))
+
+    # The plugin reads the build number from the build URL when it creates the run.
+    assert _dispatched(client)[0][1]["job_url"] == f"https://argus.example.com/test/{_LOCAL_PATH}/5/"
+
+
+async def test_local_run_needs_base_url(run_store):
+    client = _ok_client()
+    with pytest.raises(ReplayServiceError, match="BASE_URL"):
+        await _local_service(client, argus_url="").ingest(_archive(_run_archive()))
+    client.request.assert_not_called()
+
+
+async def test_replay_without_a_build_path_needs_no_base_url(run_store):
+    summary = await _make_service(argus_url="").ingest(_archive(_run_archive()))
+
+    assert summary.failed == 0
+
+
+async def test_new_run_without_an_owner_keeps_its_starter(run_store):
+    client = _ok_client()
+    await _local_service(client).ingest(_archive(_run_archive()))
+
+    # No owner: the assignee and the starter stay as the replay created them.
+    assert _dispatched(client)[0][1]["started_by"] == "linux_user=jdoe"
+    run_store.model.get.assert_not_called()
+
+
+async def test_new_run_belongs_to_the_owner(run_store):
+    client = _ok_client()
+    await _local_service(client, as_me=True).ingest(_archive(_run_archive()))
+
+    # The run is created with the owner as its starter, set in one place.
+    assert _dispatched(client)[0][1]["started_by"] == "jdoe"
+    assert run_store.run.assignee == _OWNER.id
+    assert run_store.run.started_by == "linux_user=jdoe"
+    run_store.change_assignee.assert_not_called()
+
+
+async def test_new_run_of_a_plugin_without_started_by_keeps_its_fields(run_store):
+    run_store.model.get.return_value = run = _StoredRunWithoutStarter()
+    client = _ok_client()
+    archive = _archive(
+        [
+            _rec(
+                "/testrun/$type/submit",
+                ts=1,
+                location_params={"type": "driver-matrix-tests"},
+                body={"run_id": _RUN_ID, "job_name": "x", "job_url": ""},
+            )
+        ]
+    )
+
+    summary = await _local_service(client, as_me=True).ingest(archive)
+
+    assert "started_by" not in _dispatched(client)[0][1]
+    assert run.assignee == _OWNER.id
+    assert run.started_by == "linux_user=jdoe"
+    assert summary.errors == []
+
+
+async def test_owner_without_a_build_path_changes_only_the_assignee(run_store):
+    client = _ok_client()
+    summary = await _make_service(client, caller=_OWNER, as_me=True).ingest(_archive(_run_archive()))
+
+    # The original run keeps its recorded starter.
+    assert _dispatched(client)[0][1]["started_by"] == "linux_user=jdoe"
+    run_store.change_assignee.assert_awaited_once_with(
+        test_id=_TEST_ID, run_id=UUID(_RUN_ID), new_assignee=_OWNER.id, user=_OWNER
+    )
+    assert run_store.run.started_by == "linux_user=jdoe"
+    run_store.run.save.assert_not_awaited()
+    assert summary.errors == []
+
+
+async def test_owner_of_an_existing_local_run_changes_only_the_assignee(run_store):
+    run_store.exists.return_value = True
+    client = _ok_client()
+    summary = await _local_service(client, as_me=None).ingest(_archive(_run_archive()))
+
+    assert _dispatched(client)[0][1]["started_by"] == "linux_user=jdoe"
+    run_store.change_assignee.assert_awaited_once_with(
+        test_id=_TEST_ID, run_id=UUID(_RUN_ID), new_assignee=_OWNER.id, user=_OWNER
+    )
+    run_store.run.save.assert_not_awaited()
+    assert summary.errors == []
+
+
+async def test_owner_who_is_already_the_assignee_changes_nothing(run_store):
+    run_store.run.assignee = _OWNER.id
+
+    summary = await _make_service(caller=_OWNER, as_me=True).ingest(_archive(_run_archive()))
+
+    run_store.change_assignee.assert_not_called()
+    assert summary.errors == []
+
+
+async def test_owner_without_a_build_path_needs_a_test(run_store):
+    run_store.run.test_id = None
+
+    summary = await _make_service(caller=_OWNER, as_me=True).ingest(_archive(_run_archive()))
+
+    run_store.change_assignee.assert_not_called()
+    assert [e["endpoint"] for e in summary.errors] == ["stamp_run"]
+
+
+async def test_stamp_skipped_without_a_build_path_and_owner(run_store):
+    await _make_service().ingest(_archive(_run_archive()))
+
+    run_store.service_cls.return_value.get_model.assert_not_called()
+
+
+async def test_stamp_failure_is_reported_per_run(run_store):
+    run_store.model.get.side_effect = DocumentNotFound("gone")
+
+    summary = await _make_service(caller=_OWNER, as_me=True).ingest(_archive(_run_archive()))
+
+    assert [e["endpoint"] for e in summary.errors] == ["stamp_run"]
+    assert _RUN_ID in summary.errors[0]["error"]
+
+
+async def test_owner_skipped_on_dry_run(run_store):
+    await _make_service(caller=_OWNER, as_me=True).ingest(_archive(_run_archive()), dry_run=True)
+
+    run_store.service_cls.return_value.get_model.assert_not_called()
+
+
+async def test_stamp_skips_a_run_whose_submit_failed(run_store):
+    diagnosis = f"test entity missing for build_id='{_LOCAL_PATH}'"
+    with patch.object(ReplayService, "_diagnose_missing_hierarchy", return_value=diagnosis):
+        summary = await _local_service(as_me=True, create_missing_tests=False).ingest(_archive(_run_archive()))
+
+    run_store.model.get.assert_not_called()
+    assert [e["endpoint"] for e in summary.errors] == ["/testrun/$type/submit"]
+
+
+async def test_run_whose_submit_failed_is_marked_failed(run_store):
+    diagnosis = f"test entity missing for build_id='{_LOCAL_PATH}'"
+    with patch.object(ReplayService, "_diagnose_missing_hierarchy", return_value=diagnosis):
+        summary = await _local_service(create_missing_tests=False).ingest(_archive(_run_archive()))
+
+    assert summary.runs[0]["failed"] is True
+    assert summary.as_dict()["runs"][0]["failed"] is True
+
+
+async def test_run_whose_submit_succeeded_is_not_marked_failed(run_store):
+    summary = await _local_service().ingest(_archive(_run_archive()))
+
+    assert summary.runs[0]["failed"] is False
+
+
+# ---------------------------------------------------------------------------
+# defaults: the local-runs path, as_me and create_missing_tests
+# ---------------------------------------------------------------------------
+
+
+async def test_local_run_goes_to_local_runs_of_the_caller(run_store):
+    client = _ok_client()
+    summary = await _local_service(client, as_me=None, create_missing_tests=None).ingest(_archive(_run_archive()))
+
+    assert summary.runs[0]["build_id"] == _LOCAL_PATH
+    assert summary.runs[0]["build_number"] == 5
+    assert summary.runs[0]["id"] == _RUN_ID
+    submit_body = _dispatched(client)[0][1]
+    assert submit_body["job_name"] == _LOCAL_PATH
+    # The run belongs to the caller by default.
+    assert submit_body["started_by"] == "jdoe"
+    assert run_store.run.assignee == _OWNER.id
+
+
+async def test_local_run_creates_its_folders_by_default(run_store):
+    with patch("argus.backend.service.test_hierarchy.ensure_test_hierarchy") as ensure:
+        await _local_service(create_missing_tests=None).ingest(_archive(_run_archive()))
+
+    assert ensure.call_args.kwargs["build_id"] == _LOCAL_PATH
+
+
+async def test_local_run_defaults_can_be_turned_off(run_store):
+    client = _ok_client()
+    with patch("argus.backend.service.test_hierarchy.ensure_test_hierarchy") as ensure:
+        await _local_service(client, as_me=False, create_missing_tests=False).ingest(_archive(_run_archive()))
+
+    submit_body = _dispatched(client)[0][1]
+    assert submit_body["job_name"] == _LOCAL_PATH
+    assert submit_body["started_by"] == "linux_user=jdoe"
+    assert run_store.run.assignee is None
+    ensure.assert_not_called()
+
+
+async def test_second_replay_of_a_local_run_creates_no_test(run_store):
+    # The run exists, so its submit_run keeps job_name="local_run", which names no test.
+    run_store.exists.return_value = True
+    with patch("argus.backend.service.test_hierarchy.ensure_test_hierarchy") as ensure:
+        summary = await _local_service(create_missing_tests=None).ingest(_archive(_run_archive()))
+
+    ensure.assert_not_called()
+    assert summary.errors == []
+
+
+async def test_second_replay_of_a_local_run_skips_the_missing_test_check(run_store):
+    run_store.exists.return_value = True
+    diagnosis = "test entity missing for build_id='local_run'"
+    with patch.object(ReplayService, "_diagnose_missing_hierarchy", return_value=diagnosis) as diagnose:
+        summary = await _local_service(create_missing_tests=False).ingest(_archive(_run_archive()))
+
+    diagnose.assert_not_called()
+    assert summary.failed == 0
+    assert summary.runs[0]["failed"] is False
+
+
+async def test_jenkins_run_keeps_its_recorded_path(run_store):
+    client = _ok_client()
+    summary = await _local_service(client, as_me=None, create_missing_tests=None).ingest(
+        _archive(_run_archive(**_JENKINS_SUBMIT))
+    )
+
+    assert summary.runs[0]["id"] == _RUN_ID
+    assert summary.runs[0]["build_id"] is None
+    assert _dispatched(client)[0][1]["job_name"] == _JENKINS_SUBMIT["job_name"]
+    # Not a local run: the caller owns it only when asking for it.
+    run_store.change_assignee.assert_not_called()
+
+
+async def test_archive_of_two_runs_keeps_its_recorded_paths(run_store):
+    other = "33333333-3333-3333-3333-333333333333"
+    summary = await _local_service().ingest(_archive(_run_archive(), _run_archive(run_id=other)))
+
+    assert [r["build_id"] for r in summary.runs] == [None, None]
+
+
+@pytest.mark.parametrize(
+    ("body", "job"),
+    [
+        ({"sct_config": {"config_files": "test-cases/a/longevity-50gb.yaml other.yaml"}}, "longevity-50gb"),
+        ({"sct_config": {"config_files": ["x/My Test (v2).yml"]}}, "My-Test-v2"),
+        ({"sct_config": {}, "job_name": "local/dtest-nightly"}, "dtest-nightly"),
+        ({"sct_config": None, "job_name": "", "build_id": "my run"}, "my-run"),
+        ({"sct_config": None, "job_name": ""}, "local-run"),
+    ],
+)
+async def test_local_job_name(body, job):
+    assert ReplayService._local_job_name(body) == job
+
+
+async def test_test_name_names_the_test_of_a_local_run(run_store):
+    client = _ok_client()
+    summary = await _local_service(client, test_name="feature/PR 123").ingest(_archive(_run_archive()))
+
+    assert summary.runs[0]["build_id"] == "local-runs/jdoe/feature-PR-123"
+    assert _dispatched(client)[0][1]["job_name"] == "local-runs/jdoe/feature-PR-123"
+
+
+@pytest.mark.parametrize("local_runs", [True, False])
+async def test_test_name_needs_one_local_run(run_store, local_runs):
+    client = _ok_client()
+    service = _make_service(client, caller=_OWNER, local_runs=local_runs, test_name="feature-x")
+    archive = _archive(_run_archive(**_JENKINS_SUBMIT)) if local_runs else _archive(_run_archive())
+
+    with pytest.raises(DataValidationError, match="test_name"):
+        await service.ingest(archive)
+    client.request.assert_not_called()
+
+
+@pytest.mark.parametrize("test_name", ["///", ".", ".."])
+async def test_test_name_needs_a_path_character(run_store, test_name):
+    with pytest.raises(DataValidationError, match="test_name"):
+        await _local_service(test_name=test_name).ingest(_archive(_run_archive()))
+
+
+async def test_local_path_cleans_the_username(run_store):
+    caller = SimpleNamespace(id=_OWNER.id, username="John Doe")
+    summary = await _make_service(caller=caller, local_runs=True).ingest(_archive(_run_archive()))
+
+    assert summary.runs[0]["build_id"] == "local-runs/John-Doe/longevity-100gb-4h"
+
+
+async def test_local_run_replays_as_recorded_without_local_runs(run_store):
+    # An older CLI, or any other client, sends no local_runs and gets the replay it always got.
+    client = _ok_client()
+    summary = await _make_service(client, caller=_OWNER).ingest(_archive(_run_archive()))
+
+    assert summary.runs[0]["id"] == _RUN_ID
+    assert summary.runs[0]["build_id"] is None
+    assert _dispatched(client)[0][1]["job_name"] == "local_run"
+
+
+# ---------------------------------------------------------------------------
+# robustness
+# ---------------------------------------------------------------------------
+
+
+async def test_new_test_takes_no_build_url_of_a_new_run(run_store):
+    with patch("argus.backend.service.test_hierarchy.ensure_test_hierarchy") as ensure:
+        await _local_service(create_missing_tests=True).ingest(_archive(_run_archive()))
+
+    assert ensure.call_args.kwargs["build_id"] == _LOCAL_PATH
+    assert ensure.call_args.kwargs["build_url"] is None
+
+
+async def test_submit_without_a_run_type_does_not_abort_the_replay(run_store):
+    client = _ok_client()
+    record = _rec("/testrun/$type/submit", ts=1, location_params={}, body=_submit_body())
+    record["test_type"] = None
+
+    summary = await _local_service(client, as_me=True).ingest(_archive([record]))
+
+    # A record with no run type names no run, so the stamp step has nothing to do.
+    assert summary.runs == []
+    assert summary.processed == 1
+
+
+async def test_run_exists_reads_the_run_model():
+    model = MagicMock()
+    model.get = AsyncMock(side_effect=[object(), DocumentNotFound("gone")])
+    run_ref = {"type": "scylla-cluster-tests", "id": _RUN_ID}
+    with patch("argus.backend.service.replay_service.ClientService") as service_cls:
+        service_cls.return_value.get_model.return_value = model
+
+        assert await _make_service()._run_exists(run_ref) is True
+        assert await _make_service()._run_exists(run_ref) is False
+    assert str(model.get.await_args.kwargs["id"]) == _RUN_ID

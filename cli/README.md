@@ -198,6 +198,150 @@ argus config set url https://my-argus.internal
 argus config set use_cloudflare false
 ```
 
+## Replaying a run
+
+An SCT run writes each Argus call it makes to a replay log
+(`argus_replay_log_<run_id>_<ts>.jsonl`). `argus run replay` sends these logs
+to Argus, and the server applies the calls again. Use it to put a local or
+minicloud run into a shared Argus, or to recover a run after an outage.
+
+Replay the logs of one run from an SCT results directory:
+
+```bash
+argus run replay --dir ~/sct-results/latest --run-id <run_id>
+```
+
+Replay an archive or single files:
+
+```bash
+argus run replay --file argus-replay-baseline.tar.zst
+argus run replay --file argus_replay_log_<run_id>_<ts>.jsonl.zst
+```
+
+### Where a local run goes
+
+A local or minicloud run has no Jenkins job. When the logs hold one such
+run, the replay files it under your user by default:
+
+```
+local-runs/<your Argus username>/<test>
+```
+
+`<test>` is the name of the first SCT config file of the run. For example,
+`test-cases/longevity/longevity-100gb-4h.yaml` gives
+`local-runs/jdoe/longevity-100gb-4h`. Each replay of the same test adds the
+next build: `#1`, `#2`, and so on.
+
+A local run of a test such as `longevity-100gb-4h` often uses a different
+config, or belongs to a feature or a pull request. Give `--test` to name the
+test yourself:
+
+```bash
+argus run replay --dir ~/sct-results/latest --test my-feature
+```
+
+The run then goes to `local-runs/<your Argus username>/my-feature`. The
+replay replaces each character that a build path does not accept with `-`. To find your local runs in Argus, open the
+`local-runs` release and then the group with your username, or search for
+`local-runs/<your username>`.
+
+The replay creates the release, the group and the test when they do not
+exist. The server picks the build number, and the path always starts with
+`local-runs/<your Argus username>/`. You cannot choose the full path, because
+a chosen path can name a Jenkins job, and the next Jenkins build would then
+get the same number. A Jenkins run keeps its
+recorded job path and run ID, so a replay after an outage restores the
+original run.
+
+For a local run, the replay:
+
+1. Keeps the recorded run ID, so the logs in S3 stay attached to the run.
+2. Files the run under `local-runs/<your Argus username>/<test>`, with the
+   next build number of that test. `<test>` is the `--test` value when you
+   give it.
+3. Makes your Argus user the starter and the assignee of the run.
+
+Only a run that Argus does not hold yet gets the path, the number and the
+starter. A run that Argus already holds replays as recorded, and `--as-me`
+makes you its assignee.
+
+To replay a local run as recorded, give `--keep-run`. You cannot give
+`--keep-run` with `--test`.
+
+Turn off a step that you do not want:
+
+| Flag | Effect |
+| ---- | ------ |
+| `--as-me=false` | Keep the recorded starter and the scheduled assignee. |
+| `--create-missing-tests=false` | Fail when the release, the group or the test of a new run does not exist. |
+| `--backfill-logs=false` | Attach only the logs that the replay log records. |
+
+`--as-me` also works for a run that keeps its recorded path. It then makes
+you the assignee of the runs that the logs name, and writes the change to the
+run activity. The runs keep their original run IDs and their recorded
+starter.
+
+### Upload the logs of a local run
+
+A local run does not upload its logs to S3. `hydra collect-logs` uploads them
+under the run ID. With Argus off, which is the usual case for a local run,
+`collect-logs` does not link the logs to a run in Argus. The replay links
+them: the log back-fill lists the S3 prefix of the run ID and attaches each
+log that the replay logs do not record.
+
+1. Upload the logs under the run ID:
+
+   ```bash
+   hydra collect-logs --test-id 91c226dc-a057-4ad4-a0b8-bf8bc73031b9 \
+     --logdir ~/sct-results/<run directory>
+   ```
+
+2. Replay the run directory:
+
+   ```bash
+   argus run replay --dir ~/sct-results/<run directory>
+   ```
+
+When you upload the logs after the first replay, replay again. The second
+replay keeps the run and its build, and attaches the new logs. When
+`collect-logs` runs with Argus on, it writes its own replay log into the run
+directory, and `--dir` sends it with the others.
+
+The back-fill looks in the `cloudius-jenkins-test` bucket, which SCT uses by
+default, when the replay logs record no S3 link. A run that uploads to another
+bucket needs `REPLAY_LOG_BACKFILL_BUCKET` in the Argus configuration.
+
+### Output
+
+The summary counts the records. One line per run follows, with its link in
+Argus:
+
+```
+Replay summary: total=83 processed=83 succeeded=83 failed=0 skipped=0 backfilled_logs=0
+Run 91c226dc-a057-4ad4-a0b8-bf8bc73031b9 (local-runs/jdoe/longevity-100gb-4h#1): https://argus.scylladb.com/tests/scylla-cluster-tests/91c226dc-a057-4ad4-a0b8-bf8bc73031b9
+```
+
+The build follows the run ID in parentheses. A run that keeps its recorded
+path shows no build. A run whose `submit_run` failed shows no link, because
+Argus may not hold it:
+
+```
+Run 91c226dc-a057-4ad4-a0b8-bf8bc73031b9 (local-runs/jdoe/longevity-100gb-4h#1) failed: see the errors below
+```
+
+A table of errors follows when a record fails. `--report json` writes the
+summary and the links as JSON.
+
+Run with `--dry-run` first to check the logs and the build. A dry run
+applies nothing and shows no links. It shows the build each run would get:
+
+```
+Run 91c226dc-a057-4ad4-a0b8-bf8bc73031b9 would replay as (local-runs/jdoe/longevity-100gb-4h#1)
+```
+
+Use `--target-url` to replay into another Argus instance. The CLI must already
+hold credentials for that instance.
+
 ## Find the runs linked to an issue
 
 List the test runs linked to a Jira issue key, newest first:

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/rs/zerolog"
@@ -48,7 +49,22 @@ attaches any log archives that were uploaded but whose logs/submit was never
 recorded (e.g. loader/monitor/sct-runner bundles); pass --backfill-logs=false
 to skip that step. Use --target-url to replay against a different Argus
 instance; you must already hold credentials valid for that target (the CLI
-does not re-authenticate against a different host).`,
+does not re-authenticate against a different host).
+
+A local run (one run with no Jenkins build URL) goes to
+local-runs/<your Argus username>/<test>, where <test> is its first SCT config
+file, e.g. local-runs/jdoe/longevity-100gb-4h. Use --test to name <test>
+yourself, e.g. after a feature or a pull request. The server picks the next
+build number of that test. The run keeps its recorded run ID, so the
+log back-fill finds the logs it uploaded to S3. A run that Argus already holds
+replays as recorded. --as-me is on unless you turn it off, so the run belongs
+to your Argus user. The server creates the release, group and test that the
+path needs. Use --keep-run to replay a local run as recorded. Without a build
+path, --as-me only makes you the assignee, and the run keeps its recorded
+starter.
+
+The summary lists each run with its Argus link. A run whose submit_run failed
+gets no link.`,
 	Example: `  # Replay all files for a run from the SCT results directory
   argus run replay --dir ~/sct-results/latest --run-id 550e8400-e29b-41d4-a716-446655440000
 
@@ -61,6 +77,12 @@ does not re-authenticate against a different host).`,
   # Replay a compressed single log
   argus run replay --file argus_replay_log_R_1.jsonl.zst
 
+  # Replay a local run under local-runs/<you>/my-feature
+  argus run replay --dir ~/sct-results/latest --test my-feature
+
+  # Replay a local run, but keep the scheduled assignee and the recorded starter
+  argus run replay --dir ~/sct-results/latest --as-me=false
+
   # Dry-run preview
   argus run replay --dir ~/sct-results/latest --run-id 550e... --dry-run`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
@@ -72,10 +94,13 @@ does not re-authenticate against a different host).`,
 		runID, _ := cmd.Flags().GetString("run-id")
 		fileArgs, _ := cmd.Flags().GetStringArray("file")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
-		createMissingTests, _ := cmd.Flags().GetBool("create-missing-tests")
+		createMissingTests := optionalBool(cmd, "create-missing-tests")
 		backfillLogs, _ := cmd.Flags().GetBool("backfill-logs")
 		targetURL, _ := cmd.Flags().GetString("target-url")
 		reportFmt, _ := cmd.Flags().GetString("report")
+		asMe := optionalBool(cmd, "as-me")
+		keepRun, _ := cmd.Flags().GetBool("keep-run")
+		testName, _ := cmd.Flags().GetString("test")
 
 		inputs, err := collectFiles(dir, runID, fileArgs)
 		if err != nil {
@@ -97,12 +122,21 @@ does not re-authenticate against a different host).`,
 			return err
 		}
 
-		summary, err := uploadReplay(ctx, client, files, dryRun, createMissingTests, backfillLogs, log)
+		opts := replayOptions{
+			DryRun:             dryRun,
+			CreateMissingTests: createMissingTests,
+			BackfillLogs:       backfillLogs,
+			AsMe:               asMe,
+			KeepRun:            keepRun,
+			TestName:           testName,
+		}
+		summary, err := uploadReplay(ctx, client, files, opts, log)
 		if err != nil {
 			return err
 		}
 
-		return renderReplaySummary(cmd, reportFmt, summary)
+		report := replayReport{ReplayIngestSummary: summary, Runs: runLinks(client.BaseURL(), summary.Runs, dryRun)}
+		return renderReplaySummary(cmd, reportFmt, report)
 	},
 }
 
@@ -229,28 +263,58 @@ func replayClient(ctx context.Context, targetURL string) (*api.Client, error) {
 	return client, nil
 }
 
+// replayOptions are the query parameters of one replay-ingest request. A nil
+// CreateMissingTests or AsMe leaves the choice to the server, which turns both
+// on for a replay into the local-runs path. An empty TestName leaves the
+// <test> of local-runs/<user>/<test> to the server.
+type replayOptions struct {
+	DryRun             bool
+	CreateMissingTests *bool
+	BackfillLogs       bool
+	AsMe               *bool
+	KeepRun            bool
+	TestName           string
+}
+
+// optionalBool returns the value of a bool flag the user set, or nil.
+func optionalBool(cmd *cobra.Command, name string) *bool {
+	if !cmd.Flags().Changed(name) {
+		return nil
+	}
+	v, _ := cmd.Flags().GetBool(name)
+	return &v
+}
+
 // uploadReplay streams the tar.zst archive of files to the replay-ingest
 // endpoint and decodes the server's summary response.
 func uploadReplay(
 	ctx context.Context,
 	client *api.Client,
 	files []string,
-	dryRun bool,
-	createMissingTests bool,
-	backfillLogs bool,
+	opts replayOptions,
 	log zerolog.Logger,
 ) (*models.ReplayIngestSummary, error) {
 	route := api.ReplayIngest
 	q := url.Values{}
-	if dryRun {
+	if opts.DryRun {
 		q.Set("dry_run", "true")
 	}
-	if createMissingTests {
-		q.Set("create_missing_tests", "true")
+	if opts.CreateMissingTests != nil {
+		q.Set("create_missing_tests", strconv.FormatBool(*opts.CreateMissingTests))
 	}
 	// Backfill is on by default server-side; only send the param to disable it.
-	if !backfillLogs {
+	if !opts.BackfillLogs {
 		q.Set("backfill_logs", "false")
+	}
+	if opts.AsMe != nil {
+		q.Set("as_me", strconv.FormatBool(*opts.AsMe))
+	}
+	// The CLI asks for the local-runs default unless the user keeps the run.
+	if !opts.KeepRun {
+		q.Set("local_runs", "true")
+	}
+	if opts.TestName != "" {
+		q.Set("test_name", opts.TestName)
 	}
 	if encoded := q.Encode(); encoded != "" {
 		route += "?" + encoded
@@ -321,12 +385,65 @@ func uploadReplay(
 	return &summary, nil
 }
 
-// renderReplaySummary writes the summary either as JSON (--report json or the
-// default JSON output mode) or as a human-readable one-liner plus, when
-// non-empty, an errors table.
-func renderReplaySummary(cmd *cobra.Command, reportFmt string, summary *models.ReplayIngestSummary) error {
-	ctx := cmd.Context()
-	out := OutputterFrom(ctx)
+// replayRunLink is the Argus web link of one run that the replay touched.
+type replayRunLink struct {
+	Type        string `json:"type"`
+	ID          string `json:"id"`
+	BuildID     string `json:"build_id,omitempty"`
+	BuildNumber *int   `json:"build_number,omitempty"`
+	Failed      bool   `json:"failed"`
+	URL         string `json:"url,omitempty"`
+}
+
+// replayReport is the server summary plus the links of the replayed runs.
+type replayReport struct {
+	*models.ReplayIngestSummary
+	Runs []replayRunLink `json:"runs"`
+}
+
+// runLinks pairs each run with its Argus link. A dry run and a run whose
+// submit_run failed get no link, because the run may not exist.
+func runLinks(base string, runs []models.ReplayRun, dryRun bool) []replayRunLink {
+	links := make([]replayRunLink, 0, len(runs))
+	for _, r := range runs {
+		link := replayRunLink{
+			Type:        r.Type,
+			ID:          r.ID,
+			BuildID:     r.BuildID,
+			BuildNumber: r.BuildNumber,
+			Failed:      r.Failed,
+		}
+		if !dryRun && !r.Failed {
+			link.URL = api.RunPageURL(base, r.Type, r.ID)
+		}
+		links = append(links, link)
+	}
+	return links
+}
+
+// runLine is the text line of one run: the run ID, the build, and the link. A dry run names the build that the run would become.
+func runLine(r replayRunLink) string {
+	build := ""
+	if r.BuildID != "" && r.BuildNumber != nil {
+		build = fmt.Sprintf(" (%s#%d)", r.BuildID, *r.BuildNumber)
+	}
+	switch {
+	case r.Failed:
+		return fmt.Sprintf("Run %s%s failed: see the errors below", r.ID, build)
+	case r.URL == "" && build != "":
+		return fmt.Sprintf("Run %s would replay as%s", r.ID, build)
+	case r.URL == "":
+		return ""
+	default:
+		return fmt.Sprintf("Run %s%s: %s", r.ID, build, r.URL)
+	}
+}
+
+// renderReplaySummary writes the report either as JSON (--report json or the
+// default JSON output mode) or as a human-readable one-liner, the link of
+// each replayed run and, when non-empty, an errors table.
+func renderReplaySummary(cmd *cobra.Command, reportFmt string, report replayReport) error {
+	summary := report.ReplayIngestSummary
 
 	switch strings.ToLower(reportFmt) {
 	case "", "text":
@@ -334,6 +451,11 @@ func renderReplaySummary(cmd *cobra.Command, reportFmt string, summary *models.R
 			"Replay summary: total=%d processed=%d succeeded=%d failed=%d skipped=%d backfilled_logs=%d\n",
 			summary.Total, summary.Processed, summary.Succeeded, summary.Failed, summary.SkippedNoReplay, summary.BackfilledLogs,
 		)
+		for _, r := range report.Runs {
+			if line := runLine(r); line != "" {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), line)
+			}
+		}
 		if len(summary.Errors) == 0 {
 			return nil
 		}
@@ -341,7 +463,7 @@ func renderReplaySummary(cmd *cobra.Command, reportFmt string, summary *models.R
 		text := output.New(cmd.OutOrStdout(), true)
 		return text.Write(models.NewTabularSlice(summary.Errors))
 	case "json":
-		return out.Write(summary)
+		return OutputterFrom(cmd.Context()).Write(report)
 	default:
 		return fmt.Errorf("--report: unknown format %q (expected \"text\" or \"json\")", reportFmt)
 	}
@@ -355,19 +477,28 @@ func init() {
 	replayCmd.Flags().Bool("create-missing-tests", false,
 		"Ask the server to auto-create ArgusRelease/Group/Test rows for build_ids "+
 			"that have no curated test entity yet (parsed from build_id as release/group/test). "+
-			"When false (default), submit_run records whose test entity does not yet exist "+
+			"When false, submit_run records whose test entity does not yet exist "+
 			"are reported as failures naming the would-be release/group/test and which level "+
-			"is missing -- rather than silently inserting a broken run with empty test_id.")
+			"is missing -- rather than silently inserting a broken run with empty test_id. "+
+			"Default: on for the local-runs path, off otherwise.")
 	replayCmd.Flags().Bool("backfill-logs", true,
 		"After replaying, have the server list each run's S3 log prefix and submit links "+
 			"for any log archives that were uploaded but whose logs/submit was never recorded "+
 			"(e.g. loader/monitor/sct-runner bundles). Uses the server's existing read-only S3 "+
 			"credentials; idempotent. On by default; pass --backfill-logs=false to disable. "+
 			"Ignored with --dry-run.")
+	replayCmd.Flags().Bool("keep-run", false,
+		"Replay a local run under its recorded path, in place of the local-runs default")
+	replayCmd.Flags().String("test", "",
+		"Name the <test> of local-runs/<your username>/<test> for a local run, in place of its first SCT config file")
+	replayCmd.Flags().Bool("as-me", false,
+		"Make your Argus user the assignee and the starter of every new run. For a run that keeps "+
+			"its recorded path, only the assignee changes. Default: on for the local-runs path, off otherwise.")
 	replayCmd.Flags().String("target-url", "", "Override the base URL (replay against a different Argus instance)")
 	replayCmd.Flags().String("report", "text", `Output format: "text" or "json"`)
 
 	replayCmd.MarkFlagsMutuallyExclusive("dir", "file")
+	replayCmd.MarkFlagsMutuallyExclusive("keep-run", "test")
 
 	runCmd.AddCommand(replayCmd)
 }

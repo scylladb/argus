@@ -22,6 +22,12 @@ from argus.backend.controller import replay_api
 from argus.backend.error_handlers import APIException, api_exception_handler
 from argus.backend.models.web import User
 from argus.backend.service.user import load_user
+from argus.backend.util.config import Config
+
+
+@pytest.fixture(autouse=True)
+def web_config(monkeypatch):
+    monkeypatch.setattr(Config, "CONFIG", {"BASE_URL": "https://argus.example.com"})
 
 
 @pytest.fixture
@@ -150,3 +156,55 @@ def test_replay_ingest_forwards_service_error_through_handler(client):
     assert response.json()["status"] == "error"
     assert response.json()["response"]["exception"] == "ReplayServiceError"
     assert "Failed to decode archive" in response.json()["response"]["message"]
+
+
+def _service_kwargs(client, query: str) -> dict:
+    with patch(
+        "argus.backend.controller.replay_api.ReplayService"
+    ) as mock_service_cls:
+        instance = mock_service_cls.return_value
+        instance.ingest = AsyncMock(return_value=MagicMock())
+        instance.ingest.return_value.as_dict.return_value = {}
+        client.post(
+            f"/api/v1/client/replay/ingest{query}",
+            content=_make_archive([]),
+            headers={"content-type": "application/x-tar-zstd"},
+        )
+        return mock_service_cls.call_args.kwargs
+
+
+def test_replay_ingest_passes_the_caller_and_the_flags(client):
+    kwargs = _service_kwargs(client, "?as_me=false&create_missing_tests=true")
+
+    assert kwargs["caller"].username == "replay-test"
+    assert kwargs["as_me"] is False
+    assert kwargs["create_missing_tests"] is True
+
+
+def test_replay_ingest_leaves_unset_flags_to_the_service(client):
+    kwargs = _service_kwargs(client, "")
+
+    assert kwargs["caller"].username == "replay-test"
+    assert kwargs["as_me"] is None
+    assert kwargs["create_missing_tests"] is None
+    # A client that sends no local_runs gets the replay it always got.
+    assert kwargs["local_runs"] is False
+    assert kwargs["test_name"] is None
+
+
+def test_replay_ingest_passes_local_runs_and_the_argus_url(client):
+    kwargs = _service_kwargs(client, "?local_runs=true&test_name=feature-x")
+
+    assert kwargs["local_runs"] is True
+    assert kwargs["test_name"] == "feature-x"
+    assert kwargs["argus_url"] == "https://argus.example.com"
+
+
+def test_replay_ingest_ignores_the_host_header_without_base_url(client, monkeypatch):
+    monkeypatch.setattr(Config, "CONFIG", {"SCYLLA_KEYSPACE_NAME": "argus"})
+
+    kwargs = _service_kwargs(client, "?local_runs=true")
+
+    # A build URL from the request would trust the Host header. The service
+    # refuses the local-runs path without BASE_URL.
+    assert kwargs["argus_url"] == ""
