@@ -27,7 +27,6 @@ stays in every plan built from a spec.
   - the last line is `Task: ARGUS-238`
   - no `Co-Authored-By` trailer
   - `git add` by explicit path only
-- Leave the code uncommitted until Komachi reviews it.
 
 ## Task 1 — Run the embedder on onnxruntime, and add a local cosine
 
