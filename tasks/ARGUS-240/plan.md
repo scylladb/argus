@@ -139,7 +139,8 @@ the rest only.
   every route, `SimilarRunsInfoRequest.run_ids: list[UUID]`)
 - Modify: `argus/backend/plugins/sct/service.py` (every method behind
   those routes; `submit_event` takes `UUID`; `get_similar_runs_info` keys
-  its result by `str(run_id)` and dedups on like types)
+  its result by `str(run_id)` and dedups on like types;
+  `submit_performance_results` reads the run metric with `getattr`)
 - Modify: `argus/backend/plugins/sct/testrun.py` (`get_stress_commands`)
 - Test:
   - `argus/backend/tests/sct_api/test_sct_api.py`
@@ -147,16 +148,16 @@ the rest only.
     `argus/backend/tests/sct_events/test_event_embedding_integration.py`
     (pass `UUID` to `submit_event`)
 
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - Gemini submit with `gemini_status: "FAILED"` sets the run FAILED and
     writes the status event
   - performance submit that finds a regression writes its event
   - `similar_runs_info` keys its response by the string IDs
   - `GET /client/sct/<bad>/events/get` returns `RequestValidationError`
-- [ ] Run them and confirm the failures.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failures.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 5 — admin_api, ReleaseManagerService, UserService, tunnel IDs
 

@@ -369,8 +369,8 @@ class SCTTestRun(PluginModelBase):
         return xcloud_details_from_config_params(await self.get_config_params())
 
     @classmethod
-    async def get_stress_commands(cls, run_id: str) -> list[StressCommand]:
-        return await StressCommand.find(run_id=UUID(run_id) if isinstance(run_id, str) else run_id).all()
+    async def get_stress_commands(cls, run_id: UUID) -> list[StressCommand]:
+        return await StressCommand.find(run_id=run_id).all()
 
     async def add_stress_command(self, cmd: str, ts: float, log_name: str, loader_name: str):
         s = StressCommand.model_construct()

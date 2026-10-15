@@ -85,11 +85,11 @@ class SimilarEventRequest(BaseModel):
 
 
 class SimilarRunsInfoRequest(BaseModel):
-    run_ids: list[str]
+    run_ids: list[UUID]
 
 
 @router.post("/{run_id}/packages/submit", name="api.client_api.sct_api.sct_submit_packages")
-async def sct_submit_packages(run_id: str, payload: PackagesSubmitRequest,
+async def sct_submit_packages(run_id: UUID, payload: PackagesSubmitRequest,
                         user: User = Depends(api_current_user)):
     result = await SCTService.submit_packages(run_id=run_id, packages=payload.packages)
     return APIResponse({
@@ -99,7 +99,7 @@ async def sct_submit_packages(run_id: str, payload: PackagesSubmitRequest,
 
 
 @router.post("/{run_id}/screenshots/submit", name="api.client_api.sct_api.sct_submit_screenshots")
-async def sct_submit_screenshots(run_id: str, payload: ScreenshotsSubmitRequest,
+async def sct_submit_screenshots(run_id: UUID, payload: ScreenshotsSubmitRequest,
                            user: User = Depends(api_current_user)):
     result = await SCTService.submit_screenshots(run_id=run_id, screenshot_links=payload.screenshot_links)
     return APIResponse({
@@ -109,7 +109,7 @@ async def sct_submit_screenshots(run_id: str, payload: ScreenshotsSubmitRequest,
 
 
 @router.post("/{run_id}/sct_runner/set", name="api.client_api.sct_api.sct_set_runner")
-async def sct_set_runner(run_id: str, payload: SetRunnerRequest, user: User = Depends(api_current_user)):
+async def sct_set_runner(run_id: UUID, payload: SetRunnerRequest, user: User = Depends(api_current_user)):
     result = await SCTService.set_sct_runner(
         run_id=run_id,
         public_ip=payload.public_ip,
@@ -125,7 +125,7 @@ async def sct_set_runner(run_id: str, payload: SetRunnerRequest, user: User = De
 
 
 @router.get("/{run_id}/resource/all", name="api.client_api.sct_api.sct_resource_all")
-async def sct_resource_all(run_id: str, user: User = Depends(api_current_user)):
+async def sct_resource_all(run_id: UUID, user: User = Depends(api_current_user)):
     result = await SCTService.get_resources(run_id=run_id)
     return APIResponse({
         "status": "ok",
@@ -134,7 +134,7 @@ async def sct_resource_all(run_id: str, user: User = Depends(api_current_user)):
 
 
 @router.get("/{run_id}/resource/{name}/get", name="api.client_api.sct_api.sct_resource_get")
-async def sct_resource_get(run_id: str, name: str, user: User = Depends(api_current_user)):
+async def sct_resource_get(run_id: UUID, name: str, user: User = Depends(api_current_user)):
     result = await SCTService.get_resource(run_id=run_id, name=name)
     return APIResponse({
         "status": "ok",
@@ -143,7 +143,7 @@ async def sct_resource_get(run_id: str, name: str, user: User = Depends(api_curr
 
 
 @router.post("/{run_id}/resource/create", name="api.client_api.sct_api.sct_resource_create")
-async def sct_resource_create(run_id: str, payload: ResourceCreateRequest,
+async def sct_resource_create(run_id: UUID, payload: ResourceCreateRequest,
                         user: User = Depends(api_current_user)):
     result = await SCTService.create_resource(run_id=run_id, resource_details=payload.resource)
     return APIResponse({
@@ -154,7 +154,7 @@ async def sct_resource_create(run_id: str, payload: ResourceCreateRequest,
 
 @router.post("/{run_id}/resource/{resource_name}/terminate",
              name="api.client_api.sct_api.sct_resource_terminate")
-async def sct_resource_terminate(run_id: str, resource_name: str, payload: ResourceTerminateRequest,
+async def sct_resource_terminate(run_id: UUID, resource_name: str, payload: ResourceTerminateRequest,
                            user: User = Depends(api_current_user)):
     result = await SCTService.terminate_resource(run_id=run_id, resource_name=resource_name,
                                                  reason=payload.reason)
@@ -166,7 +166,7 @@ async def sct_resource_terminate(run_id: str, resource_name: str, payload: Resou
 
 @router.post("/{run_id}/resource/{resource_name}/shards",
              name="api.client_api.sct_api.sct_resource_update_shards")
-async def sct_resource_update_shards(run_id: str, resource_name: str, payload: ResourceShardsRequest,
+async def sct_resource_update_shards(run_id: UUID, resource_name: str, payload: ResourceShardsRequest,
                                user: User = Depends(api_current_user)):
     result = await SCTService.update_resource_shards(run_id=run_id, resource_name=resource_name,
                                                      new_shards=payload.shards)
@@ -178,7 +178,7 @@ async def sct_resource_update_shards(run_id: str, resource_name: str, payload: R
 
 @router.post("/{run_id}/resource/{resource_name}/update",
              name="api.client_api.sct_api.sct_resource_update")
-async def sct_resource_update(run_id: str, resource_name: str, payload: ResourceUpdateRequest,
+async def sct_resource_update(run_id: UUID, resource_name: str, payload: ResourceUpdateRequest,
                         user: User = Depends(api_current_user)):
     result = await SCTService.update_resource(run_id=run_id, resource_name=resource_name,
                                               update_data=payload.update_data)
@@ -189,7 +189,7 @@ async def sct_resource_update(run_id: str, resource_name: str, payload: Resource
 
 
 @router.post("/{run_id}/nemesis/submit", name="api.client_api.sct_api.sct_nemesis_submit")
-async def sct_nemesis_submit(run_id: str, payload: NemesisRequest, user: User = Depends(api_current_user)):
+async def sct_nemesis_submit(run_id: UUID, payload: NemesisRequest, user: User = Depends(api_current_user)):
     result = await SCTService.submit_nemesis(run_id=run_id, nemesis_details=payload.nemesis)
     return APIResponse({
         "status": "ok",
@@ -198,7 +198,7 @@ async def sct_nemesis_submit(run_id: str, payload: NemesisRequest, user: User = 
 
 
 @router.get("/{run_id}/nemesis/get", name="api.client_api.sct_api.sct_nemesis_get")
-async def sct_nemesis_get(run_id: str, user: User = Depends(api_current_user)):
+async def sct_nemesis_get(run_id: UUID, user: User = Depends(api_current_user)):
     result = await SCTService.get_nemesis(run_id=run_id)
     return APIResponse({
         "status": "ok",
@@ -207,7 +207,7 @@ async def sct_nemesis_get(run_id: str, user: User = Depends(api_current_user)):
 
 
 @router.post("/{run_id}/nemesis/finalize", name="api.client_api.sct_api.sct_nemesis_finalize")
-async def sct_nemesis_finalize(run_id: str, payload: NemesisRequest, user: User = Depends(api_current_user)):
+async def sct_nemesis_finalize(run_id: UUID, payload: NemesisRequest, user: User = Depends(api_current_user)):
     result = await SCTService.finalize_nemesis(run_id=run_id, nemesis_details=payload.nemesis)
     return APIResponse({
         "status": "ok",
@@ -216,7 +216,7 @@ async def sct_nemesis_finalize(run_id: str, payload: NemesisRequest, user: User 
 
 
 @router.post("/{run_id}/events/submit", name="api.client_api.sct_api.sct_events_submit")
-async def sct_events_submit(run_id: str, payload: EventsSubmitRequest,
+async def sct_events_submit(run_id: UUID, payload: EventsSubmitRequest,
                       user: User = Depends(api_current_user)):
     """
         Legacy endpoint. The payload is accepted and discarded; old clients
@@ -229,7 +229,7 @@ async def sct_events_submit(run_id: str, payload: EventsSubmitRequest,
 
 
 @router.get("/{run_id}/events/get", name="api.client_api.sct_api.sct_events_get")
-async def sct_events_get(run_id: str, limit: int = Query(100), before: str | None = Query(None),
+async def sct_events_get(run_id: UUID, limit: int = Query(100), before: str | None = Query(None),
                    after: str | None = Query(None),
                    severities: list[str] = Query(default=[], alias="severity"),
                    user: User = Depends(api_current_user)):
@@ -242,7 +242,7 @@ async def sct_events_get(run_id: str, limit: int = Query(100), before: str | Non
 
 
 @router.get("/{run_id}/events/{severity}/get", name="api.client_api.sct_api.sct_events_get_by_severity")
-async def sct_events_get_by_severity(run_id: str, severity: SCTEventSeverity, limit: int = Query(100),
+async def sct_events_get_by_severity(run_id: UUID, severity: SCTEventSeverity, limit: int = Query(100),
                                before: str | None = Query(None), after: str | None = Query(None),
                                user: User = Depends(api_current_user)):
     result = await SCTService.get_events(run_id=run_id, limit=limit, before=before, after=after,
@@ -255,7 +255,7 @@ async def sct_events_get_by_severity(run_id: str, severity: SCTEventSeverity, li
 
 @router.get("/{run_id}/events/{severity}/count",
             name="api.client_api.sct_api.sct_events_count_by_severity")
-async def sct_events_count_by_severity(run_id: str, severity: SCTEventSeverity,
+async def sct_events_count_by_severity(run_id: UUID, severity: SCTEventSeverity,
                                  user: User = Depends(api_current_user)):
     result = await SCTService.count_events_by_severity(run_id=run_id, severity=severity)
     return APIResponse({
@@ -265,7 +265,7 @@ async def sct_events_count_by_severity(run_id: str, severity: SCTEventSeverity,
 
 
 @router.post("/{run_id}/event/submit", name="api.client_api.sct_api.sct_event_submit")
-async def sct_event_submit(run_id: str, payload: EventSubmitRequest,
+async def sct_event_submit(run_id: UUID, payload: EventSubmitRequest,
                      user: User = Depends(api_current_user)):
     """
         Submit an event or a collection of events
@@ -280,7 +280,7 @@ async def sct_event_submit(run_id: str, payload: EventSubmitRequest,
 
 
 @router.post("/{run_id}/gemini/submit", name="api.client_api.sct_api.sct_gemini_results_submit")
-async def sct_gemini_results_submit(run_id: str, payload: GeminiResultsRequest,
+async def sct_gemini_results_submit(run_id: UUID, payload: GeminiResultsRequest,
                               user: User = Depends(api_current_user)):
     result = await SCTService.submit_gemini_results(run_id=run_id, gemini_data=payload.gemini_data, user=user)
     return APIResponse({
@@ -291,7 +291,7 @@ async def sct_gemini_results_submit(run_id: str, payload: GeminiResultsRequest,
 
 @router.post("/{run_id}/performance/submit",
              name="api.client_api.sct_api.sct_performance_results_submit")
-async def sct_performance_results_submit(run_id: str, payload: PerformanceResultsRequest,
+async def sct_performance_results_submit(run_id: UUID, payload: PerformanceResultsRequest,
                                    user: User = Depends(api_current_user)):
     result = await SCTService.submit_performance_results(run_id=run_id,
                                                          performance_results=payload.performance_results,
@@ -303,7 +303,7 @@ async def sct_performance_results_submit(run_id: str, payload: PerformanceResult
 
 
 @router.get("/{run_id}/performance/history", name="api.client_api.sct_api.sct_get_performance_history")
-async def sct_get_performance_history(run_id: str, user: User = Depends(api_current_user)):
+async def sct_get_performance_history(run_id: UUID, user: User = Depends(api_current_user)):
     result = await SCTService.get_performance_history_for_test(run_id=run_id)
     return APIResponse({
         "status": "ok",
@@ -321,7 +321,7 @@ async def sct_get_kernel_report(release_name: str, user: User = Depends(api_curr
 
 
 @router.post("/{run_id}/junit/submit", name="api.client_api.sct_api.sct_submit_junit_report")
-async def sct_submit_junit_report(run_id: str, payload: JunitSubmitRequest,
+async def sct_submit_junit_report(run_id: UUID, payload: JunitSubmitRequest,
                             user: User = Depends(api_current_user)):
     result = await SCTService.junit_submit(run_id, payload.file_name, payload.content)
     return APIResponse({
@@ -331,7 +331,7 @@ async def sct_submit_junit_report(run_id: str, payload: JunitSubmitRequest,
 
 
 @router.post("/{run_id}/stress_cmd/submit", name="api.client_api.sct_api.sct_add_stress_cmd")
-async def sct_add_stress_cmd(run_id: str, payload: StressCommandRequest,
+async def sct_add_stress_cmd(run_id: UUID, payload: StressCommandRequest,
                        user: User = Depends(api_current_user)):
     result = await SCTService.add_stress_command(run_id, cmd=payload.cmd, ts=payload.ts,
                                                  loader_name=payload.loader_name, log_name=payload.log_name)
@@ -342,7 +342,7 @@ async def sct_add_stress_cmd(run_id: str, payload: StressCommandRequest,
 
 
 @router.get("/{run_id}/stress_cmd/get", name="api.client_api.sct_api.sct_get_all_stress_cmds")
-async def sct_get_all_stress_cmds(run_id: str, user: User = Depends(api_current_user)):
+async def sct_get_all_stress_cmds(run_id: UUID, user: User = Depends(api_current_user)):
     result = await SCTService.get_stress_commands(run_id)
     return APIResponse({
         "status": "ok",
@@ -351,7 +351,7 @@ async def sct_get_all_stress_cmds(run_id: str, user: User = Depends(api_current_
 
 
 @router.get("/{run_id}/similar_events", name="api.client_api.sct_api.sct_get_similar_events")
-async def sct_get_similar_events(run_id: str, user: User = Depends(api_current_user)):
+async def sct_get_similar_events(run_id: UUID, user: User = Depends(api_current_user)):
     result = await SCTService.get_similar_events(run_id=run_id)
     return APIResponse({
         "status": "ok",
@@ -360,7 +360,7 @@ async def sct_get_similar_events(run_id: str, user: User = Depends(api_current_u
 
 
 @router.post("/{run_id}/event/similar", name="api.client_api.sct_api.sct_get_similar_events_realtime")
-async def sct_get_similar_events_realtime(run_id: str, payload: SimilarEventRequest,
+async def sct_get_similar_events_realtime(run_id: UUID, payload: SimilarEventRequest,
                                     user: User = Depends(api_current_user)):
     """Get similar events for a specific event using real-time vector search"""
     err_message = ""

@@ -47,7 +47,7 @@ async def test_event_to_embedding_flow_should_create_embedding_for_error_event(
         "ts": datetime.now(tz=UTC).timestamp()
     }
 
-    await sct_service.submit_event(str(run_req.run_id), event_data)
+    await sct_service.submit_event(UUID(run_req.run_id), event_data)
 
     # Step 3: Verify event was created in SCTEvent table
     events = await SCTEvent.find(run_id=UUID(str(run_req.run_id)), severity=SCTEventSeverity.ERROR.value).all()
@@ -120,7 +120,7 @@ async def test_event_to_embedding_flow_should_create_embedding_for_critical_even
         "event_type": "NodeFailure"
     }
 
-    await sct_service.submit_event(str(run_req.run_id), event_data)
+    await sct_service.submit_event(UUID(run_req.run_id), event_data)
 
     # Step 3: Verify unprocessed event was created
     unprocessed_events = await SCTUnprocessedEvent.find(
@@ -180,7 +180,7 @@ async def test_event_to_embedding_flow_should_not_create_unprocessed_for_warning
         "event_type": "PerformanceWarning"
     }
 
-    await sct_service.submit_event(str(run_req.run_id), event_data)
+    await sct_service.submit_event(UUID(run_req.run_id), event_data)
 
     # Step 3: Verify event was created in SCTEvent table
     events = await SCTEvent.find(run_id=UUID(str(run_req.run_id)), severity=SCTEventSeverity.WARNING.value).all()
@@ -215,7 +215,7 @@ async def test_event_to_embedding_flow_should_process_multiple_events_into_separ
             "ts": datetime.now(tz=UTC).timestamp() + i,
             "event_type": "DatabaseEvent"
         }
-        await sct_service.submit_event(str(run_req.run_id), event_data)
+        await sct_service.submit_event(UUID(run_req.run_id), event_data)
 
     # Step 3: Submit multiple CRITICAL events
     for i in range(2):
@@ -226,7 +226,7 @@ async def test_event_to_embedding_flow_should_process_multiple_events_into_separ
             "ts": datetime.now(tz=UTC).timestamp() + i + 100,
             "event_type": "CriticalFailure"
         }
-        await sct_service.submit_event(str(run_req.run_id), event_data)
+        await sct_service.submit_event(UUID(run_req.run_id), event_data)
 
     # Step 4: Verify 5 unprocessed events were created
     all_unprocessed = list(await SCTUnprocessedEvent.find(run_id=UUID(str(run_req.run_id))).all())
@@ -300,7 +300,7 @@ async def test_dedup_marks_same_run_twin_despite_large_other_run_population(
     first_ts = datetime.now(tz=UTC).timestamp()
     for offset in (0, 1):
         await sct_service.submit_event(
-            str(run_req.run_id),
+            UUID(run_req.run_id),
             {
                 "message": message,
                 "run_id": run_req.run_id,
@@ -356,7 +356,7 @@ async def test_event_to_embedding_flow_should_handle_processing_errors_gracefull
         "ts": datetime.now(tz=UTC).timestamp(),
         "event_type": "TestEvent"
     }
-    await sct_service.submit_event(str(run_req.run_id), event_data)
+    await sct_service.submit_event(UUID(run_req.run_id), event_data)
 
     # Step 3: Manually create an unprocessed event that points to non-existent event
     fake_run_id = uuid4()
