@@ -452,15 +452,15 @@ The query is a list of words separated by spaces. Every word must match.
 | `type:test` | `release`, `group` or `test` |
 | `status:fail`, `istatus:not` | Tests whose latest status, or latest investigation status, starts with the value, as the release stats show them: `status:fail` finds `failed`, `istatus:not` finds `not_investigated` |
 | `assignee:alice` | Tests whose latest run is assigned to a user whose username or full name contains the value |
-
-`status:`, `istatus:` and `assignee:` read the stats of one release: the one in
-`releaseId`, or the one a `release:` value names exactly. Without one release
-such a query matches nothing. With one, only tests match.
 | `-azure`, `-release:2025.1` | Leaves out what the word or the facet matches |
 | `https://jenkins.example.com/job/a/job/b/` | The test whose build id is `a/b` |
 | A UUID | That release, group, test or run |
 | `issue:SCT-1234` | The runs linked to that Jira issue, newest first, across releases: it ignores `releaseId` |
 | `config:backend=aws` | Runs whose recorded config parameter has that value. `backend` stands for the one parameter whose name ends in `.backend`. Repeating a name matches any of its values; different names must all match. `config:backend` alone asks for the parameter to be set, and needs `issue:` beside it |
+
+`status:`, `istatus:` and `assignee:` read the stats of one release: the one in
+`releaseId`, or the one a `release:` value names exactly. Without one release
+such a query matches nothing. With one, only tests match.
 
 Hits come ranked: an exact name match first, then a name that starts with the
 first word, then a word inside the name. Within each rank, releases come before
