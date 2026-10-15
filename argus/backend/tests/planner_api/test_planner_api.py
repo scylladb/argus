@@ -38,7 +38,7 @@ async def cleanup_plans():
 
 
 def _create_plan(api_client, release, fake_test, name=None, target_version="1.0",
-                 owner=None, tests=None, groups=None):
+                 owner=None, tests=None, groups=None, assignments=None):
     payload = {
         "name": name or f"plan_{uuid.uuid4().hex[:8]}",
         "description": "test plan",
@@ -48,7 +48,7 @@ def _create_plan(api_client, release, fake_test, name=None, target_version="1.0"
         "release_id": str(release.id),
         "tests": [str(t) for t in (tests if tests is not None else [fake_test.id])],
         "groups": [str(gid) for gid in (groups or [])],
-        "assignments": {},
+        "assignments": {str(entity): str(assignee) for entity, assignee in (assignments or {}).items()},
     }
     return api_client.post("/api/v1/planning/plan/create", json=payload).json()
 
@@ -80,6 +80,39 @@ def test_create_plan_duplicate_name_version_errors(api_client, release, fake_tes
     dup = _create_plan(api_client, release, fake_test, name=name, target_version="2.0")
     assert dup["status"] == "error"
     assert "existing plan" in dup["response"]["arguments"][0]
+
+
+def test_create_plan_duplicate_with_assignments_errors(api_client, release, fake_test, cleanup_plans):
+    name = f"plan_{uuid.uuid4().hex[:8]}"
+    assignments = {fake_test.id: g.user.id}
+    first = _create_plan(api_client, release, fake_test, name=name, target_version="2.1", assignments=assignments)
+    assert first["status"] == "ok", first
+
+    response = api_client.post("/api/v1/planning/plan/create", json={
+        "name": name, "description": "test plan", "owner": str(g.user.id), "participants": [],
+        "target_version": "2.1", "release_id": str(release.id), "tests": [str(fake_test.id)], "groups": [],
+        "assignments": {str(fake_test.id): str(g.user.id)},
+    })
+
+    assert response.status_code == 200
+    assert response.json()["response"]["exception"] == "PlannerServiceException"
+    assert "existing plan" in response.json()["response"]["arguments"][0]
+
+
+async def test_copy_plan_onto_its_own_name_and_version_errors(api_client, release, fake_test, cleanup_plans):
+    source = _create_plan(api_client, release, fake_test, assignments={fake_test.id: g.user.id})["response"]
+    plan = api_client.get(f"/api/v1/planning/plan/{source['id']}/get").json()["response"]
+
+    response = api_client.post("/api/v1/planning/plan/copy", json={
+        "plan": plan,
+        "keepParticipants": True,
+        "replacements": {},
+        "targetReleaseId": str(release.id),
+        "targetReleaseName": release.name,
+    })
+
+    assert response.status_code == 200
+    assert response.json()["response"]["exception"] == "PlannerServiceException"
 
 
 def test_get_plan_unknown_id_errors(api_client):

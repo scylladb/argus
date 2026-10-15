@@ -318,3 +318,23 @@ the rest only.
       and, where it applies, an empty optional ID.
 - [x] `docker ps` after the suite shows the other session's containers
       untouched.
+
+## Task 10 — Review fixes
+
+**Files:**
+- Modify: `argus/backend/service/planner_service.py` (the duplicate plan
+  error in `create_plan`, `update_plan` and `copy_plan` carries `existing`
+  only)
+- Modify: `argus/backend/service/testrun.py` (`post_run_comment` resolves the
+  mention IDs to existing users and leaves out the author)
+- Test: `argus/backend/tests/planner_api/test_planner_api.py`,
+  `argus/backend/tests/testrun_api/test_testrun_api.py`
+
+- [x] Write the failing tests: a duplicate plan create with assignments and a
+      copy onto the source name and version return the
+      `PlannerServiceException` envelope, not HTTP 500; a mention of an
+      unknown user ID is dropped and notifies nobody.
+- [x] Run them and confirm the failures.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.

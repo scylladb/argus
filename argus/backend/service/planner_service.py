@@ -181,7 +181,7 @@ class PlanningService:
             name=plan_request.name, target_version=plan_request.target_version).allow_filtering().first()
         if existing:
             raise PlannerServiceException(
-                f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, plan_request)
+                f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing)
 
         plan = ArgusReleasePlan.model_construct()
         plan.name = plan_request.name
@@ -228,7 +228,7 @@ class PlanningService:
             name=plan.name, target_version=plan.target_version).allow_filtering().first()
         if existing and existing.id != plan.id:
             raise PlannerServiceException(
-                f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, plan_request)
+                f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing)
 
         # Apply list diffs (remove first, then add - remove wins over concurrent edits)
         current_tests = list(plan.tests or [])
@@ -420,7 +420,7 @@ class PlanningService:
             name=payload.plan.name, target_version=payload.plan.target_version).allow_filtering().first()
         if existing:
             raise PlannerServiceException(
-                f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, payload)
+                f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing)
 
         original_plan: ArgusReleasePlan = await self._resolve_plan(payload.plan.id)
         target_release: ArgusRelease = await ArgusRelease.get(id=payload.targetReleaseId)
