@@ -113,6 +113,7 @@ def expected_jira_issue(issue: JiraIssue) -> dict:
         "key": issue.key,
         "state": "todo",
         "project": "SCYLLA",
+        "priority": None,
         "permalink": issue.permalink,
         "labels": [],
         "assignees": [],
