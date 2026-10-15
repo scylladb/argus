@@ -96,8 +96,7 @@ class TestRunService:
         runs = await plugin.model.find(build_id=build_id, build_number=build_number).allow_filtering().all()
         return runs[0] if runs else None
 
-    async def get_test_type_for_run(self, run_id: str) -> str:
-        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
+    async def get_test_type_for_run(self, run_id: UUID) -> str:
         runs = await asyncio.gather(*(plugin.model.find_one(id=run_id) for plugin in AVAILABLE_PLUGINS.values()))
         for name, run in zip(AVAILABLE_PLUGINS, runs):
             if run:
@@ -372,16 +371,16 @@ class TestRunService:
     async def get_run_comments(self, run_id: UUID):
         return sorted(await ArgusTestRunComment.find(test_run_id=run_id).all(), key=lambda c: c.posted_at)
 
-    async def post_run_comment(self, test_id: UUID, run_id: UUID, message: str, reactions: dict, mentions: list[str],
+    async def post_run_comment(self, test_id: UUID, run_id: UUID, message: str, reactions: dict, mentions: list[UUID],
                                user: User):
         message_stripped = strip_html_tags(message)
 
-        mentions = set(mentions)
+        mention_ids = set(mentions)
         mentioned_users = await asyncio.gather(
             *(User.exists_by_name(potential_mention.lstrip("@"))
               for potential_mention in re.findall(self.RE_MENTION, message_stripped))
         )
-        mentions.update(mentioned for mentioned in mentioned_users if mentioned and mentioned.id != user.id)
+        mention_ids.update(mentioned.id for mentioned in mentioned_users if mentioned and mentioned.id != user.id)
 
         test: ArgusTest = await ArgusTest.get(id=test_id)
         plugin = self.get_plugin(test.plugin_name)
@@ -390,7 +389,7 @@ class TestRunService:
         comment.test_id = test.id
         comment.message = message_stripped
         comment.reactions = reactions
-        comment.mentions = [m.id for m in mentions]
+        comment.mentions = list(mention_ids)
         comment.test_run_id = run_id
         comment.release_id = release.id
         comment.user_id = user.id
@@ -399,7 +398,7 @@ class TestRunService:
 
         notifications = [
             self.notification_manager.send_notification(
-                receiver=mention.id,
+                receiver=mention_id,
                 sender=comment.user_id,
                 notification_type=ArgusNotificationTypes.Mention,
                 source_type=ArgusNotificationSourceTypes.Comment,
@@ -413,7 +412,7 @@ class TestRunService:
                     "build_number": run.build_number,
                 },
             )
-            for mention in mentions
+            for mention_id in mention_ids
         ]
         await asyncio.gather(
             *notifications,
@@ -440,7 +439,7 @@ class TestRunService:
         return await self.get_run_comments(run_id=run_id)
 
     async def update_run_comment(self, comment_id: UUID, test_id: UUID, run_id: UUID, message: str,
-                                 mentions: list[str], reactions: dict, user: User):
+                                 mentions: list[UUID], reactions: dict, user: User):
         comment: ArgusTestRunComment = await ArgusTestRunComment.get(id=comment_id)
         if comment.user_id != user.id:
             raise Exception("Unable to edit other user comments")
