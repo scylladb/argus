@@ -340,12 +340,12 @@ Steps:
 **Files:** none.
 
 Steps:
-- [ ] Run `uv run python -m argus.backend.cli sync-models` against the dev
+- [x] Run `uv run python -m argus.backend.cli sync-models` against the dev
   database, then confirm with `cqlsh` that `jira_issue` has a `priority`
   column.
-- [ ] Run the backfill with `--key` on one stored key, then without it.
+- [x] Run the backfill with `--key` on one stored key, then without it.
   Confirm the counts, and that a re-run finds no row to update.
-- [ ] Start the app, `uv run uvicorn --factory argus_backend:create_app --port 5000`,
+- [x] Start the app, `uv run uvicorn --factory argus_backend:create_app --port 5000`,
   and drive it with headless Chrome. Check the issue tab of a run, the release
   dashboard and an issue view widget:
   - The priority badges show.
@@ -353,10 +353,10 @@ Steps:
   - The "All Labels" panel lists the labels and filters.
   - "By priority" orders the issues.
   - The "Runs" link opens `/issues/<KEY>`, and that page shows no "Runs" link.
-- [ ] In headless Chrome, check that Jira labels of one scope share a color
+- [x] In headless Chrome, check that Jira labels of one scope share a color
   family on the issue tab and in the "All Labels" panel, and that the label
   text reads in the light and the dark theme.
-- [ ] Link a Jira issue of type Task to a dev run, and confirm that its priority
+- [x] Link a Jira issue of type Task to a dev run, and confirm that its priority
   shows. A Task leaves the Seen Again Counter untouched, so the check writes
   nothing to Jira.
 - [ ] Run `refresh-issues`, and confirm that it keeps the priorities.
