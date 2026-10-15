@@ -48,6 +48,14 @@ var (
 	// ErrExpired is returned when an entry exists but has passed its TTL.
 	// The caller can decide whether to re-fetch or surface stale data.
 	ErrExpired = errors.New("cache: entry expired")
+
+	// ErrInvalidKey is returned for a key that does not name a directory
+	// inside the cache root. The root itself is not an entry.
+	ErrInvalidKey = errors.New("cache: key leaves the cache root")
+
+	// ErrDisabled is returned by [Cache.EntryDir] when the cache is in
+	// pass-through mode.
+	ErrDisabled = errors.New("cache: disabled")
 )
 
 // Meta is the metadata written alongside each cached data file.
@@ -87,11 +95,12 @@ type Cache struct {
 
 // New returns a [Cache] rooted at baseDir/cache.
 // baseDir should be the application XDG cache directory
-// (e.g. the value returned by config.CacheDir()).
+// (e.g. the value returned by config.CacheDir()). An empty baseDir gives a
+// cache with no root, which reads, writes and removes nothing.
 func New(baseDir string, opts ...Option) *Cache {
-	c := &Cache{
-		baseDir:    filepath.Join(baseDir, "cache"),
-		defaultTTL: DefaultTTL,
+	c := &Cache{defaultTTL: DefaultTTL}
+	if baseDir != "" {
+		c.baseDir = filepath.Join(baseDir, "cache")
 	}
 	for _, o := range opts {
 		o(c)
@@ -99,15 +108,32 @@ func New(baseDir string, opts ...Option) *Cache {
 	return c
 }
 
-// Disabled reports whether the cache is in pass-through mode.
-// Safe to call on a nil receiver.
+// Disabled reports whether the cache is in pass-through mode, which a cache
+// with no root always is. Safe to call on a nil receiver.
 func (c *Cache) Disabled() bool {
-	return c == nil || c.disabled
+	return c == nil || c.disabled || c.baseDir == ""
 }
 
 // Dir returns the root directory that stores all cache entries.
 func (c *Cache) Dir() string {
 	return c.baseDir
+}
+
+// EntryDir returns the directory that holds the entry for key. A file placed
+// there belongs to the entry: [Cache.Stats] counts it, and [Cache.Invalidate],
+// [Cache.PurgeExpired] and [Cache.Clear] remove it with the entry.
+//
+// Returns [ErrDisabled] for a cache in pass-through mode and [ErrInvalidKey]
+// for a key that would leave the cache root.
+func (c *Cache) EntryDir(key string) (string, error) {
+	if c.Disabled() {
+		return "", ErrDisabled
+	}
+	rel := filepath.FromSlash(key)
+	if !filepath.IsLocal(rel) || filepath.Clean(rel) == "." {
+		return "", fmt.Errorf("%w: %q", ErrInvalidKey, key)
+	}
+	return filepath.Join(c.baseDir, rel), nil
 }
 
 // Get retrieves a cached value stored under key and unmarshals it into T.
@@ -116,13 +142,17 @@ func (c *Cache) Dir() string {
 //   - (value, meta, nil)        on a valid cache hit
 //   - (zero, meta, ErrExpired)  when the entry exists but its TTL has passed
 //   - (zero, Meta{}, ErrCacheMiss) when no entry exists at key
+//   - (zero, Meta{}, ErrInvalidKey) when key would leave the cache root
 func Get[T any](c *Cache, key string) (T, Meta, error) {
 	var zero T
 	if c.Disabled() {
 		return zero, Meta{}, ErrCacheMiss
 	}
 
-	dir := filepath.Join(c.baseDir, filepath.FromSlash(key))
+	dir, err := c.EntryDir(key)
+	if err != nil {
+		return zero, Meta{}, err
+	}
 
 	metaBytes, err := os.ReadFile(filepath.Join(dir, "meta.json"))
 	if err != nil {
@@ -174,7 +204,10 @@ func Set[T any](c *Cache, key string, value T, sourceURL string, ttl time.Durati
 		ttl = c.defaultTTL
 	}
 
-	dir := filepath.Join(c.baseDir, filepath.FromSlash(key))
+	dir, err := c.EntryDir(key)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("cache: creating directory for %q: %w", key, err)
 	}
@@ -203,7 +236,10 @@ func (c *Cache) Invalidate(key string) error {
 	if c.Disabled() {
 		return nil
 	}
-	dir := filepath.Join(c.baseDir, filepath.FromSlash(key))
+	dir, err := c.EntryDir(key)
+	if err != nil {
+		return err
+	}
 	if err := os.RemoveAll(dir); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("cache: invalidating %q: %w", key, err)
 	}
@@ -211,9 +247,10 @@ func (c *Cache) Invalidate(key string) error {
 }
 
 // PurgeExpired walks the cache and removes every entry whose TTL has passed.
-// It is safe to call concurrently with [Get] and [Set] — each removal is an
-// atomic directory delete. Errors on individual entries are skipped so that
-// one corrupt file does not abort the whole sweep.
+// It is safe to call concurrently with [Get] and [Set]: an entry loses its
+// meta.json last, so a half-removed entry still reads as expired. Errors on
+// individual entries are skipped so that one corrupt file does not abort the
+// whole sweep.
 // Returns the number of entries removed.
 func (c *Cache) PurgeExpired() int {
 	if c.Disabled() {
@@ -225,17 +262,36 @@ func (c *Cache) PurgeExpired() int {
 		if err := json.Unmarshal(rawMeta, &meta); err != nil || !meta.IsExpired() {
 			return
 		}
-		if err := os.RemoveAll(entryDir); err == nil {
+		if err := removeEntry(entryDir); err == nil {
 			removed++
 		}
 	})
 	return removed
 }
 
-// Clear removes every entry from the cache.
+// removeEntry removes an entry directory with its meta.json last. The purge
+// dies with the process, so a removal cut short leaves an entry that the next
+// purge still finds.
+func removeEntry(dir string) error {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, f := range files {
+		if f.Name() == "meta.json" {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(dir, f.Name())); err != nil {
+			return err
+		}
+	}
+	return os.RemoveAll(dir)
+}
+
+// Clear removes every entry from the cache, in pass-through mode too.
 // It is not an error if the cache directory does not exist.
 func (c *Cache) Clear() error {
-	if c == nil {
+	if c == nil || c.baseDir == "" {
 		return nil
 	}
 	entries, err := os.ReadDir(c.baseDir)
@@ -257,7 +313,7 @@ func (c *Cache) Clear() error {
 // Stats walks the cache directory tree and returns aggregate information
 // suitable for the `argus cache info` command.
 func (c *Cache) Stats() (Stats, error) {
-	if c == nil {
+	if c == nil || c.baseDir == "" {
 		return Stats{Categories: make(map[string]CategoryStats)}, nil
 	}
 	s := Stats{Dir: c.baseDir, Categories: make(map[string]CategoryStats)}
@@ -272,8 +328,12 @@ func (c *Cache) Stats() (Stats, error) {
 			s.Expired++
 		}
 
-		for _, name := range []string{"data.json", "meta.json"} {
-			if fi, err := os.Stat(filepath.Join(entryDir, name)); err == nil {
+		files, _ := os.ReadDir(entryDir)
+		for _, f := range files {
+			if !f.Type().IsRegular() {
+				continue
+			}
+			if fi, err := f.Info(); err == nil {
 				cat.Bytes += fi.Size()
 				s.TotalBytes += fi.Size()
 			}

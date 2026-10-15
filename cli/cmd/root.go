@@ -141,21 +141,7 @@ var rootCmd = &cobra.Command{
 		ctx = contextWithConfig(ctx, cfg)
 
 		// ---- cache ---------------------------------------------------
-		cacheOpts := []cache.Option{
-			cache.WithDisabled(noCache),
-		}
-		if cacheTTL != "" {
-			if d, parseErr := time.ParseDuration(cacheTTL); parseErr == nil {
-				cacheOpts = append(cacheOpts, cache.WithDefaultTTL(d))
-			} else {
-				logger.Warn().Str("cache_ttl", cacheTTL).Msg("ignoring invalid --cache-ttl value; expected a Go duration (e.g. 10m, 1h)")
-			}
-		}
-		cacheDir := config.CacheDir()
-		if noCache {
-			cacheDir = ""
-		}
-		c := cache.New(cacheDir, cacheOpts...)
+		c := newCache(noCache, cacheTTL, logger)
 		ctx = contextWithCache(ctx, c)
 		logger.Debug().Bool("disabled", noCache).Str("dir", c.Dir()).Msg("cache initialised")
 		go func() {
@@ -176,6 +162,21 @@ var rootCmd = &cobra.Command{
 		cmd.SetContext(ctx)
 		return nil
 	},
+}
+
+// newCache builds the response cache under config.CacheDir(). noCache puts it
+// in pass-through mode and keeps its root, so the cache commands still act on
+// the real cache.
+func newCache(noCache bool, cacheTTL string, logger zerolog.Logger) *cache.Cache {
+	opts := []cache.Option{cache.WithDisabled(noCache)}
+	if cacheTTL != "" {
+		if d, err := time.ParseDuration(cacheTTL); err == nil {
+			opts = append(opts, cache.WithDefaultTTL(d))
+		} else {
+			logger.Warn().Str("cache_ttl", cacheTTL).Msg("ignoring invalid --cache-ttl value; expected a Go duration (e.g. 10m, 1h)")
+		}
+	}
+	return cache.New(config.CacheDir(), opts...)
 }
 
 // buildAPIClientRaw constructs an [api.Client] using credentials from the

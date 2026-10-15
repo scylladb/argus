@@ -20,6 +20,7 @@ cache directory, organised by resource type so you can browse them directly:
   ├── runs/scylla-cluster-tests/<run-id>/data.json
   ├── activity/<run-id>/data.json
   ├── comments/run/<run-id>/data.json
+  ├── prometheus-logs/<run-id>/monitor-set-*.tar.zst
   └── …`,
 }
 
