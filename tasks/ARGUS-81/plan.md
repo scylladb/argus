@@ -30,9 +30,8 @@ stays in every plan built from a spec.
 - Commit subjects are `feature(<scope>): …`, `fix(<scope>): …` or
   `docs(<scope>): …`, with `Task: ARGUS-81` as the last line and no co-author
   trailer.
-- The code stays uncommitted until Komachi has reviewed it. After the review,
-  the docs go in their own commits and the code in one commit per scope, as
-  Komachi chose; each task's last box names the commits that hold it.
+- The docs go in their own commits and the code in one commit per scope; each
+  task's last box names the commits that hold it.
 - Verify sequence, from `CLAUDE.md`:
   1. `uv run pre-commit run --all-files`
   2. `uv run pytest`
@@ -82,7 +81,7 @@ stays in every plan built from a spec.
 - [x] Write the smallest change that passes them.
 - [x] Run `uv run python -m argus.backend.cli sync-models` against the dev DB.
 - [x] Run the verify sequence.
-- [x] Committed in 7e9fd00d `feature(release)`.
+- [x] Committed in 67ca3276 `feature(release)`.
 
 ## Task 2 — Search index, query parser and paged search
 
@@ -177,7 +176,7 @@ stays in every plan built from a spec.
 - [x] Update the CLI help text: quoted facet values, AND terms, `-` exclusion, job paths and URLs, entity UUIDs.
 - [x] Time the search against the dev DB, cold and warm, for `longevity-50gb` and `-` with `limit=30`, and note the numbers for the PR body.
 - [ ] Run the verify sequence, the CLI commands included. Open: golangci-lint is not installed here, so `make lint` did not run; gofmt, `go vet` and `go test -race` pass.
-- [x] Committed in cda3f21d `feature(search)` and 414e922a `improvement(cli/search)`.
+- [x] Committed in a9327d4f `feature(search)` and 7259b507 `improvement(cli/search)`.
 
 ## Task 3 — Release stats summary route
 
@@ -213,7 +212,7 @@ stays in every plan built from a spec.
 - [x] Write the smallest change that passes them.
 - [x] Compare the bytes of `stats/v2` and `stats/summary` for scylla-master on the dev DB, and time a cold summary with `force=1`.
 - [x] Run the verify sequence.
-- [x] Committed in 976b4163 `feature(stats)`.
+- [x] Committed in 40ab297b `feature(stats)`.
 
 ## Task 4 — Sidebar state, sort and status summary
 
@@ -284,7 +283,7 @@ stays in every plan built from a spec.
 - [x] Run them and confirm the failure.
 - [x] Write the smallest change that passes them.
 - [x] Run the verify sequence.
-- [x] Committed in e52823a9 `feature(workspace)`.
+- [x] Committed in 2c05b66c `feature(workspace)`.
 
 ## Task 5 — Sidebar components, drawer, and the panel without search
 
@@ -414,7 +413,7 @@ stays in every plan built from a spec.
   - `scrollWidth === innerWidth` on mobile;
   - no 1970 dates.
 - [x] Run the verify sequence.
-- [x] Committed in e52823a9 `feature(workspace)`.
+- [x] Committed in 2c05b66c `feature(workspace)`.
 
 ## Task 6 — Release pins and multi-pick search
 
@@ -456,7 +455,7 @@ stays in every plan built from a spec.
 - [x] Write the smallest change that passes them.
 - [x] Check in headless Chrome: pins move to the top and persist, two keyboard picks open two tests on desktop and in the mobile drawer, and the runs panel height stays put while a release loads.
 - [x] Run the verify sequence.
-- [x] Committed in e52823a9 `feature(workspace)`.
+- [x] Committed in 2c05b66c `feature(workspace)`.
 
 ## Task 7 — The status facet and status indicators in search
 
@@ -498,7 +497,7 @@ stays in every plan built from a spec.
 - [x] Write the smallest change that passes them.
 - [x] Update the CLI help text and the `api_usage.md` query table.
 - [x] Run the verify sequence.
-- [x] Committed in cda3f21d `feature(search)`, 414e922a `improvement(cli/search)` and e52823a9 `feature(workspace)`.
+- [x] Committed in a9327d4f `feature(search)`, 7259b507 `improvement(cli/search)` and 2c05b66c `feature(workspace)`.
 
 ## Task 8 — The issue facet
 
@@ -526,7 +525,7 @@ stays in every plan built from a spec.
 - [x] Write the smallest change that passes them.
 - [x] Check `issue:SCT-717` on the dev data through the CLI and the sidebar: two runs of one test open together, and picking each again closes it, the last one with its test.
 - [x] Run the verify sequence.
-- [x] Committed in 5d79b54a `feature(search)`, c4a9be50 `improvement(cli/search)`, 62c80e4e `improvement(workspace)` and fa5e0a4b `docs(api-usage)`.
+- [x] Committed in ebc16a12 `feature(search)`, bcd2b970 `improvement(cli/search)`, ec4a3c51 `improvement(workspace)` and f814a91d `docs(api-usage)`.
 
 ## Task 9 — The config facet and facets over runs
 
@@ -561,7 +560,7 @@ stays in every plan built from a spec.
 - [x] Write the smallest change that passes them.
 - [x] Check `config:backend=gce` and its combinations on the dev data through the CLI and the sidebar.
 - [x] Run the verify sequence.
-- [x] Committed in 2c8193ff `feature(search)`, 514c66ac `improvement(cli/search)`, 4b5d50c6 `improvement(workspace)` and 8c54aab0 `docs(api-usage)`.
+- [x] Committed in c0d04946 `feature(search)`, f1acd94c `improvement(cli/search)`, f1fd1162 `improvement(workspace)` and 147cfbd0 `docs(api-usage)`.
 
 ## Task 10 — Review fixes
 
@@ -612,7 +611,7 @@ stays in every plan built from a spec.
 - [x] Measure the capped query on the dev server: 24 values in 0.36 s, and a release list answered meanwhile in 0.16 s; 700 values are refused.
 - [x] Check in Chrome: a second run picked into an open test appears at once; the scope chip returns after navigating.
 - [x] Run the verify sequence.
-- [x] Committed in 0978840b `fix(stats)`, a8329e3a `fix(release)`, 47df2002 `fix(search)`, 94545e08 `improvement(cli/search)`, e85997aa `fix(workspace)`, and 14e35c9f `docs(api-usage)`.
+- [x] Committed in 8aa46acb `fix(stats)`, 16d87e10 `fix(release)`, bf031137 `fix(search)`, c2c2089c `improvement(cli/search)`, 641a5dbd `fix(workspace)`, and e30a6c6f `docs(api-usage)`.
 
 ## Task 11 — Pull request review comments
 
@@ -633,7 +632,7 @@ stays in every plan built from a spec.
 - [x] Write the smallest change that passes them.
 - [x] Check in Chrome: pick run #8 from `issue:SCT-717`, go back, reopen the test from the sidebar; #8 is gone.
 - [x] Run the verify sequence.
-- [x] Committed in 788b626a and bbc26e3c `fix(workspace)`.
+- [x] Committed in e261cae9 and 6fede3f9 `fix(workspace)`.
 
 ## Task 12 — Documentation
 
@@ -644,10 +643,63 @@ stays in every plan built from a spec.
 
 - [x] Write the entries in the style of the existing `api_usage.md` sections.
 - [x] Run `uv run pre-commit run --all-files`.
-- [x] Committed in 3298a936 `docs(api-usage)`.
+- [x] Committed in d53c34a4 `docs(api-usage)`.
 
 The PR body lists these:
 - An admin sets `priority` on scylla-master and scylla-staging after the deploy.
 - The `/test_runs` breakout page loses its search box.
 - The `/releases` page changes order.
 - The search and stats measurements.
+
+## Task 13 — Staging review: hidden releases
+
+**Files:**
+- Modify:
+  - `frontend/WorkArea/Sidebar/sidebarState.svelte.ts`
+  - `frontend/WorkArea/Sidebar/Sidebar.svelte`
+  - `frontend/WorkArea/Sidebar/SidebarRow.svelte`
+- Test: `frontend/WorkArea/Sidebar/sidebarState.test.ts`, `frontend/WorkArea/Sidebar/Sidebar.test.ts`
+
+**Internals:**
+- **`SidebarState.hidden`:** a `SvelteSet` read from
+  `localStorage["argus-workspace-hidden-releases"]` (`HIDDEN_KEY`), through
+  the same read and write helpers as the pins. `toggleHidden(release)` writes
+  it back, and queues the stats of an unhidden release that is pinned or has a
+  priority. `showHidden` is page state. `loadEager` skips hidden releases.
+- **`Sidebar`:** the release list filters out hidden releases unless
+  `showHidden` is on. A header button at the release list, shown while
+  `hiddenCount > 0`, toggles `showHidden` with `aria-pressed`, and turns it off
+  when the last release is unhidden. Hiding a row focuses the next row, picked
+  before the list changes.
+- **`SidebarRow`:** `hidden` and `onToggleHidden` add a hide toggle after the
+  pin. A hidden row shown through `showHidden` is muted.
+
+- [x] Write the failing tests: hidden releases persisted and unhidden, no eager stats for a hidden release, the hide toggle and the show-hidden button in the list, focus on the next row after hiding.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Check in headless Chrome: hiding two releases, showing them muted, the stored ids, and focus on the next row.
+- [x] Run the verify sequence.
+- [x] Committed in 0a13ad15 `feature(workspace)` and 3bcc8962 `docs(api-usage)`.
+
+## Task 14 — Staging feedback: no hover fetch, steady rows
+
+**Files:**
+- Modify:
+  - `frontend/WorkArea/Sidebar/sidebarState.svelte.ts`
+  - `frontend/WorkArea/Sidebar/Sidebar.svelte`
+  - `frontend/WorkArea/Sidebar/SidebarRow.svelte`
+- Test: `frontend/WorkArea/Sidebar/sidebarState.test.ts`
+
+**Internals:**
+- **Prefetch:** `SidebarState.prefetch`, `cancelPrefetch` and `PREFETCH_DELAY`
+  go, with the row's `onHover` prop and its pointer and focus handlers.
+  `loadEager`, a pin and an opened release still load stats.
+- **`SidebarRow`:** one `detail-line` under the name holds the last run date,
+  the status bar, the spinner or the error. Its `min-height` is one line of
+  small text, so every row has the height of a row with its stats loaded.
+
+- [x] Drop the prefetch tests.
+- [x] Write the smallest change that removes the prefetch and reserves the line.
+- [x] Check in headless Chrome: every release row is 65 px, group rows keep their height while the stats load, and hovering or tabbing through release rows sends no stats request.
+- [x] Run the verify sequence.
+- [x] Committed in 7005108c and 1374ab08 `improvement(workspace)`.
