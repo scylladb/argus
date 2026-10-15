@@ -313,8 +313,8 @@ the rest only.
 
 ## Task 9 — Smoke on dev data
 
-- [ ] An authenticated TestClient over `create_app()` with the dev config
+- [x] An authenticated TestClient over `create_app()` with the dev config
       calls one retyped route per router, with a valid ID, a malformed ID
       and, where it applies, an empty optional ID.
-- [ ] `docker ps` after the suite shows the other session's containers
+- [x] `docker ps` after the suite shows the other session's containers
       untouched.
