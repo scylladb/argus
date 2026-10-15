@@ -158,6 +158,8 @@ Steps:
 **Internals:**
 - Remove `stateFilter`, the state check in `shouldFilterByState`, and the
   Open and Closed switches. Keep the "Descending order" switch.
+- Remove the `StateFilter` type from `IssueTypes.ts`, together with its
+  re-export and its import in `Issues.svelte`.
 - Add `type FilterGroup = "state" | "priority" | "project"`.
 - Add `const NO_PRIORITY = "none"`.
 - Add `const excluded: Record<FilterGroup, Record<string, boolean>> = $state({ state: {}, priority: {}, project: {} })`.
@@ -175,7 +177,8 @@ Steps:
 - Rendering:
   - Write `{#snippet filterGroup(title, group, values)}` as a row with a small
     label and one `form-check form-check-inline` checkbox per value. Each
-    checkbox has a unique `id`, which is `issueFilter-{group}-{index}`, plus
+    checkbox has the `id` `{uid}-{group}-{index}`, where `uid = $props.id()`
+    keeps the ids apart when a page holds two widgets, plus
     `checked={!excluded[group][value]}` and `onchange`.
   - Render Status always.
   - Render Priority and Space only when `jiraIssues.length > 0`.
@@ -183,7 +186,7 @@ Steps:
   when a box changes.
 
 Steps:
-- [ ] Write the failing tests in `Issues.test.ts`:
+- [x] Write the failing tests in `Issues.test.ts`:
   - The issues are one GitHub `open`, one GitHub `closed`, a Jira `to do` P1
     in SCT, a Jira `in progress` P0 in SCYLLADB, and a Jira `done` with no
     priority in SCT.
@@ -196,10 +199,10 @@ Steps:
   - Unchecking `SCT` hides both SCT issues and keeps both GitHub issues.
   - Unchecking `none` hides the issue without a priority.
   - With GitHub issues only, no Priority group and no Space group render.
-- [ ] Run `yarn test` and confirm that the new tests fail.
-- [ ] Make the changes.
-- [ ] Run the verify sequence and `yarn build`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run `yarn test` and confirm that the new tests fail.
+- [x] Make the changes.
+- [x] Run the verify sequence and `yarn build`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 5 — Fill the "All Labels" panel
 

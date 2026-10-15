@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/svelte";
+import { render, screen, cleanup, waitFor, within, fireEvent } from "@testing-library/svelte";
 import { tick } from "svelte";
 
 // AlertStore and child-component stores must be mocked before the component
@@ -15,6 +15,7 @@ vi.mock("../Stores/UserlistSubscriber.js", () => ({
 }));
 
 import Issues from "./Issues.svelte";
+import type { GithubSubtype, JiraSubtype } from "../Common/IssueTypes";
 
 // ---------------------------------------------------------------------------
 // Module-level fixtures
@@ -178,5 +179,129 @@ describe("Issues.svelte — productVersion filtering", () => {
     it("shows generic empty-state when productVersion is not set", async () => {
         renderIssues();
         await waitFor(() => expect(screen.getByText("No issues found.")).toBeTruthy());
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Checkbox filters over fetched issues
+// ---------------------------------------------------------------------------
+
+const githubIssue = (number: number, title: string, state: "open" | "closed", extra: Partial<GithubSubtype> = {}): GithubSubtype => ({
+    subtype: "github",
+    id: `g-${number}`,
+    state,
+    event_id: "",
+    added_on: "2026-10-01T10:00:00Z",
+    labels: [],
+    user_id: "u-1",
+    links: [],
+    repo: "quux-fake-repo",
+    owner: "xyzzy-fake-org",
+    number: String(number),
+    title,
+    url: `https://github.com/xyzzy-fake-org/quux-fake-repo/issues/${number}`,
+    assignees: [],
+    ...extra,
+});
+
+const jiraIssue = (key: string, summary: string, state: string, priority: string | null, extra: Partial<JiraSubtype> = {}): JiraSubtype => ({
+    subtype: "jira",
+    id: `j-${key}`,
+    state: state as JiraSubtype["state"],
+    event_id: "",
+    added_on: "2026-10-01T10:00:00Z",
+    labels: [],
+    user_id: "u-2",
+    links: [],
+    key,
+    summary,
+    project: key.split("-")[0],
+    priority,
+    permalink: `https://zxqtesting.atlassian.net/browse/${key}`,
+    assignees: [],
+    ...extra,
+});
+
+const MIXED_ISSUES = [
+    githubIssue(1, "GitHub open issue", "open"),
+    githubIssue(2, "GitHub closed issue", "closed"),
+    jiraIssue("SCT-10", "SCT todo P1", "to do", "P1"),
+    jiraIssue("SCYLLADB-20", "Scylla in progress P0", "in progress", "P0"),
+    jiraIssue("SCT-30", "SCT done without priority", "done", null),
+];
+
+const ALL_TITLES = /^(GitHub open issue|GitHub closed issue|SCT todo P1|Scylla in progress P0|SCT done without priority)$/;
+
+const shownTitles = () => screen.queryAllByText(ALL_TITLES).map((el) => el.textContent);
+
+const optionNames = (group: string) =>
+    within(screen.getByRole("group", { name: group }))
+        .getAllByRole("checkbox")
+        .map((box) => box.closest(".form-check")?.textContent?.trim());
+
+async function renderWith(issues: unknown[]) {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: () => Promise.resolve({ status: "ok", response: issues }) }));
+    renderIssues({ submitDisabled: true });
+    await waitFor(() => expect(shownTitles().length).toBeGreaterThan(0));
+}
+
+describe("Issues.svelte — checkbox filters", () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        cleanup();
+    });
+
+    it("lists every status, priority and Jira Space of the fetched issues", async () => {
+        await renderWith(MIXED_ISSUES);
+
+        expect(optionNames("Status")).toEqual(["closed", "done", "in progress", "open", "to do"]);
+        expect(optionNames("Priority")).toEqual(["P0", "P1", "none"]);
+        expect(optionNames("Space")).toEqual(["SCT", "SCYLLADB"]);
+        expect(shownTitles()).toHaveLength(5);
+    });
+
+    it("hides the issues of an unchecked status", async () => {
+        await renderWith(MIXED_ISSUES);
+
+        await fireEvent.click(within(screen.getByRole("group", { name: "Status" })).getByLabelText("to do"));
+
+        expect(shownTitles()).not.toContain("SCT todo P1");
+        expect(shownTitles()).toHaveLength(4);
+    });
+
+    it("hides the Jira issues of an unchecked Space and keeps the GitHub issues", async () => {
+        await renderWith(MIXED_ISSUES);
+
+        await fireEvent.click(within(screen.getByRole("group", { name: "Space" })).getByLabelText("SCT"));
+
+        expect(shownTitles().sort()).toEqual(["GitHub closed issue", "GitHub open issue", "Scylla in progress P0"]);
+    });
+
+    it("hides the Jira issues without a priority when none is unchecked", async () => {
+        await renderWith(MIXED_ISSUES);
+
+        await fireEvent.click(within(screen.getByRole("group", { name: "Priority" })).getByLabelText("none"));
+
+        expect(shownTitles()).not.toContain("SCT done without priority");
+        expect(shownTitles()).toHaveLength(4);
+    });
+
+    it("shows the issues again when the box is checked again", async () => {
+        await renderWith(MIXED_ISSUES);
+        const box = within(screen.getByRole("group", { name: "Priority" })).getByLabelText("P0");
+
+        await fireEvent.click(box);
+        expect(shownTitles()).toHaveLength(4);
+        await fireEvent.click(box);
+
+        expect(shownTitles()).toHaveLength(5);
+    });
+
+    it("renders no Priority and no Space group for GitHub issues only", async () => {
+        await renderWith(MIXED_ISSUES.filter((issue) => issue.subtype === "github"));
+
+        expect(optionNames("Status")).toEqual(["closed", "open"]);
+        expect(screen.queryByRole("group", { name: "Priority" })).toBeNull();
+        expect(screen.queryByRole("group", { name: "Space" })).toBeNull();
     });
 });

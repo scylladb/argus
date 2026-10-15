@@ -86,8 +86,6 @@ export interface IssueLinks {
     links: LinkedRun[];
 }
 
-export type StateFilter = Record<State, boolean>;
-
 export interface TestRun {
     build_id: string;
     build_number: string;
