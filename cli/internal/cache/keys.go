@@ -218,7 +218,8 @@ func GridviewKey(releaseID string) string {
 }
 
 // PrometheusLogKey returns the cache key for a downloaded monitor-set archive.
-// Logs are immutable once uploaded, so this acts as a long-lived marker.
+// The entry's data is the archive's file name, and the archive itself lives in
+// the entry directory, so it expires and clears with the entry.
 //
 // On disk: cache/prometheus-logs/{runID}/
 func PrometheusLogKey(runID string) string {
