@@ -360,7 +360,7 @@
             {:else if entries.length === 0}
                 <div class="p-3 text-center small text-body-secondary">{emptyMessage}</div>
             {:else}
-                <ul class="list-unstyled m-0" onpointerleave={() => sidebar.cancelPrefetch()}>
+                <ul class="list-unstyled m-0">
                     {#each entries as entry, index (entry.item.id)}
                         {@const name = displayName(entry.item)}
                         {@const stats = rowStats(entry)}
@@ -390,7 +390,6 @@
                                     activate(entry);
                                 }}
                                 onFocus={() => (activeId = entry.item.id)}
-                                onHover={entry.kind === "release" ? () => sidebar.prefetch(entry.item) : undefined}
                             />
                         </li>
                     {/each}
