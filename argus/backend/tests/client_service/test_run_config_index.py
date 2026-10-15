@@ -1,7 +1,7 @@
 import base64
 import json
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from dataclasses import asdict
@@ -48,7 +48,7 @@ def submit_config(api_client: TestClient, run_id, config: dict, name: str = "sct
 async def make_run(client_service: ClientService, testrun_service: TestRunService, fake_test: ArgusTest) -> SCTTestRun:
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    return await testrun_service.get_run(run_type, run_req.run_id)
+    return await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
 
 async def test_submitted_config_lands_in_the_by_run_table(api_client, client_service, testrun_service, fake_test):

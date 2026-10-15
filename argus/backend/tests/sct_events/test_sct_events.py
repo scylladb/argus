@@ -3,6 +3,7 @@ from datetime import datetime, UTC
 import json
 import logging
 from time import sleep
+from uuid import UUID
 
 from coodie.aio import execute_raw
 from starlette.testclient import TestClient
@@ -21,7 +22,7 @@ LOGGER = logging.getLogger(__name__)
 async def test_submit_event(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     event_data: RawEventPayload = {
         "duration": 30.0,
@@ -47,7 +48,7 @@ async def test_submit_event(client_service: ClientService, sct_service: SCTServi
 async def test_get_events_includes_summary_field(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     message = "database error: sstable corruption at offset 42"
     event_data: RawEventPayload = {
@@ -92,7 +93,7 @@ async def test_get_events_includes_summary_field(client_service: ClientService, 
 async def test_get_events_by_severity(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     event_template: RawEventPayload = {
         "duration": 30.0,
@@ -135,7 +136,7 @@ async def test_get_events_by_severity(client_service: ClientService, sct_service
 async def test_submit_event_sparse_fields(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     event_data: RawEventPayload = {
         "message": "Sample event - body contains\nmultiple lines.",
@@ -154,7 +155,7 @@ async def test_submit_event_sparse_fields(client_service: ClientService, sct_ser
 async def test_submit_event_ordering(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     event_template: RawEventPayload = {
         "message": None,
@@ -190,7 +191,7 @@ async def test_submit_event_ordering(client_service: ClientService, sct_service:
 async def test_fetch_partition_limit(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     event_template: RawEventPayload = {
         "message": None,
@@ -220,7 +221,7 @@ async def test_fetch_partition_limit(client_service: ClientService, sct_service:
 async def test_fetch_custom_limit(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     event_template: RawEventPayload = {
         "message": None,
@@ -250,7 +251,7 @@ async def test_fetch_custom_limit(client_service: ClientService, sct_service: SC
 async def test_submit_event_with_nemesis_data(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     event_data: RawEventPayload = {
         "duration": 30.0,
@@ -274,7 +275,7 @@ async def test_submit_event_with_nemesis_data(client_service: ClientService, sct
 async def test_submit_event_db_event(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     event_data: RawEventPayload = {
         "duration": 30.0,
@@ -296,7 +297,7 @@ async def test_submit_event_db_event(client_service: ClientService, sct_service:
 async def test_controller_submit_event(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     body: RawEventPayload = {
         "duration": 30.0,
@@ -327,7 +328,7 @@ async def test_controller_submit_event(api_client: TestClient, fake_test: ArgusT
 async def test_controller_submit_multiple_events(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     body: RawEventPayload = {
         "duration": 30.0,
@@ -364,7 +365,7 @@ async def test_controller_submit_multiple_events(api_client: TestClient, fake_te
 async def test_controller_submit_events_and_get_by_severity(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     body: RawEventPayload = {
         "duration": 30.0,

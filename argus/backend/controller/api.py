@@ -63,6 +63,13 @@ class UpdateGraphViewRequest(BaseModel):
     graphs: dict[str, str]
 
 
+class ScheduleCommentUpdateRequest(BaseModel):
+    releaseId: UUID
+    groupId: UUID
+    testId: UUID
+    newComment: str
+
+
 @router.get("/version", name="api.app_version")
 async def app_version():
     service = ArgusService()
@@ -174,10 +181,12 @@ async def get_planner_comment_by_test(test_id: UUID = Query(..., alias="id")):
 
 
 @router.post("/release/schedules/comment/update", name="api.release_schedules_comment_update")
-async def release_schedules_comment_update(payload: dict = Body(...),
-                                     user: User = Depends(api_current_user)):
+async def release_schedules_comment_update(payload: ScheduleCommentUpdateRequest,
+                                           user: User = Depends(api_current_user)):
     service = ArgusService()
-    comment_update_result = await service.update_schedule_comment(payload)
+    comment_update_result = await service.update_schedule_comment(
+        release_id=payload.releaseId, group_id=payload.groupId, test_id=payload.testId,
+        new_comment=payload.newComment)
 
     return APIResponse({
         "status": "ok",

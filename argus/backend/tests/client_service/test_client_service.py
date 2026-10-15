@@ -1,6 +1,7 @@
 import base64
 from dataclasses import asdict, dataclass
 import json
+from uuid import UUID
 
 import pytest
 from starlette.testclient import TestClient
@@ -18,7 +19,7 @@ from argus.backend.util.encoders import ArgusJSONEncoder
 async def test_submit_simple_config(api_client: TestClient, client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     config = {
         "prop": {
@@ -49,7 +50,7 @@ async def test_submit_simple_config(api_client: TestClient, client_service: Clie
 async def test_get_config_properties(api_client: TestClient, client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     config = {
         "prop": {
@@ -84,7 +85,7 @@ async def test_get_config_properties(api_client: TestClient, client_service: Cli
 async def test_get_configs_for_runs(api_client: TestClient, client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
     config = {
         "prop": {
@@ -122,7 +123,7 @@ async def test_get_config_property_returns_only_the_run_asked_for(api_client: Te
     for _ in range(2):
         run_type, run_req = get_fake_test_run(fake_test)
         await client_service.submit_run(run_type, asdict(run_req))
-        runs.append(await testrun_service.get_run(run_type, run_req.run_id))
+        runs.append(await testrun_service.get_run(run_type, UUID(run_req.run_id)))
     content = base64.encodebytes(json.dumps({"prop": {"inner": {"deep": 10}}}).encode("utf-8")).decode("utf-8")
     for run in runs:
         response = api_client.post(

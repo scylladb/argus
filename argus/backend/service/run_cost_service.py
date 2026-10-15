@@ -29,25 +29,19 @@ class CostItemsRequest(BaseModel):
 
 
 class RunCostService:
-    @staticmethod
-    def _run_id(run_id: UUID | str) -> UUID:
-        return UUID(run_id) if isinstance(run_id, str) else run_id
-
     @classmethod
     async def _read_partition(cls, run_id: UUID) -> list[RunCost]:
-        return await RunCost.find(run_id=cls._run_id(run_id)).all()
+        return await RunCost.find(run_id=run_id).all()
 
     @staticmethod
     def _items(rows: list[RunCost]) -> list[RunCost]:
         return [row for row in rows if row.name]
 
     async def set_estimated_cost(self, run_id: UUID, value: float) -> dict:
-        run_id = self._run_id(run_id)
         await RunCost.find(run_id=run_id).update(estimated_cost=value)
         return {"run_id": str(run_id), "estimated_cost": value}
 
     async def submit_cost_items(self, run_id: UUID, items: list[CostItemRequest]) -> dict:
-        run_id = self._run_id(run_id)
         names = [item.name for item in items]
         duplicates = sorted({name for name in names if names.count(name) > 1})
         if duplicates:
@@ -76,7 +70,6 @@ class RunCostService:
         )
 
     async def recompute_actual_cost(self, run_id: UUID, use_estimate: bool = False) -> float | None:
-        run_id = self._run_id(run_id)
         rows = await self._read_partition(run_id)
         if not rows:
             return None

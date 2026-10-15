@@ -302,14 +302,14 @@ the rest only.
     `argus/backend/tests/notification_api/`
   - the direct callers that pass a string: `get_run` (about 30 sites built
     on `run_req.run_id`), `IssueService` in `issues/`, `sct_api/`
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - `GET /notifications/summary?afterId=` returns the first page
   - schedule comment update with a malformed `testId` returns
     `RequestValidationError`
-- [ ] Run them and confirm the failures.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failures.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 9 — Smoke on dev data
 

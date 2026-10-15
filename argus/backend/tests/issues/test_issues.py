@@ -12,7 +12,7 @@ import logging
 import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock, call
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from coodie.exceptions import DocumentNotFound
@@ -50,7 +50,7 @@ def unique_suffix() -> str:
 async def submit_run(client_service: ClientService, testrun_service: TestRunService, fake_test: ArgusTest) -> SCTTestRun:
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    return await testrun_service.get_run(run_type, run_req.run_id)
+    return await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
 
 async def issue_added_events(run_id) -> list[dict]:
@@ -352,7 +352,7 @@ async def test_submit_for_sct_event_records_event_id_on_link(run: SCTTestRun, mo
     event_id = uuid4()
 
     result = await mocked_issue_service.submit_for_sct_event(
-        issue_url=url, test_id=run.test_id, event_id=str(event_id), run_id=run.id, user=logged_in_user)
+        issue_url=url, test_id=run.test_id, event_id=event_id, run_id=run.id, user=logged_in_user)
 
     link: IssueLink = await IssueLink.get(run_id=run.id, issue_id=result["id"])
     assert link.event_id == event_id
@@ -612,7 +612,7 @@ async def test_delete_github_issue_link_removes_orphaned_issue(run: SCTTestRun, 
     mocked_issue_service.gh.gh.get_repo.return_value = remote_repo
     submitted = await mocked_issue_service.submit(issue_url=url, test_id=run.test_id, run_id=run.id, user=logged_in_user)
 
-    result = await mocked_issue_service.delete(issue_id=str(submitted["id"]), run_id=str(run.id), user=logged_in_user)
+    result = await mocked_issue_service.delete(issue_id=submitted["id"], run_id=run.id, user=logged_in_user)
 
     assert result["deleted"] == submitted["id"]
     assert await mocked_issue_service.get("run_id", run.id) == []
@@ -659,13 +659,13 @@ async def test_get_by_view_returns_each_link_once(api_client, run: SCTTestRun, m
         "name": f"issues_view_{unique_suffix()}", "items": [f"test:{run.test_id}"], "settings": "{}",
     }).json()
     assert created["status"] == "ok", created
-    view_id = created["response"]["id"]
+    view_id = UUID(created["response"]["id"])
 
     try:
         aggregated = await mocked_issue_service.get("view_id", view_id, aggregate_by_issue=True)
         flat = await mocked_issue_service.get("view_id", view_id)
     finally:
-        api_client.post("/api/v1/views/delete", json={"viewId": view_id})
+        api_client.post("/api/v1/views/delete", json={"viewId": str(view_id)})
 
     assert len(aggregated) == 1
     assert len(aggregated[0]["links"]) == 1
@@ -685,7 +685,7 @@ async def test_delete_issue_link_keeps_the_issue_other_runs_link(
     submitted = await mocked_issue_service.submit(issue_url=url, test_id=run.test_id, run_id=run.id, user=logged_in_user)
     await mocked_issue_service.submit(issue_url=url, test_id=other_run.test_id, run_id=other_run.id, user=logged_in_user)
 
-    await mocked_issue_service.delete(issue_id=str(submitted["id"]), run_id=str(run.id), user=logged_in_user)
+    await mocked_issue_service.delete(issue_id=submitted["id"], run_id=run.id, user=logged_in_user)
 
     assert await mocked_issue_service.get("run_id", run.id) == []
     remaining = await mocked_issue_service.get("run_id", other_run.id)
