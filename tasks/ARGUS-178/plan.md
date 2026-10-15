@@ -278,9 +278,9 @@ Steps:
 - Modify: `docs/api_usage.md:315-330`
 
 Steps:
-- [ ] Add `"priority": "P2",` after `"project": "SCT",` in the example issue
+- [x] Add `"priority": "P2",` after `"project": "SCT",` in the example issue
   of `GET /api/v1/issues/{key}/links`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 8 — Live check against the dev database and Jira
 

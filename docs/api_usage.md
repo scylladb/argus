@@ -321,6 +321,7 @@ curl --request GET \
       "summary": "Nemesis fails to restart node",
       "state": "in progress",
       "project": "SCT",
+      "priority": "P2",
       "permalink": "https://scylladb.atlassian.net/browse/SCT-1234",
       "labels": [{"id": 2915093381, "name": "triage", "color": "000", "description": ""}],
       "assignees": ["someone@scylladb.com"],
