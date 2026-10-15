@@ -319,7 +319,7 @@ Steps:
   parses `hsl()`.
 
 Steps:
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - `IssueTypes.test.ts`:
     - `label2color` returns an `hsl(…)` string, and it is deterministic.
     - The hues of `backport/2025.1`, `backport/2025.1-done`, `backport/6.2`,
@@ -330,10 +330,10 @@ Steps:
       white at 3.14:1, and white for `rgb(0, 32, 255)`.
   - `IssueCard.test.ts`: a GitHub label with the color `f76121` renders with
     black text.
-- [ ] Run `yarn test` and confirm that the new tests fail.
-- [ ] Make the changes.
-- [ ] Run the verify sequence and `yarn build`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run `yarn test` and confirm that the new tests fail.
+- [x] Make the changes.
+- [x] Run the verify sequence and `yarn build`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 9 — Live check against the dev database and Jira
 

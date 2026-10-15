@@ -6,7 +6,6 @@
     import { run as run_1 } from 'svelte/legacy';
 
     import { createEventDispatcher } from "svelte";
-    import Color from "color";
     import Fa from "svelte-fa";
     import { faJira } from "@fortawesome/free-brands-svg-icons";
     import {
@@ -18,7 +17,7 @@
     import { userList } from "../Stores/UserlistSubscriber";
     import { timestampToISODate } from "../Common/DateUtils";
     import { stateEncoder } from "../Common/StateManagement";
-    import { label2color, priorityClass, type JiraState, type JiraSubtype, type Link, type TestRun, JiraIssueColorMap, JiraIssueIcon, resolveRuns as resolveRunsHelper, resolveFirstUserForAggregation as resolveFirstUserHelper, deleteIssue as deleteIssueHelper } from '../Common/IssueTypes';
+    import { label2color, labelTextColor, priorityClass, type JiraState, type JiraSubtype, type Link, type TestRun, JiraIssueColorMap, JiraIssueIcon, resolveRuns as resolveRunsHelper, resolveFirstUserForAggregation as resolveFirstUserHelper, deleteIssue as deleteIssueHelper } from '../Common/IssueTypes';
     import { getUser } from '../Common/UserUtils';
 
     const dispatch = createEventDispatcher();
@@ -115,9 +114,10 @@
                 >
             {/if}
             {#each issue.labels as label (label.id)}
+                {@const color = label2color(label)}
                 <button
                     class="align-items-center px-2 label-text border border-dark cursor-pointer"
-                    style="color: {Color(`${label2color(label)}`).isDark() ? 'white' : 'black'}; background-color: {label2color(label)};"
+                    style="color: {labelTextColor(color)}; background-color: {color};"
                     onclick={() => {
                         dispatch("labelClick", label);
                     }}

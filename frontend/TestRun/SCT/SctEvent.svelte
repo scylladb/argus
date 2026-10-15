@@ -11,7 +11,7 @@
     import ModalWindow from "../../Common/ModalWindow.svelte";
     import { JiraIssueColorMap, JiraIssueIcon } from "../../Jira/JiraIssue.svelte";
     import { GithubIssueColorMap, GithubIssueIcon } from "../../Github/GithubIssue.svelte";
-    import Color from "color";
+    import { label2color, labelTextColor } from "../../Common/IssueTypes";
     import { onMount } from "svelte";
 
     interface Props {
@@ -222,7 +222,7 @@
                                     </td>
                                     <td>
                                         {#each i.labels as label}
-                                            <div class="mb-1 text-center rounded-pill border px-1" style="color: {Color(`#${label.color}`).isDark() ? 'white' : 'black'}; background-color: #{label.color};">
+                                            <div class="mb-1 text-center rounded-pill border px-1" style="color: {labelTextColor(`#${label.color}`)}; background-color: #{label.color};">
                                                 {label.name}
                                             </div>
                                         {/each}
@@ -246,7 +246,8 @@
                                     </td>
                                     <td>
                                         {#each i.labels as label}
-                                            <div class="mb-1 text-center rounded-pill border px-1" style="color: {Color(`#${label.color}`).isDark() ? 'white' : 'black'}; background-color: #{label.color};">
+                                            {@const color = label2color(label)}
+                                            <div class="mb-1 text-center rounded-pill border px-1" style="color: {labelTextColor(color)}; background-color: {color};">
                                                 {label.name}
                                             </div>
                                         {/each}

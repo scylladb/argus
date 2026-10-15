@@ -94,6 +94,12 @@ describe("IssueCard with a GitHub issue", () => {
         const { getAllByText } = render(IssueCard, { issue: GITHUB_ISSUE, runId: "r-1" });
         expect(getAllByText("open").length).toBeGreaterThanOrEqual(1);
     });
+
+    it("renders label text in the color with the higher contrast", () => {
+        const issue = { ...GITHUB_ISSUE, labels: [{ id: "7", name: "orange", color: "f76121", description: "" }] };
+        const { getByRole } = render(IssueCard, { issue, runId: "r-1" });
+        expect(getByRole("button", { name: "orange" }).style.color).toBe("black");
+    });
 });
 
 describe("IssueCard with a Jira issue", () => {
