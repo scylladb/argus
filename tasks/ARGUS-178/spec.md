@@ -9,7 +9,8 @@ change. The issue widget shows the priority on the Jira card. It filters the
 fetched issues with checkboxes for status, priority and Jira Space, derived
 from the issues it holds. It sorts by priority, and its "All Labels" panel
 lists the labels of the fetched issues. A Jira card links to `/issues/<KEY>`
-everywhere except on that page.
+everywhere except on that page. A Jira label takes its color family from its
+scope, and every label chip picks the text color with the higher contrast.
 
 ## Constraints
 
@@ -36,6 +37,15 @@ everywhere except on that page.
 - **The Jira card.** It shows the priority as a Bootstrap badge after the state
   pill. It links to `/issues/<KEY>` unless the page that mounts it turns the
   link off. The issue page turns it off.
+- **Label colors.** The scope of a label is the text before its first `/` or
+  `:`, in lowercase, or the whole name when it has neither.
+  - The scope sets the hue of a Jira label, so `backport/2025.1` and
+    `backport/6.2-done` share a color family.
+  - The full name moves the hue by up to 12° and sets the lightness between 36%
+    and 48%, so labels of one scope stay apart. The saturation stays at 65%.
+  - A label chip, GitHub or Jira, takes white or black text, whichever has the
+    higher contrast ratio against the chip. Across that palette the chosen text
+    keeps at least 4.5:1.
 - **The widget.** It replaces the fixed Open and Closed switches with three
   checkbox groups, plus a priority sort and a filled label panel.
   - **Status** lists every distinct state of the fetched issues.
@@ -160,6 +170,8 @@ class JiraService:
 ```ts
 export const JIRA_PRIORITIES: readonly string[];
 export const priorityRank: (i: Issue) => number;   // index in JIRA_PRIORITIES, then unknown names, then Infinity
+export const label2color: (label: Label) => string; // "hsl(<hue>, 65%, <36-48>%)"
+export const labelTextColor: (background: string) => "white" | "black";
 ```
 
 The Jira card takes one new prop, `showRunsLink?: boolean`, which defaults to
@@ -192,3 +204,8 @@ None.
 - The label filter matches by name, not by id. GitHub gives the same label a
   different id in each repository, so the dev release dashboard listed `bug`
   three times. (build)
+- A Jira label takes its hue from its scope rather than from a hash of the
+  whole name, so related labels look related. The scope comes from a hash, so
+  unrelated scopes still spread around the wheel. (build)
+- A label chip picks its text color by contrast ratio. The brightness rule of
+  `isDark()` left about 10% of the new palette below 4.5:1. (build)

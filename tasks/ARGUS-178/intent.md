@@ -16,6 +16,12 @@ stored as `to do`, which is not in that list, so it is always hidden.
 The "All Labels" panel of the widget opens empty. A label can only be picked
 by clicking it on an issue card.
 
+A Jira label has no color of its own, so Argus derives one from a hash of its
+name. About a quarter of the derived colors are grey, and labels of one scope,
+such as `backport/2025.1` and `backport/6.2-done`, get unrelated colors. A
+label chip picks its text color by a brightness rule, which leaves the text of
+some chips below a 4.5:1 contrast ratio. This applies to GitHub labels too.
+
 An issue card does not link to the page that lists the runs linked to that
 issue, `/issues/<KEY>`. The page is reachable only by typing its address.
 
@@ -67,6 +73,19 @@ The label list of the "All Labels" panel, in the same file:
 let availableLabels: Label[] = [];
 ```
 
+The color of a Jira label, `frontend/Common/IssueTypes.ts`, and its text color,
+`frontend/Jira/JiraIssue.svelte`:
+
+```
+const START_COLOR = [255, 238, 0];
+const END_COLOR = [0, 32, 255];
+const factor = (parseInt(sha1(label.name).slice(0, 16), 16) % 10000) / 10000;
+```
+
+```
+style="color: {Color(`${label2color(label)}`).isDark() ? 'white' : 'black'}; background-color: {label2color(label)};"
+```
+
 ## What good looks like
 
 - Each Jira issue card shows the priority of the issue, and the priority stays
@@ -78,6 +97,8 @@ let availableLabels: Label[] = [];
 - The widget sorts the issues by priority.
 - The "All Labels" panel lists the labels of the issues shown, and picking one
   filters the list.
+- Jira labels of one scope share a color family, and the text of every label
+  chip stays readable.
 - A Jira issue card outside `/issues/<KEY>` links to that page.
 
 ## Out of scope
