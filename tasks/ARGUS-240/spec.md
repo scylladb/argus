@@ -237,3 +237,7 @@ and the `RunConfigParam.run_id` text column.
 - Server-rendered pages keep their hand parsing, which flashes an error and
   redirects. The impersonation form is not an API route and stays as is. (spec)
 - The legacy schedule stubs read no IDs and stay untyped. (spec)
+- The performance regression check read the run by subscript, which a
+  coodie document does not support, so every submission with an earlier
+  run failed before the event write. It reads the attribute now, so the
+  regression path and its run ID fix are reachable. (build)

@@ -177,7 +177,7 @@ async def test_send_default_email_renders_package_versions(api_client: TestClien
     await client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
 
-    await sct_service.submit_packages(str(run.id), [
+    await sct_service.submit_packages(run.id, [
         {"name": "kernel", "version": "6.8.0-1066-gcp", "date": "", "revision_id": "", "build_id": ""},
         {
             "name": "scylla-server",

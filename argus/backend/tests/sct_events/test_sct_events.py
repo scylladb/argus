@@ -38,7 +38,7 @@ async def test_submit_event(client_service: ClientService, sct_service: SCTServi
         "ts": datetime.now(tz=UTC).timestamp()
     }
 
-    _ = await sct_service.submit_event(str(run.id), event_data)
+    _ = await sct_service.submit_event(run.id, event_data)
 
     all_events = await run.get_all_events()
     assert len(all_events) == 1, "Event not found"
@@ -64,7 +64,7 @@ async def test_get_events_includes_summary_field(client_service: ClientService, 
         "target_node": None,
         "ts": datetime.now(tz=UTC).timestamp()
     }
-    _ = await sct_service.submit_event(str(run.id), event_data)
+    _ = await sct_service.submit_event(run.id, event_data)
 
     # A freshly submitted event has no summary yet: the field is present and null,
     # and consumers fall back to the original message (goal 4).
@@ -123,7 +123,7 @@ async def test_get_events_by_severity(client_service: ClientService, sct_service
         events.append(raw_event)
 
     for event in events:
-        _ = await sct_service.submit_event(str(run.id), event)
+        _ = await sct_service.submit_event(run.id, event)
 
     all_events = await run.get_all_events()
     assert len(all_events) == 13, "Event not found"
@@ -145,7 +145,7 @@ async def test_submit_event_sparse_fields(client_service: ClientService, sct_ser
         "event_type": "DatabaseEvent"
     }
 
-    _ = await sct_service.submit_event(str(run.id), event_data)
+    _ = await sct_service.submit_event(run.id, event_data)
 
     all_events = await run.get_all_events()
     assert len(all_events) == 1, "Event not found"
@@ -169,7 +169,7 @@ async def test_submit_event_ordering(client_service: ClientService, sct_service:
         event_data = dict(event_template)
         event_data["ts"] = base_ts + i * 0.001  # Each event 1ms apart
         event_data["message"] = f"This is event {i}"
-        _ = await sct_service.submit_event(str(run.id), event_data)
+        _ = await sct_service.submit_event(run.id, event_data)
 
 
     all_events = await run.get_all_events()
@@ -181,7 +181,7 @@ async def test_submit_event_ordering(client_service: ClientService, sct_service:
         event_data = dict(event_template)
         event_data["ts"] = later_ts + i * 0.001
         event_data["message"] = f"This is event r{i}"
-        _ = await sct_service.submit_event(str(run.id), event_data)
+        _ = await sct_service.submit_event(run.id, event_data)
 
     all_events = await run.get_all_events()
     assert len(all_events) > 0 and all_events[0].message == "This is event 0", "Incorrect event in set! Expected oldest event first with ASC ordering."
@@ -204,14 +204,14 @@ async def test_fetch_partition_limit(client_service: ClientService, sct_service:
         event_data = dict(event_template)
         event_data["ts"] = datetime.now(tz=UTC).timestamp() + i * 0.001
         event_data["message"] = f"This is event {i}"
-        _ = await sct_service.submit_event(str(run.id), event_data)
+        _ = await sct_service.submit_event(run.id, event_data)
 
     for i in range(11):
         event_data = dict(event_template)
         event_data["severity"] = SCTEventSeverity.NORMAL.value
         event_data["ts"] = datetime.now(tz=UTC).timestamp() + i * 0.001
         event_data["message"] = f"This is event {i}"
-        _ = await sct_service.submit_event(str(run.id), event_data)
+        _ = await sct_service.submit_event(run.id, event_data)
 
     all_events = await run.get_events_limited(run.id, per_partition_limit=10)
     assert len(all_events) == 20, "Incorrect event in set!"
@@ -234,14 +234,14 @@ async def test_fetch_custom_limit(client_service: ClientService, sct_service: SC
         event_data = dict(event_template)
         event_data["ts"] = datetime.now(tz=UTC).timestamp() - 1
         event_data["message"] = f"This is event {i}"
-        _ = await sct_service.submit_event(str(run.id), event_data)
+        _ = await sct_service.submit_event(run.id, event_data)
 
     for i in range(50):
         event_data = dict(event_template)
         event_data["severity"] = SCTEventSeverity.NORMAL.value
         event_data["ts"] = datetime.now(tz=UTC).timestamp() - 1
         event_data["message"] = f"This is event {i}"
-        _ = await sct_service.submit_event(str(run.id), event_data)
+        _ = await sct_service.submit_event(run.id, event_data)
 
     all_events = await run.get_events_limited(run.id, per_partition_limit=10, severities=[SCTEventSeverity.CRITICAL])
     assert len(all_events) == 10, "Incorrect events in set!"
@@ -265,7 +265,7 @@ async def test_submit_event_with_nemesis_data(client_service: ClientService, sct
         "ts": datetime.now(tz=UTC).timestamp()
     }
 
-    _ = await sct_service.submit_event(str(run.id), event_data)
+    _ = await sct_service.submit_event(run.id, event_data)
 
     all_events = await run.get_all_events()
     assert len(all_events) == 1, "Event not found"
@@ -287,7 +287,7 @@ async def test_submit_event_db_event(client_service: ClientService, sct_service:
         "ts": datetime.now(tz=UTC).timestamp()
     }
 
-    _ = await sct_service.submit_event(str(run.id), event_data)
+    _ = await sct_service.submit_event(run.id, event_data)
 
     all_events = await run.get_all_events()
     assert len(all_events) == 1, "Event not found"
