@@ -50,6 +50,7 @@ func buildTarZst(t *testing.T, entries map[string]string) []byte {
 }
 
 func TestMaterializePlainJSONL(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "argus_replay_log_R_1.jsonl")
 	if err := os.WriteFile(path, []byte(`{"ts":1}`+"\n"), 0o644); err != nil {
@@ -68,6 +69,7 @@ func TestMaterializePlainJSONL(t *testing.T) {
 }
 
 func TestMaterializeJSONLZst(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	src := filepath.Join(dir, "argus_replay_log_R_1.jsonl.zst")
 
@@ -104,6 +106,7 @@ func TestMaterializeJSONLZst(t *testing.T) {
 }
 
 func TestMaterializeTarZstFiltersToReplayLogs(t *testing.T) {
+	t.Parallel()
 	archive := buildTarZst(t, map[string]string{
 		"sct-runner-events-xyz/argus.log":                          "some sct log",
 		"sct-runner-events-xyz/critical.log":                       "critical log",
@@ -157,6 +160,7 @@ func TestMaterializeTarZstFiltersToReplayLogs(t *testing.T) {
 }
 
 func TestMaterializeUnsupportedExtension(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "events.log")
 	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
@@ -171,6 +175,7 @@ func TestMaterializeUnsupportedExtension(t *testing.T) {
 }
 
 func TestMaterializeTarZstWithoutReplayLogs(t *testing.T) {
+	t.Parallel()
 	archive := buildTarZst(t, map[string]string{
 		"events.log": "no replay logs here",
 	})
@@ -209,6 +214,7 @@ func equal(a, b []string) bool {
 }
 
 func TestEnsureCloseable(t *testing.T) {
+	t.Parallel()
 	// Sanity check that io.Discard works as we expect in other tests.
 	_, _ = io.Copy(io.Discard, bytes.NewReader(nil))
 }

@@ -345,6 +345,7 @@ class DriverTestRun(PluginModelBase):
         run.id = UUID(req.run_id) if isinstance(req.run_id, str) else req.run_id
         run.build_id = req.job_name
         run.build_job_url = req.job_url
+        run.build_number = get_build_number(req.job_url)
         await run.assign_categories()
         run.assignee = await run.get_assignee()
         for key, value in req.test_environment.items():

@@ -80,6 +80,25 @@ def driver_matrix_run_id(api_client, driver_matrix_test: ArgusTest) -> str:
     return run_id
 
 
+def test_legacy_submit_reads_the_build_number_from_the_job_url(api_client, driver_matrix_test):
+    run_id = str(uuid4())
+    payload = {
+        "schema_version": "v1",
+        "run_id": run_id,
+        "job_name": driver_matrix_test.build_system_id,
+        "job_url": f"https://argus.example.com/test/{driver_matrix_test.build_system_id}/7/",
+        "test_environment": {"scylla-version": "2024.1.0"},
+        "matrix_results": [],
+    }
+    resp = api_client.post(f"{CLIENT_PREFIX}/testrun/{RUN_TYPE}/submit", json=payload)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["status"] == "ok"
+
+    run = api_client.get(f"{RUN_PREFIX}/{RUN_TYPE}/{run_id}")
+    assert run.status_code == 200, run.text
+    assert run.json()["response"]["build_number"] == 7
+
+
 def test_submit_driver_matrix_result(api_client, release, driver_matrix_test, driver_matrix_run_id):
     driver_name = "TEST-myDriver-1.0.xml"
     payload = {

@@ -362,6 +362,70 @@ A key that Argus does not know is not an error:
 
 `linked_on` is `null` for links made before Argus recorded the time.
 
+```http
+POST /api/v1/client/replay/ingest
+Content-Type: application/x-tar-zstd
+```
+
+Applies the requests that an Argus client recorded in replay logs
+(`argus_replay_log_*.jsonl`). The body is an archive of those logs: `tar.zst`,
+`tar.gz`, plain `tar` or `zip`. The server sorts the records, applies them
+through the client API with the token of the caller, and returns a summary.
+It skips the calls that send mail or start CI jobs.
+
+| Parameter | Type | Default | Description |
+| --------- | ---- | ------- | ----------- |
+| dry_run | bool | `false` | Check the archive and the test entities. Apply nothing. |
+| as_me | bool | `true` with a build path, else `false` | With a build path, make the caller the starter and the assignee of a new run. For any other run, make the caller the assignee, and write the change to the run events. That run keeps its recorded starter. |
+| create_missing_tests | bool | `true` when a new run gets a build path, else `false` | Create the release, the group and the test that the build path names when they do not exist. When `false`, a `submit_run` for a missing test fails with a message that names the missing parts. In a replay into a build path, a run that Argus already holds gets neither step. |
+| backfill_logs | bool | `true` | List the S3 prefix of each run and attach the log archives that the logs do not record. |
+| local_runs | bool | `false` | Send an archive of one local run to `local-runs/<caller username>/<test>`. The CLI sends `true` unless the user gives `--keep-run`. |
+| test_name | string | none | The `<test>` of `local-runs/<caller username>/<test>`. Each character that a build path does not accept becomes `-`. Needs `local_runs` and an archive of one local run, else the request fails. |
+
+With `local_runs`, an archive of one local run, a `submit_run` with no build
+URL, goes to `local-runs/<caller username>/<test>`. `<test>` is `test_name`
+when the request sets it, else the first SCT config file of the run without
+its directory and extension. Any other archive
+keeps its recorded paths and run IDs. "A build path" in the table above means
+this path.
+
+The run keeps its recorded run ID. The server picks the build path and the
+build number. Only a run that Argus does not hold yet gets them. It takes the
+next number above the highest build number under the path. Its build URL is
+its own Argus link, `<BASE_URL>/test/<path>/<n>/`. A replay into a build path
+fails when `BASE_URL` is not configured, because report emails and GitHub
+issues link to the build URL. A run that Argus already holds replays as
+recorded, because `submit_run` keeps an existing run.
+
+`runs` lists each run in the archive once, under its recorded run ID.
+`build_id` and `build_number` name the build of a new run, and are `null`
+for any other run. `failed` is `true` when the `submit_run` of the run failed,
+so Argus may not hold the run. A dry run returns the build each run would get. An error
+with the endpoint `stamp_run` is a run that the server could not give to its
+new owner.
+
+```json
+{
+  "response": {
+    "total": 83,
+    "processed": 83,
+    "succeeded": 83,
+    "failed": 0,
+    "skipped_no_replay": 0,
+    "backfilled_logs": 2,
+    "errors": [],
+    "runs": [
+      {"type": "scylla-cluster-tests",
+       "id": "91c226dc-a057-4ad4-a0b8-bf8bc73031b9",
+       "build_id": "local-runs/jdoe/longevity-100gb-4h",
+       "build_number": 1,
+       "failed": false}
+    ]
+  },
+  "status": "ok"
+}
+```
+
 ## Email reporting API
 
 ```http

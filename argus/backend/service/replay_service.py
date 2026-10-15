@@ -40,7 +40,10 @@ When ``create_missing_tests`` is set, ``submit_run`` records get a pre-step
 that ensures the ``ArgusRelease/Group/Test`` triple exists for the run's
 build_id, so that the controller's ``assign_categories`` can populate
 ``test_id`` on the row. This is opt-in because curated instances already have
-the hierarchy populated and don't want orphan auto-creates.
+the hierarchy populated and don't want orphan auto-creates. In a replay into
+the ``local-runs`` path, a run that Argus already holds gets neither the
+pre-step nor the missing-test check: ``submit_run`` keeps the stored run, so
+its recorded ``job_name`` names no test.
 
 When ``backfill_logs`` is set, a post-step lists each run's S3 log prefix
 (derived from the run-id in any recorded log link) and submits links for any
@@ -50,6 +53,34 @@ enables this by default (disable with ``?backfill_logs=false``); it re-uses
 the app's existing read-only S3 credentials and the link-only log model
 (nothing is uploaded or hosted), and is idempotent, so the extra S3 list per
 ingest is the only cost when there is nothing to back-fill.
+
+When the request sets ``local_runs``, the ``submit_run`` of an archive of one
+local run (a ``submit_run`` with no build URL) is filed under
+``local-runs/<caller username>/<test>``, where ``<test>`` is ``test_name``
+when the request sets it, else the name of the first SCT config file. The
+run keeps its recorded run ID, so the S3 log
+back-fill finds its logs. The CLI sends ``local_runs`` by default. A request
+without it replays each run as recorded. The server picks the build path, so a replay
+never takes a build number that a Jenkins job gives out. The ``local-runs``
+path creates the release, the group and the test it needs.
+
+Only a run that Argus does not hold yet gets the path. It takes the next
+build number above the highest one that a run holds under the path. Its
+build URL is its own absolute Argus link, ``<BASE_URL>/test/<path>/<n>/``:
+every reader parses the build number from the URL, and the report email and
+the GitHub issue templates link to it. A replay into the path fails before
+dispatch when ``BASE_URL`` is not configured. A run that Argus already holds
+replays as recorded, since ``submit_run`` keeps an existing run.
+
+When ``owner`` is set, the ``submit_run`` of a new run carries the owner as
+``started_by``, and a post-step after all records makes the owner the
+``assignee``, because ``update_product_version`` can reassign a run from the
+release schedule. A run that existed before the replay belongs to somebody
+else's history, so ``owner`` changes only its assignee, through the service
+that writes the assignee-change event, and only when the assignee differs.
+The post-step skips a run whose ``submit_run`` failed in this replay, since
+that failure is already in the summary, and the summary marks that run as
+``failed``.
 """
 import asyncio
 import gzip
@@ -61,13 +92,18 @@ import tarfile
 import zipfile
 from dataclasses import dataclass, field
 from typing import Iterable
+from uuid import UUID
 
 import httpx2
 import zstandard as zstd
 
 from coodie.exceptions import DocumentNotFound
 
-from argus.backend.error_handlers import APIException
+from argus.backend.error_handlers import APIException, DataValidationError
+from argus.backend.models.web import User
+from argus.backend.plugins.loader import AVAILABLE_PLUGINS
+from argus.backend.service.client_service import ClientException, ClientService
+from argus.backend.service.testrun import TestRunService
 from argus.backend.util.config import Config
 
 LOGGER = logging.getLogger(__name__)
@@ -94,6 +130,22 @@ CLIENT_ROUTE_PREFIX = "/api/v1/client"
 # The ``logs/submit`` endpoint template, referenced from both ordering and the
 # S3 log back-fill.
 LOGS_SUBMIT_ENDPOINT = "/testrun/$type/$id/logs/submit"
+
+# The ``submit_run`` endpoint template, the record that creates a run.
+SUBMIT_RUN_ENDPOINT = "/testrun/$type/submit"
+
+# The release that holds replayed local runs, one group per user.
+LOCAL_RUNS_RELEASE = "local-runs"
+
+# Characters a name in a build path may hold. Others become "-".
+_PATH_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
+
+# The ``submit_run`` body keys that carry the build path and the build URL.
+# Plugins name them differently: SCT and driver-matrix send ``job_name`` and
+# ``job_url``, generic sends ``build_id`` and ``build_url``, and sirenada
+# sends ``build_id`` and ``build_job_url``.
+_BUILD_PATH_KEYS = ("job_name", "build_id")
+_BUILD_URL_KEYS = ("job_url", "build_url", "build_job_url")
 
 # The ``finalize`` endpoint template. It writes the run's terminal state
 # (``end_time`` for every plugin; ``status`` and ``scylla_version`` for the
@@ -138,6 +190,11 @@ class ReplaySummary:
     # that were uploaded but whose ``logs/submit`` call was never recorded).
     backfilled_logs: int = 0
     errors: list[dict] = field(default_factory=list)
+    # The runs the archive addresses, as ``{"type", "id", "build_id",
+    # "build_number", "failed"}``. ``build_id`` and ``build_number`` are set on
+    # a run that the replay files under a build path only. ``failed`` is set
+    # on a run whose ``submit_run`` failed in this replay.
+    runs: list[dict] = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return {
@@ -148,6 +205,7 @@ class ReplaySummary:
             "skipped_no_replay": self.skipped_no_replay,
             "backfilled_logs": self.backfilled_logs,
             "errors": self.errors,
+            "runs": self.runs,
         }
 
 
@@ -177,8 +235,13 @@ class ReplayService:
         app=None,
         client=None,
         auth_header: str | None = None,
-        create_missing_tests: bool = False,
+        create_missing_tests: bool | None = None,
         backfill_logs: bool = False,
+        caller: User | None = None,
+        as_me: bool | None = None,
+        local_runs: bool = False,
+        test_name: str | None = None,
+        argus_url: str = "",
         s3_client=None,
     ) -> None:
         self._app = app
@@ -186,6 +249,23 @@ class ReplayService:
         self._auth_header = auth_header
         self._create_missing_tests = create_missing_tests
         self._backfill_logs = backfill_logs
+        # The build path of a new local run: local-runs/<caller>/<test>.
+        self._build_path: str | None = None
+        self._caller = caller
+        self._as_me = as_me
+        # The caller when the replay gives the runs to the caller, else None.
+        self._owner: User | None = None
+        self._local_runs = local_runs
+        # The <test> of the build path that the request names, else None.
+        self._test_name = test_name
+        # The public base URL of Argus, for the build URL of a new run.
+        self._argus_url = argus_url.rstrip("/")
+        # IDs of the runs that Argus did not hold before this replay.
+        self._new_runs: set[str] = set()
+        # IDs of the runs that Argus held before a replay into the build path.
+        self._kept_runs: set[str] = set()
+        # Run IDs whose submit_run failed in this replay.
+        self._failed_submits: set[str] = set()
         # Lazily built from app config on first use; injectable for tests.
         self._s3 = s3_client
 
@@ -194,9 +274,31 @@ class ReplayService:
     # ------------------------------------------------------------------
     async def ingest(self, archive_bytes: bytes, *, dry_run: bool = False) -> ReplaySummary:
         records = await asyncio.to_thread(lambda: list(self._extract_records(archive_bytes)))
+        if self._caller is not None and self._local_runs:
+            self._build_path = self._local_build_path(records)
+        if self._test_name is not None and self._build_path is None:
+            raise DataValidationError(
+                "test_name names the test of a local run, but the archive does not hold exactly one local run "
+                "or the request does not set local_runs"
+            )
+        self._resolve_owner()
+        runs = self._runs_in(records)
+        if self._build_path is not None:
+            if not self._argus_url:
+                raise ReplayServiceError(
+                    "BASE_URL is not set. A replayed run needs an absolute build URL, because report emails "
+                    "and GitHub issues link to it. Set BASE_URL in the Argus configuration."
+                )
+            self._new_runs = {run_ref["id"] for run_ref in runs if not await self._run_exists(run_ref)}
+            self._kept_runs = {run_ref["id"] for run_ref in runs} - self._new_runs
+            await self._assign_build_numbers([run_ref for run_ref in runs if run_ref["id"] in self._new_runs])
+            records = self._rewrite_submits(records, runs)
+        if self._create_missing_tests is None:
+            # Only a new run in the build path needs the test that the path names.
+            self._create_missing_tests = bool(self._new_runs)
         records = self._apply_ordering(records)
 
-        summary = ReplaySummary(total=len(records))
+        summary = ReplaySummary(total=len(records), runs=runs)
         if records:
             client = self._async_client()
             try:
@@ -204,6 +306,8 @@ class ReplayService:
             finally:
                 if client is not self._client:
                     await client.aclose()
+        for run_ref in runs:
+            run_ref["failed"] = run_ref["id"] in self._failed_submits
 
         LOGGER.info(
             "Replay ingest complete: total=%d processed=%d ok=%d failed=%d skipped=%d "
@@ -217,7 +321,13 @@ class ReplayService:
     async def _dispatch_all(self, client, records: list[dict], summary: ReplaySummary, *, dry_run: bool) -> None:
         last_seen_ts = self._compute_last_seen_ts(records)
         for rec in records:
+            failed_before = summary.failed
             await self._process_one(client, rec, summary, dry_run=dry_run, last_seen_ts=last_seen_ts)
+            run_id = self._record_run_id(rec) if self._is_submit(rec) else None
+            if not run_id:
+                continue
+            if summary.failed > failed_before:
+                self._failed_submits.add(run_id)
 
         # After the recorded calls are applied, optionally discover log
         # archives that reached S3 but whose ``logs/submit`` was never
@@ -229,6 +339,182 @@ class ReplayService:
             for rec in backfill_records:
                 await self._process_one(client, rec, summary, dry_run=dry_run, last_seen_ts=last_seen_ts)
                 summary.backfilled_logs += len((rec.get("body") or {}).get("logs") or [])
+
+        if self._owner is not None and not dry_run:
+            await self._stamp_runs(summary)
+
+    # ------------------------------------------------------------------
+    # The build path (local_runs) and ownership (owner)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _model_for(run_type: str):
+        """Return the run model of a plugin, or reject an unknown run type."""
+        try:
+            return ClientService().get_model(run_type)
+        except ClientException:
+            raise DataValidationError(f"the archive names run type {run_type!r}, which no plugin serves") from None
+
+    @staticmethod
+    def _run_models() -> list:
+        """Return the run model of every plugin."""
+        return list({id(plugin.model): plugin.model for plugin in AVAILABLE_PLUGINS.values()}.values())
+
+    async def _run_exists(self, run_ref: dict) -> bool:
+        """Return whether Argus holds the run, or reject an unknown run type."""
+        try:
+            await self._model_for(run_ref["type"]).get(id=UUID(run_ref["id"]))
+        except DocumentNotFound:
+            return False
+        return True
+
+    async def _run_build_numbers(self) -> set[int]:
+        """Return the build numbers that runs hold under the build path, for
+        every plugin, since ``/test/<path>/<n>`` resolves one run."""
+        queries = [
+            model.find(build_id=self._build_path).only("build_number").values_list("build_number").all()
+            for model in self._run_models()
+        ]
+        rows = [row for result in await asyncio.gather(*queries) for row in result]
+        return {n for (n,) in rows if n is not None}
+
+    async def _assign_build_numbers(self, runs: list[dict]) -> None:
+        """Give each run the next build number above the highest one under
+        the build path."""
+        if not runs:
+            return
+        for run_ref in runs:
+            run_ref["build_id"] = self._build_path
+        number = max(await self._run_build_numbers() | {0})
+        for run_ref in runs:
+            number += 1
+            run_ref["build_number"] = number
+
+    def _resolve_owner(self) -> None:
+        """Turn on ``as_me`` for a replay into a build path, unless the
+        request set it."""
+        as_me = self._build_path is not None if self._as_me is None else self._as_me
+        self._owner = self._caller if as_me else None
+
+    def _local_build_path(self, records: list[dict]) -> str | None:
+        """Return ``local-runs/<caller>/<test>`` for an archive of one local
+        run, or None for any other archive. ``<test>`` is ``test_name`` when
+        the request sets it."""
+        submits = [rec["body"] for rec in records if self._is_submit(rec) and isinstance(rec.get("body"), dict)]
+        if len(submits) != 1 or any(submits[0].get(key) for key in _BUILD_URL_KEYS):
+            return None
+        user = self._path_name(self._caller.username) or "unknown-user"
+        if self._test_name is None:
+            test = self._local_job_name(submits[0])
+        elif not (test := self._path_name(self._test_name)):
+            raise DataValidationError(f"test_name {self._test_name!r} holds no character that a build path accepts")
+        return f"{LOCAL_RUNS_RELEASE}/{user}/{test}"
+
+    @classmethod
+    def _local_job_name(cls, body: dict) -> str:
+        """Name a local run after its first SCT config file, else after the
+        last name of its recorded build path."""
+        config_files = (body.get("sct_config") or {}).get("config_files") or []
+        if isinstance(config_files, str):
+            config_files = config_files.split()
+        if config_files:
+            stem = config_files[0].rsplit("/", 1)[-1].removesuffix(".yaml").removesuffix(".yml")
+            if name := cls._path_name(stem):
+                return name
+        recorded = next((body[key] for key in _BUILD_PATH_KEYS if body.get(key)), "")
+        return cls._path_name(str(recorded).rstrip("/").rsplit("/", 1)[-1]) or "local-run"
+
+    @staticmethod
+    def _path_name(value: str) -> str:
+        """Make ``value`` a name a build path accepts."""
+        return _PATH_NAME_RE.sub("-", value).strip("-.")
+
+    @classmethod
+    def _is_submit(cls, record: dict) -> bool:
+        return cls._normalise_endpoint(record.get("endpoint", "")) == SUBMIT_RUN_ENDPOINT
+
+    @classmethod
+    def _record_run_id(cls, record: dict) -> str | None:
+        loc = record.get("location_params") or {}
+        if loc.get("id"):
+            return str(loc["id"])
+        if cls._is_submit(record):
+            run_id = (record.get("body") or {}).get("run_id")
+            return str(run_id) if run_id else None
+        return None
+
+    def _rewrite_submits(self, records: list[dict], runs: list[dict]) -> list[dict]:
+        """File the ``submit_run`` of every new run under the build path, with
+        its own Argus link as the build URL, and with the owner as its
+        starter."""
+        numbers = {run_ref["id"]: run_ref["build_number"] for run_ref in runs}
+        rewritten = []
+        for rec in records:
+            body = rec.get("body")
+            if self._is_submit(rec) and isinstance(body, dict) and self._record_run_id(rec) in self._new_runs:
+                build_url = f"{self._argus_url}/test/{self._build_path}/{numbers[self._record_run_id(rec)]}/"
+                path_keys = [key for key in _BUILD_PATH_KEYS if key in body] or ["job_name"]
+                url_keys = [key for key in _BUILD_URL_KEYS if key in body] or ["job_url"]
+                body = {**body, **dict.fromkeys(path_keys, self._build_path), **dict.fromkeys(url_keys, build_url)}
+                if self._owner is not None and "started_by" in body:
+                    body["started_by"] = self._owner.username
+                rec = {**rec, "body": body}
+            rewritten.append(rec)
+        return rewritten
+
+    def _runs_in(self, records: list[dict]) -> list[dict]:
+        """Return the distinct runs that ``records`` address, in first-seen
+        order. The run type comes from ``location_params.type``, or from
+        ``test_type`` for a route that carries only the run ID."""
+        runs: dict[tuple, None] = {}
+        for rec in records:
+            run_id = self._record_run_id(rec)
+            run_type = (rec.get("location_params") or {}).get("type") or rec.get("test_type")
+            if run_id and run_type:
+                runs.setdefault((run_type, run_id), None)
+        return [
+            {"type": t, "id": i, "build_id": None, "build_number": None, "failed": False}
+            for t, i in runs
+        ]
+
+    @staticmethod
+    def _stamp_error(summary: ReplaySummary, run_id: str, exc: Exception) -> None:
+        LOGGER.exception("Replay could not stamp run %s", run_id)
+        summary.errors.append({
+            "ts": 0,
+            "endpoint": "stamp_run",
+            "error": f"run {run_id}: {type(exc).__name__}: {exc}",
+        })
+
+    async def _stamp_runs(self, summary: ReplaySummary) -> None:
+        """Make the owner the assignee of each replayed run."""
+        for run_ref in summary.runs:
+            if run_ref["id"] in self._failed_submits:
+                continue
+            try:
+                if run_ref["id"] in self._new_runs:
+                    await self._assign_new(run_ref)
+                else:
+                    await self._assign_existing(run_ref)
+            except Exception as exc:  # noqa: BLE001 -- isolate per run
+                self._stamp_error(summary, run_ref["id"], exc)
+
+    async def _assign_new(self, run_ref: dict) -> None:
+        run = await self._model_for(run_ref["type"]).get(id=UUID(run_ref["id"]))
+        if run.assignee != self._owner.id:
+            run.assignee = self._owner.id
+            await run.save()
+
+    async def _assign_existing(self, run_ref: dict) -> None:
+        """Make the owner the assignee of a run that existed before the
+        replay, and record the change in the run events."""
+        run = await self._model_for(run_ref["type"]).get(id=UUID(run_ref["id"]))
+        if run.assignee == self._owner.id:
+            return
+        if not run.test_id:
+            raise DataValidationError("the run has no test, so its assignee cannot change")
+        await TestRunService().change_run_assignee(
+            test_id=run.test_id, run_id=run.id, new_assignee=self._owner.id, user=self._owner,
+        )
 
     def _async_client(self):
         """Build the in-process ``httpx2.AsyncClient`` to dispatch through.
@@ -658,28 +944,29 @@ class ReplayService:
         """Synthesise ``logs/submit`` records for a run's S3 log archives that
         were uploaded but never recorded.
 
-        For each run touched by the archive we derive its S3 bucket + ``run_id``
-        prefix from any recorded log link, list the prefix, and emit a record
-        for every object whose URL is not already in the recorded set. The
+        For each run that the archive addresses (see :meth:`_runs_in`) we
+        derive its S3 bucket + ``run_id`` prefix from any recorded log link,
+        list the prefix, and emit a record for every object whose URL is not
+        already in the recorded set. The
         records are dispatched through the normal ``logs/submit`` path, whose
         ``submit_logs`` appends-and-dedups -- so this is idempotent across
         re-ingests (deterministic key-derived names) and never clobbers links
         the client already submitted.
         """
-        runs: dict[tuple, set] = {}
+        runs: dict[tuple, set] = {(run_ref["type"], run_ref["id"]): set() for run_ref in self._runs_in(records)}
         schema_version: str | None = None
         for rec in records:
-            loc = rec.get("location_params") or {}
-            run_type, run_id = loc.get("type"), loc.get("id")
-            if not run_type or not run_id:
+            if self._normalise_endpoint(rec.get("endpoint", "")) != LOGS_SUBMIT_ENDPOINT:
                 continue
-            links = runs.setdefault((run_type, run_id), set())
-            if self._normalise_endpoint(rec.get("endpoint", "")) == LOGS_SUBMIT_ENDPOINT:
-                body = rec.get("body") or {}
-                schema_version = schema_version or body.get("schema_version")
-                for log in body.get("logs") or []:
-                    if log.get("log_link"):
-                        links.add(log["log_link"])
+            links = runs.get(((rec.get("location_params") or {}).get("type") or rec.get("test_type"),
+                              self._record_run_id(rec)))
+            if links is None:
+                continue
+            body = rec.get("body") or {}
+            schema_version = schema_version or body.get("schema_version")
+            for log in body.get("logs") or []:
+                if log.get("log_link"):
+                    links.add(log["log_link"])
 
         backfill: list[dict] = []
         for (run_type, run_id), recorded_links in runs.items():
@@ -737,6 +1024,10 @@ class ReplayService:
             summary.skipped_no_replay += 1
             return
 
+        # A run that Argus held before a replay into the build path keeps its
+        # test, so its submit_run needs no test entity.
+        needs_test = endpoint == SUBMIT_RUN_ENDPOINT and self._record_run_id(record) not in self._kept_runs
+
         # Pre-check (default path): when create_missing_tests is NOT set,
         # refuse to dispatch a submit_run whose ArgusTest entity does not
         # exist. Without it, assign_categories silently leaves test_id empty
@@ -744,7 +1035,7 @@ class ReplayService:
         # breaks. Surface a per-record failure naming the would-be
         # release/group/test and which level is absent. Runs in dry_run too
         # so the user can preview which records would fail.
-        if not self._create_missing_tests and endpoint == "/testrun/$type/submit":
+        if not self._create_missing_tests and needs_test:
             try:
                 diagnosis = await self._diagnose_missing_hierarchy(record)
             except Exception:  # noqa: BLE001
@@ -772,9 +1063,9 @@ class ReplayService:
         # dispatch so ``assign_categories`` can resolve ``test_id`` on the
         # initial insert. Failures here are non-fatal -- we still try the
         # dispatch and surface its error.
-        if self._create_missing_tests and endpoint == "/testrun/$type/submit":
+        if self._create_missing_tests and needs_test:
             try:
-                await self._ensure_hierarchy_for_submit_run(record)
+                await self._ensure_hierarchy_for_submit_run(self._without_build_url(record))
             except Exception:  # noqa: BLE001
                 LOGGER.exception(
                     "Hierarchy auto-create failed for ts=%s; continuing with dispatch", ts,
@@ -856,6 +1147,14 @@ class ReplayService:
             "endpoint": endpoint,
             "error": f"HTTP {status}: {body_text[: self._ERROR_BODY_MAX]}",
         })
+
+    def _without_build_url(self, record: dict) -> dict:
+        """Drop the build URL of the ``submit_run`` of a new run before the test
+        entity takes it: the URL opens one build, not the job."""
+        body = record.get("body")
+        if self._build_path is None or not isinstance(body, dict):
+            return record
+        return {**record, "body": {k: v for k, v in body.items() if k not in _BUILD_URL_KEYS}}
 
     @staticmethod
     def _envelope_error(response) -> str | None:
