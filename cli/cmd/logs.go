@@ -363,7 +363,7 @@ func logEntriesFromPairs(pairs [][]string) []models.LogEntry {
 		if len(p) < 2 {
 			continue
 		}
-		entries = append(entries, models.LogEntry{Name: p[0], URL: p[1]})
+		entries = append(entries, models.LogEntry{Name: p[0]})
 	}
 	return entries
 }
@@ -377,7 +377,7 @@ func logEntriesFromMap(m map[string]string) []models.LogEntry {
 
 	entries := make([]models.LogEntry, 0, len(m))
 	for _, name := range names {
-		entries = append(entries, models.LogEntry{Name: name, URL: m[name]})
+		entries = append(entries, models.LogEntry{Name: name})
 	}
 	return entries
 }

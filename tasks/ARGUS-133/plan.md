@@ -55,15 +55,15 @@ summary path stays as it is. The Long help names `--full`.
 - Test: `cli/cmd/logs_test.go`
 
 **Internals:** `LogEntry` keeps `Name` only. `logEntriesFromPairs` takes
-`p[0]` and skips an empty pair. `logEntriesFromMap` keeps the sorted
-names.
+`p[0]` and still skips a pair without a link, which the download endpoint
+cannot serve. `logEntriesFromMap` keeps the sorted names.
 
-- [ ] Write the failing test: `run logs list` against a stub SCT run with
+- [x] Write the failing test: `run logs list` against a stub SCT run with
   two logs prints `[{"name": …}, {"name": …}]` and no `url` key.
-- [ ] Run it and confirm the failure.
-- [ ] Write the smallest change that passes it.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run it and confirm the failure.
+- [x] Write the smallest change that passes it.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 3 — failures by default on both pytest commands
 
