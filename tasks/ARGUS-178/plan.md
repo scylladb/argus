@@ -94,7 +94,7 @@ Steps:
 - [x] Write the script.
 - [x] Run `uv run python scripts/migration/migration_2026-10-15_backfill_jira_issue_priority.py --help`
   and confirm the usage text prints.
-- [x] The migration scripts carry no unit tests. Task 8 runs this one against
+- [x] The migration scripts carry no unit tests. Task 9 runs this one against
   the dev database and live Jira.
 - [x] Run the verify sequence.
 - [x] Commit, with the boxes of this task checked.
@@ -282,7 +282,60 @@ Steps:
   of `GET /api/v1/issues/{key}/links`.
 - [x] Commit, with the boxes of this task checked.
 
-## Task 8 — Live check against the dev database and Jira
+## Task 8 — Label colors by scope, and readable label text
+
+**Files:**
+- Modify: `frontend/Common/IssueTypes.ts` (`label2color`)
+- Modify: `frontend/Jira/JiraIssue.svelte:116-127`
+- Modify: `frontend/Github/GithubIssue.svelte:104-114`
+- Modify: `frontend/Github/Issues.svelte` (the "All Labels" chips)
+- Modify: `frontend/TestRun/SCT/SctEvent.svelte:225, 249`
+- Test: `frontend/Common/IssueTypes.test.ts`
+- Test: `frontend/Common/IssueCard.test.ts`
+
+**Internals:**
+- In `IssueTypes.ts`:
+  - `const LABEL_SCOPE = /^([^/:]+)[/:]/`.
+  - `const hash32 = (text: string) => parseInt(sha1(text).slice(0, 8), 16)`.
+    Eight hex digits stay a safe integer.
+  - `label2color(label)`:
+    - The scope is `LABEL_SCOPE.exec(label.name)?.[1] ?? label.name`, in
+      lowercase.
+    - Set `variant = hash32(label.name)`.
+    - The hue is `(hash32(scope) % 360 + variant % 25 - 12 + 360) % 360`.
+    - The lightness is `36 + (variant >>> 8) % 13`.
+    - It returns `hsl(<hue>, 65%, <lightness>%)`.
+  - `labelTextColor(background: string): "white" | "black"` returns the one
+    with the higher `Color(background).contrast(...)`.
+- In `JiraIssue.svelte`, compute the color once per label with
+  `{@const color = label2color(label)}` and take the text from
+  `labelTextColor(color)`.
+- `GithubIssue.svelte`, `SctEvent.svelte` and the panel chips in
+  `Issues.svelte` replace `Color(...).isDark() ? 'white' : 'black'` with
+  `labelTextColor(...)`. Drop the `Color` import where nothing else uses it.
+- The Jira rows of `SctEvent.svelte` take the label background from
+  `label2color(label)`, as the Jira card does. They used the stored `000`.
+- `IssuesCopyModal.svelte` keeps `Color(label2color(label)).darken(0.50)`, which
+  parses `hsl()`.
+
+Steps:
+- [ ] Write the failing tests:
+  - `IssueTypes.test.ts`:
+    - `label2color` returns an `hsl(…)` string, and it is deterministic.
+    - The hues of `backport/2025.1`, `backport/2025.1-done`, `backport/6.2`,
+      `backport/6.2-done` and `Backport/none` lie within 24° of each other.
+    - For 2000 generated label names, both with and without a scope, the
+      background and `labelTextColor` reach a contrast ratio of at least 4.5.
+    - `labelTextColor` gives black for `#F76121`, where `isDark()` would give
+      white at 3.14:1, and white for `rgb(0, 32, 255)`.
+  - `IssueCard.test.ts`: a GitHub label with the color `f76121` renders with
+    black text.
+- [ ] Run `yarn test` and confirm that the new tests fail.
+- [ ] Make the changes.
+- [ ] Run the verify sequence and `yarn build`.
+- [ ] Commit, with the boxes of this task checked.
+
+## Task 9 — Live check against the dev database and Jira
 
 **Files:** none.
 
@@ -300,6 +353,9 @@ Steps:
   - The "All Labels" panel lists the labels and filters.
   - "By priority" orders the issues.
   - The "Runs" link opens `/issues/<KEY>`, and that page shows no "Runs" link.
+- [ ] In headless Chrome, check that Jira labels of one scope share a color
+  family on the issue tab and in the "All Labels" panel, and that the label
+  text reads in the light and the dark theme.
 - [ ] Link a Jira issue of type Task to a dev run, and confirm that its priority
   shows. A Task leaves the Seen Again Counter untouched, so the check writes
   nothing to Jira.
