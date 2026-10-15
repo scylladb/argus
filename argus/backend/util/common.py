@@ -3,6 +3,7 @@ import base64
 from itertools import islice
 import logging
 import os
+import re
 from typing import Awaitable, Callable, Iterable, TypeVar
 from uuid import UUID
 
@@ -83,6 +84,11 @@ def get_build_number(build_job_url: str) -> int | None:
         except ValueError:
             LOGGER.error("Error parsing build number from %s: got %s as build_number", build_job_url, build_number)
     return None
+
+
+def version_key(name: str) -> tuple:
+    return tuple((1, "", -int(part)) if index % 2 else (0, part.lower(), 0)
+                 for index, part in enumerate(re.split(r"(\d+)", name)))
 
 
 def check_version(filter_string: str, version: str) -> bool:

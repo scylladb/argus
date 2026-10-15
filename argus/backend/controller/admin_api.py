@@ -1,9 +1,10 @@
 import logging
 from dataclasses import asdict
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.release_manager import ReleaseManagerService
@@ -39,14 +40,18 @@ class SetReleaseDormancyRequest(BaseModel):
     dormant: bool
 
 
+MAX_RELEASE_PRIORITY = 2**31 - 1
+
+
 class EditReleaseRequest(BaseModel):
     id: str
-    pretty_name: str
+    pretty_name: str | None = None
     description: str | None = None
     valid_version_regex: str | None = None
     enabled: bool
     perpetual: bool
     dormant: bool
+    priority: Annotated[int, Field(ge=0, le=MAX_RELEASE_PRIORITY)] | None = None
 
 
 class DeleteReleaseRequest(BaseModel):

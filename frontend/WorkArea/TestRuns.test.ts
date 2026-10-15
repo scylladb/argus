@@ -132,3 +132,19 @@ describe("TestRuns refresh", () => {
         expect(dispatcherProps().autoRefresh).toBe(false);
     });
 });
+
+describe("TestRuns picked runs", () => {
+    const runListRequests = () =>
+        vi.mocked(fetch).mock.calls.map(([url]) => String(url)).filter((url) => url.startsWith(`/api/v1/test/${TEST_ID}/runs`));
+
+    it("fetches the runs again when a run is picked into the open test", async () => {
+        const { rerender } = render(TestRuns, { props: { testId: TEST_ID, tab: "details", additionalRuns: ["r1"] } });
+        await screen.findByRole("button", { name: "#412" });
+        expect(runListRequests()).toHaveLength(1);
+
+        await rerender({ testId: TEST_ID, tab: "details", additionalRuns: ["r1", "r2"] });
+
+        await vi.waitFor(() => expect(runListRequests()).toHaveLength(2));
+        expect(runListRequests()[1]).toContain("additionalRuns[]=r2");
+    });
+});
