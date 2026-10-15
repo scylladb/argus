@@ -83,7 +83,7 @@ the rest only.
   the IDs of the `@name` matches. It stores the list and notifies each ID.
 - `update_run_comment` stores `mentions: list[UUID]`.
 
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - submit a comment with a mention ID: the comment holds it, and the
     mentioned user gets a notification
   - update a comment with mention IDs
@@ -92,10 +92,10 @@ the rest only.
   - clone/create with real release and group IDs (replace `"release-1"` and
     `"group-1"` in `test_testrun_api.py`)
   - assignee set with the sentinel clears the assignee
-- [ ] Run them and confirm the failures.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failures.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 3 — client_api and ClientService
 
