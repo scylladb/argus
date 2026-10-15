@@ -1,4 +1,4 @@
-from typing import Annotated, Any, Optional, TypedDict
+from typing import Annotated, Any, NotRequired, Optional, TypedDict
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -16,11 +16,12 @@ class PytestSubmitData(TypedDict):
     timestamp: float
     session_timestamp: float
     test_type: str
-    run_id: str
-    status: PytestStatus
-    duration: float
+    run_id: UUID
+    status: str
+    message: NotRequired[str | None]
+    duration: NotRequired[float | None]
     markers: list[str]
-    user_fields: dict[str, Any]
+    user_fields: NotRequired[dict[str, Any]]
 
 
 class PytestResultTableOld(Document):

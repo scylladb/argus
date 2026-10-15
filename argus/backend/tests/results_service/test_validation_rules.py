@@ -65,7 +65,7 @@ async def test_can_track_validation_rules_changes(fake_test, client_service, res
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
     await client_service.submit_run(run_type, asdict(run))
-    await client_service.submit_results(run_type, run.run_id, results.as_dict())
+    await client_service.submit_results(run_type, UUID(run.run_id), results.as_dict())
     run_results = await results_service.get_run_results(fake_test.id, UUID(run.run_id))
     actual_cells = results_to_dict(run_results[0])
     # all results should be marked as passed
@@ -92,7 +92,7 @@ async def test_can_track_validation_rules_changes(fake_test, client_service, res
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
     await client_service.submit_run(run_type, asdict(run))
     with pytest.raises(DataValidationError):
-        await client_service.submit_results(run_type, run.run_id, results.as_dict())
+        await client_service.submit_results(run_type, UUID(run.run_id), results.as_dict())
     run_results = await results_service.get_run_results(fake_test.id, UUID(run.run_id))
     actual_cells = results_to_dict(run_results[0])
     for cell in sample_data:
@@ -121,7 +121,7 @@ async def test_can_track_validation_rules_changes(fake_test, client_service, res
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
     await client_service.submit_run(run_type, asdict(run))
-    await client_service.submit_results(run_type, run.run_id, results.as_dict())
+    await client_service.submit_results(run_type, UUID(run.run_id), results.as_dict())
     run_results = await results_service.get_run_results(fake_test.id, UUID(run.run_id))
     actual_cells = results_to_dict(run_results[0])
     for cell in sample_data:
@@ -151,7 +151,7 @@ async def test_can_track_validation_rules_changes(fake_test, client_service, res
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
     await client_service.submit_run(run_type, asdict(run))
     with pytest.raises(DataValidationError):
-        await client_service.submit_results(run_type, run.run_id, results.as_dict())
+        await client_service.submit_results(run_type, UUID(run.run_id), results.as_dict())
     run_results = await results_service.get_run_results(fake_test.id, UUID(run.run_id))
     actual_cells = results_to_dict(run_results[0])
     for cell in sample_data:
@@ -197,7 +197,7 @@ async def test_can_track_validation_rules_changes(fake_test, client_service, res
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
     await client_service.submit_run(run_type, asdict(run))
-    await client_service.submit_results(run_type, run.run_id, results.as_dict())
+    await client_service.submit_results(run_type, UUID(run.run_id), results.as_dict())
     run_results = await results_service.get_run_results(fake_test.id, UUID(run.run_id))
     actual_cells = results_to_dict(run_results[0])
     for cell in sample_data:

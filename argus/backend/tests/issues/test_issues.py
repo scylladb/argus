@@ -1038,7 +1038,7 @@ async def test_search_by_issue_key_narrows_its_runs_by_config_and_status(
     await ClientService.parse_config_values("sct_config", json.dumps({"backend": "aws"}), str(run.id))
     await ClientService.parse_config_values("sct_config", json.dumps({"backend": "gce"}), str(on_gce.id))
     await ClientService.parse_config_values("sct_config", json.dumps({"backend": "aws"}), str(failed_on_aws.id))
-    await client_service.update_run_status("scylla-cluster-tests", str(failed_on_aws.id), "failed")
+    await client_service.update_run_status("scylla-cluster-tests", failed_on_aws.id, "failed")
 
     on_aws = _search(api_client, query=f"issue:{key} config:backend=aws", limit=10)
     failed = _search(api_client, query=f"issue:{key} config:backend=aws status:failed", limit=10)

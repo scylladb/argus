@@ -122,15 +122,15 @@ the rest only.
   - `argus/backend/tests/run_cost/test_finalize_recompute.py`,
     `argus/backend/tests/test_stats_snapshot.py`
 
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - `POST /client/testrun/sct/<bad>/heartbeat` returns
     `RequestValidationError`
   - pytest result submit with `status: "internal-error"` and
     `message: null` stores the row
-- [ ] Run them and confirm the failures.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failures.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 4 — SCT plugin
 

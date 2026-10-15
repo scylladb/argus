@@ -64,7 +64,7 @@ class ClientService:
         new_result.id = datetime.fromtimestamp(request_data["timestamp"], tz=UTC)
         new_result.status = request_data["status"]
         new_result.test_type = request_data["test_type"]
-        new_result.run_id = UUID(request_data["run_id"]) if isinstance(request_data["run_id"], str) else request_data["run_id"]
+        new_result.run_id = request_data["run_id"]
         new_result.message = request_data.get("message", "")
         new_result.duration = request_data.get("duration")
         new_result.test_timestamp = datetime.fromtimestamp(request_data["timestamp"])
@@ -97,8 +97,7 @@ class ClientService:
             "id": new_result.id,
         }
 
-    async def get_run(self, run_type: str, run_id: str):
-        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
+    async def get_run(self, run_type: str, run_id: UUID):
         model = self.get_model(run_type)
         try:
             run = await model.get(id=run_id)
@@ -106,58 +105,58 @@ class ClientService:
             return None
         return run
 
-    async def heartbeat(self, run_type: str, run_id: str) -> int:
+    async def heartbeat(self, run_type: str, run_id: UUID) -> int:
         model = self.get_model(run_type)
-        run = await model.load_test_run(UUID(run_id))
+        run = await model.load_test_run(run_id)
         run.update_heartbeat()
         await run.save()
         return run.heartbeat
 
-    async def get_run_status(self, run_type: str, run_id: str) -> str:
+    async def get_run_status(self, run_type: str, run_id: UUID) -> str:
         model = self.get_model(run_type)
-        run = await model.load_test_run(UUID(run_id))
+        run = await model.load_test_run(run_id)
         return run.status
 
-    async def update_run_status(self, run_type: str, run_id: str, new_status: str) -> str:
+    async def update_run_status(self, run_type: str, run_id: UUID, new_status: str) -> str:
         model = self.get_model(run_type)
-        run = await model.load_test_run(UUID(run_id))
+        run = await model.load_test_run(run_id)
         run.change_status(new_status=TestStatus(new_status))
         await run.save()
 
         return run.status
 
-    async def submit_product_version(self, run_type: str, run_id: str, version: str) -> str:
+    async def submit_product_version(self, run_type: str, run_id: UUID, version: str) -> str:
         model = self.get_model(run_type)
-        run = await model.load_test_run(UUID(run_id))
+        run = await model.load_test_run(run_id)
         await run.submit_product_version(version)
         await run.save()
 
         return "Submitted"
 
-    async def submit_logs(self, run_type: str, run_id: str, logs: list[dict]) -> str:
+    async def submit_logs(self, run_type: str, run_id: UUID, logs: list[dict]) -> str:
         model = self.get_model(run_type)
-        run = await model.load_test_run(UUID(run_id))
+        run = await model.load_test_run(run_id)
         await run.submit_logs(logs)
         await run.save()
 
         return "Submitted"
 
-    async def finish_run(self, run_type: str, run_id: str, payload: dict | None = None) -> str:
+    async def finish_run(self, run_type: str, run_id: UUID, payload: dict | None = None) -> str:
         model = self.get_model(run_type)
-        run = await model.load_test_run(UUID(run_id))
+        run = await model.load_test_run(run_id)
         await run.finish_run(payload)
         await run.save()
         try:
-            await RunCostService().recompute_actual_cost(UUID(run_id), use_estimate=True)
+            await RunCostService().recompute_actual_cost(run_id, use_estimate=True)
         except (DriverException, NoHostAvailable):
             LOGGER.exception("Could not recompute the actual cost of run %s, the run is finalized", run_id)
 
         return "Finalized"
 
-    async def submit_results(self, run_type: str, run_id: str, results: dict) -> dict[str, str]:
+    async def submit_results(self, run_type: str, run_id: UUID, results: dict) -> dict[str, str]:
         model = self.get_model(run_type)
         try:
-            run = await model.load_test_run(UUID(run_id))
+            run = await model.load_test_run(run_id)
         except DocumentNotFound:
             return {"status": "error", "response": {
                 "exception": "DoesNotExist",
@@ -196,13 +195,12 @@ class ClientService:
             raise DataValidationError()
         return {"status": "ok", "message": "Results submitted"}
 
-    async def get_run_info(self, run_id: str) -> dict:
+    async def get_run_info(self, run_id: UUID) -> dict:
         """Search all plugin models for a test run by run_id and return full details.
 
         Returns the test run itself, test info (test, group, release), comments, and activity.
         """
-        run_uuid = UUID(run_id)
-        runs = await asyncio.gather(*(plugin.model.find_one(id=run_uuid) for plugin in AVAILABLE_PLUGINS.values()))
+        runs = await asyncio.gather(*(plugin.model.find_one(id=run_id) for plugin in AVAILABLE_PLUGINS.values()))
         plugin_name, run = next(((name, run) for name, run in zip(AVAILABLE_PLUGINS, runs) if run), (None, None))
 
         if not run:
@@ -212,14 +210,14 @@ class ClientService:
 
         test_info, comments, all_events = await asyncio.gather(
             self._get_run_test_info(run_id, run.test_id),
-            ArgusTestRunComment.find(test_run_id=run_uuid).all(),
-            ArgusEvent.find(run_id=run_uuid).all(),
+            ArgusTestRunComment.find(test_run_id=run_id).all(),
+            ArgusEvent.find(run_id=run_id).all(),
         )
         comments_data = [c.model_dump() for c in sorted(comments, key=lambda c: c.posted_at)]
 
         all_events = sorted(all_events, key=lambda ev: ev.created_at)
         activity = {
-            "run_id": run_uuid,
+            "run_id": run_id,
             "raw_events": [event.model_dump() for event in all_events],
             "events": {
                 str(event.id): EVENT_PROCESSORS.get(event.kind)(json.loads(event.body))
@@ -236,7 +234,7 @@ class ClientService:
         }
 
     @staticmethod
-    async def _get_run_test_info(run_id: str, test_id: UUID | None) -> dict:
+    async def _get_run_test_info(run_id: UUID, test_id: UUID | None) -> dict:
         if not test_id:
             return {}
         try:
@@ -260,8 +258,7 @@ class ClientService:
         return await dml.all()
 
     @staticmethod
-    async def get_config_store(run_id: str, config_name: str) -> RunConfiguration:
-        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
+    async def get_config_store(run_id: UUID, config_name: str) -> RunConfiguration:
         try:
             config_store = await RunConfiguration.get(run_id=run_id, name=config_name)
         except DocumentNotFound:
@@ -272,8 +269,7 @@ class ClientService:
         return config_store
 
     @staticmethod
-    async def get_all_configs(run_id: str) -> list[RunConfiguration]:
-        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
+    async def get_all_configs(run_id: UUID) -> list[RunConfiguration]:
         return await RunConfiguration.find(run_id=run_id).all()
 
     @staticmethod
@@ -332,7 +328,7 @@ class ClientService:
         return scalars
 
     @classmethod
-    async def parse_config_values(cls, name: str, config: str, run_id: str):
+    async def parse_config_values(cls, name: str, config: str, run_id: UUID | str):
         try:
             loaded: dict = json.loads(config)
         except json.JSONDecodeError:
@@ -357,7 +353,7 @@ class ClientService:
         LOGGER.debug("Indexed %s config parameters for run %s", len(scalars), run_id)
 
     @classmethod
-    async def submit_config(cls, run_id: str, config_name: str, config_content: str) -> bool:
+    async def submit_config(cls, run_id: UUID, config_name: str, config_content: str) -> bool:
         config_store = await cls.get_config_store(run_id, config_name)
         decoded_config = str(base64.decodebytes(bytes(config_content, encoding="utf-8")), encoding="utf-8")
 

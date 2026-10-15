@@ -53,7 +53,7 @@ async def run_with_hidden_column(client_service, fake_test, release, group):
     for cell in SAMPLE_CELLS:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
     await client_service.submit_run(run_type, asdict(run))
-    await client_service.submit_results(run_type, run.run_id, results.as_dict())
+    await client_service.submit_results(run_type, UUID(run.run_id), results.as_dict())
     return UUID(run.run_id)
 
 

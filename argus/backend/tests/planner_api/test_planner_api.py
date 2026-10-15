@@ -220,7 +220,7 @@ async def _release_tree(release_manager_service, test_names: list[str], priority
 async def _run_with_status(client_service, test, status: str) -> None:
     run_type, run_req = get_fake_test_run(test)
     await client_service.submit_run(run_type, asdict(run_req))
-    await client_service.update_run_status(run_type, run_req.run_id, status)
+    await client_service.update_run_status(run_type, uuid.UUID(run_req.run_id), status)
 
 
 async def test_search_status_facet_keeps_the_scoped_tests_in_that_status(
@@ -265,7 +265,7 @@ async def test_search_istatus_and_assignee_facets_read_the_latest_run(
 async def _run_with_config(client_service, test, status: str, **params: str) -> str:
     run_type, run_req = get_fake_test_run(test)
     await client_service.submit_run(run_type, asdict(run_req))
-    await client_service.update_run_status(run_type, run_req.run_id, status)
+    await client_service.update_run_status(run_type, uuid.UUID(run_req.run_id), status)
     await ClientService.parse_config_values("sct_config", json.dumps(params), run_req.run_id)
     return run_req.run_id
 
