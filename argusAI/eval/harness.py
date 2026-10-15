@@ -90,7 +90,7 @@ class EvalHarness:
         """Collapse semantically-similar events (mirrors production) when enabled."""
         if not self.cfg.similarity_dedup:
             return events
-        from .dedup import deduplicate_by_similarity  # noqa: PLC0415 - lazy: pulls in chromadb, an optional ('ai-eval') dep
+        from .dedup import deduplicate_by_similarity  # noqa: PLC0415 - lazy: pulls in onnxruntime, an optional ('ai-eval') dep
 
         return deduplicate_by_similarity(events, self.cfg.similarity_threshold)
 

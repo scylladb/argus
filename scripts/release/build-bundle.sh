@@ -240,7 +240,7 @@ mv "$BUNDLE" "$RELOCATED"
     "$RELOCATED/python/bin/python${PYTHON_VERSION}" -c "
 import sys
 import argus_backend, argusAI.event_similarity_processor_v2
-import cassandra, coodie, chromadb, gunicorn, uvicorn
+import cassandra, coodie, onnxruntime, tokenizers, gunicorn, uvicorn
 # What the gunicorn master runs as the health process, and the package it
 # imports. A link back to the build checkout would resolve here only if this
 # tree had not moved, which is why the check runs from the relocated path.

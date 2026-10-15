@@ -122,7 +122,7 @@ lives in the scratchpad and is not committed.
 **Files:**
 - Delete: `argusAI/event_similarity_processor.py`
 - Modify: `pyproject.toml` (`ai`, `ai-eval`: replace `chromadb >= 1.5.9`
-  with `numpy >= 2.2`, `onnxruntime >= 1.24`, `tokenizers >= 0.22`)
+  with `numpy >= 2.2`, `onnxruntime >= 1.23`, `tokenizers >= 0.22`)
 - Modify: `uv.lock` (`uv lock`, no upgrade)
 - Modify: `scripts/release/build-bundle.sh` (the self-check import line)
 - Modify: `argusAI/README.md`: the overview sentence on V1, the "Same model
@@ -133,17 +133,18 @@ lives in the scratchpad and is not committed.
   extra (chromadb)" comment)
 - Modify: `argusAI/eval/harness.py` (the `noqa` reason names chromadb)
 
-- [ ] Delete V1, and edit the extras, the self-check and the text.
-- [ ] Run `uv lock`. Confirm that chromadb is gone, and that `onnxruntime`
-      (1.29.0, and 1.24.3 below 3.11), `tokenizers` (0.22.2) and `numpy`
-      keep their versions.
-- [ ] Run `uv sync --all-extras`, and confirm that `import chromadb` fails
+- [x] Delete V1, and edit the extras, the self-check and the text.
+- [x] Run `uv lock`. Confirm that chromadb is gone, and that `onnxruntime`
+      (1.29.0), `tokenizers` (0.22.2) and `numpy` keep their versions on
+      Python 3.11 and newer. A floor of 1.24 failed for Python 3.10: no
+      cp310 wheel. The floor is 1.23, and the 3.10 split takes 1.23.2.
+- [x] Run `uv sync --all-extras`, and confirm that `import chromadb` fails
       and `import argusAI.event_similarity_processor_v2` works.
-- [ ] Run `git grep -i chroma`. Expect only the cache path in
-      `argusAI/utils/embedding.py`, `argusAI/README.md` and the tests, plus
-      `tasks/`, `docs/plans/archive/`.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run `git grep -i chroma`. Expect only the cache path in
+      `argusAI/utils/embedding.py` and `argusAI/README.md`, plus `tasks/`
+      and `docs/plans/archive/`.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## After merge
 

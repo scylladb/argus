@@ -2,7 +2,7 @@
 
 ## Overview
 
-This directory contains the Event Similarity Processor V2 — the new system that generates and stores embeddings for SCT events. It supersedes the legacy `event_similarity_processor.py` that worked with the deprecated `sct_run` table, but for now both systems are allowed to run in parallel (see "Co‑existence with V1").
+This directory contains the Event Similarity Processor V2 — the system that generates and stores embeddings for SCT events.
 
 ## Architecture
 
@@ -70,7 +70,7 @@ Uses `MessageSanitizer` from `argusAI/utils/event_message_sanitizer.py` to:
 `BgeSmallEnEmbeddingModel` (BGE‑Small‑EN‑v1.5):
 - 384‑dimensional embeddings
 - Optimized for semantic similarity search
-- Same model family used by the legacy processor for consistency
+- Runs locally with `onnxruntime` and `tokenizers`
 
 ### Error handling
 - Event not found → logged and skipped
@@ -107,20 +107,6 @@ Metrics:
 - `processed_count`: total successfully processed events
 - `error_count`: total errors encountered
 
-## Differences from V1
-
-Improvements in V2:
-1. Cleaner architecture: no Vector DB dependency for processing
-2. Better error handling: failures don’t block processing
-3. Simpler flow: queue → process → store
-4. Severity‑specific tables for similarity performance
-5. Comprehensive unit and integration tests
-
-What’s not included in V2:
-- Similarity search (removed from the processor itself)
-- ChromaDB collections (not required for embedding storage)
-- Historical event backfill (processes only new events)
-
 ## Performance Benefits
 
 By separating ERROR and CRITICAL embeddings:
@@ -132,16 +118,6 @@ By separating ERROR and CRITICAL embeddings:
 ## Configuration
 
 No dedicated config file is required for the processor itself. It uses the standard Argus configuration for database connectivity (e.g., ScyllaDB settings from your environment or YAML config such as `argus.yaml`/`argus.local.yaml`, depending on your deployment). The embedding model is auto‑downloaded to `~/.cache/chroma/onnx_models/`.
-
-## Co‑existence with V1 (temporary)
-
-- For now, both V1 (`event_similarity_processor.py`) and V2 (`event_similarity_processor_v2.py`) may run in parallel.
-- There is no data migration at this time; V1 will be disabled once the team fully moves to V2.
-- If you still need to run V1 locally for comparison or fallback:
-  ```bash
-  cd argusAI
-  PYTHONPATH=.. uv run event_similarity_processor.py
-  ```
 
 ## Notes
 

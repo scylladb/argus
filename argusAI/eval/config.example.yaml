@@ -16,7 +16,7 @@ max_events: 25              # cap the unique-event set so a sweep stays cheap
 
 # Collapse semantically-similar events the way production does (sanitize -> BGE embed ->
 # cosine distance < threshold), instead of only exact-string dedup. Gives the true canonical
-# set production would summarize. Needs the 'ai-eval' extra (chromadb); downloads the BGE model.
+# set production would summarize. Needs the 'ai-eval' extra (onnxruntime); downloads the BGE model.
 similarity_dedup: false
 similarity_threshold: 0.05  # cosine distance; matches the worker (0.05 ≈ 95% similar)
 

@@ -153,8 +153,9 @@ TypeScript 5.x covers 19 modules. `tsconfig.json` extends
 | `PyJWT[crypto] >= 2.10.0` | Token authentication. |
 | `zstandard`, `lz4` | Artifact compression. |
 
-Optional extra `ai`: `chromadb >= 1.0.15`, `anthropic >= 1.4.0`,
-`tiktoken >= 0.7.0`. The extra `ai-eval` adds the evaluation harness inputs.
+Optional extra `ai`: `anthropic >= 1.4.0`, `tiktoken >= 0.7.0`, and
+`onnxruntime`, `tokenizers` and `numpy` for the embedding model. The extra
+`ai-eval` adds the evaluation harness inputs.
 
 ## Version Management
 
