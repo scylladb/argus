@@ -203,6 +203,38 @@ func ValidRunTypes() string {
 	return strings.Join(keys, ", ")
 }
 
+// fetchFullRun returns the whole typed run, from the cache when it holds the
+// run and from the API otherwise.
+func fetchFullRun(ctx context.Context, client *api.Client, c *cache.Cache, runType, runID string) (any, error) {
+	handler, ok := RunTypeHandlers[runType]
+	if !ok {
+		return nil, fmt.Errorf("unknown run type %q, valid types: %s", runType, ValidRunTypes())
+	}
+
+	cacheKey := cache.RunKey(runType, runID)
+	if getter, ok := runTypeCacheGetters[runType]; ok {
+		if cached, err := getter(c, cacheKey); isCacheable(err) {
+			return cached, nil
+		}
+	}
+
+	route := fmt.Sprintf(api.TestRunGet, runType, runID)
+	req, err := client.NewRequest(ctx, "GET", route, nil)
+	if err != nil {
+		return nil, err
+	}
+	result, err := handler(client, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if setter, ok := runTypeCacheSetters[runType]; ok {
+		_ = setter(c, cacheKey, result)
+	}
+
+	return result, nil
+}
+
 // newRunFetcher constructs the RunFetcher used by discussion commands to
 // resolve test IDs.  It delegates to the cmd-level run-type handler registry
 // and cache maps.
@@ -212,36 +244,7 @@ func newRunFetcher() services.RunFetcher {
 		func(ctx context.Context, client *api.Client, runID string) (string, error) {
 			return ResolveRunType(ctx, client, runID)
 		},
-		// fetchRun (with cache)
-		func(ctx context.Context, client *api.Client, c *cache.Cache, runType, runID string) (any, error) {
-			handler, ok := RunTypeHandlers[runType]
-			if !ok {
-				return nil, fmt.Errorf("unknown run type %q returned by server", runType)
-			}
-
-			cacheKey := cache.RunKey(runType, runID)
-			if getter, ok := runTypeCacheGetters[runType]; ok {
-				if cached, err := getter(c, cacheKey); isCacheable(err) {
-					return cached, nil
-				}
-			}
-
-			route := fmt.Sprintf(api.TestRunGet, runType, runID)
-			req, err := client.NewRequest(ctx, "GET", route, nil)
-			if err != nil {
-				return nil, err
-			}
-			result, err := handler(client, req)
-			if err != nil {
-				return nil, err
-			}
-
-			if setter, ok := runTypeCacheSetters[runType]; ok {
-				_ = setter(c, cacheKey, result)
-			}
-
-			return result, nil
-		},
+		fetchFullRun,
 	)
 }
 
@@ -391,6 +394,8 @@ var getRunCmd = &cobra.Command{
 on the Argus Details tab — without heavy fields such as logs, screenshots,
 events, nemeses, or cloud resources.
 
+With --full, show the complete run object with every field.
+
 For additional information use the dedicated subcommands:
   argus run logs list / download
   argus run activity
@@ -407,8 +412,9 @@ For additional information use the dedicated subcommands:
 
 		runType, _ := cmd.Flags().GetString("type")
 		runID, _ := cmd.Flags().GetString("run-id")
+		full, _ := cmd.Flags().GetBool("full")
 
-		log.Debug().Str("run_id", runID).Str("type_flag", runType).Msg("fetching run summary")
+		log.Debug().Str("run_id", runID).Str("type_flag", runType).Bool("full", full).Msg("fetching run")
 
 		// Auto-resolve run type when --type is not provided.
 		if runType == "" {
@@ -431,6 +437,16 @@ For additional information use the dedicated subcommands:
 					log.Warn().Err(cacheErr).Str("run_id", runID).Msg("failed to cache run type")
 				}
 			}
+		}
+
+		if full {
+			result, err := fetchFullRun(ctx, client, c, runType, runID)
+			if err != nil {
+				log.Error().Err(err).Str("run_id", runID).Str("run_type", runType).Msg("failed to fetch full run")
+				return err
+			}
+			log.Info().Str("run_id", runID).Str("run_type", runType).Msg("full run fetched successfully")
+			return out.Write(models.NewKVTabular(result))
 		}
 
 		route := fmt.Sprintf(api.TestRunGet, runType, runID)
@@ -764,6 +780,7 @@ func init() {
 	// run get
 	getRunCmd.Flags().String("type", "", "Plugin type (optional, auto-resolved when omitted): "+ValidRunTypes())
 	getRunCmd.Flags().String("run-id", "", "Run UUID (required)")
+	getRunCmd.Flags().Bool("full", false, "Return the complete run object, including logs, screenshots, nemeses and cloud resources")
 	_ = getRunCmd.MarkFlagRequired("run-id")
 
 	// run get-type
