@@ -3,7 +3,6 @@ import { fetchJson } from "../../Common/ApiUtils";
 import { displayName, type NamedEntity, type ReleaseSummary } from "./sidebarSort";
 
 export const STATS_TTL = 300_000;
-export const PREFETCH_DELAY = 150;
 export const STATS_SLOTS = 2;
 export const PINS_KEY = "argus-workspace-pinned-releases";
 export const HIDDEN_KEY = "argus-workspace-hidden-releases";
@@ -137,7 +136,6 @@ export class SidebarState {
     hidden = new SvelteSet<string>(readIds(HIDDEN_KEY));
     showHidden = $state(false);
     #limiter = new Limiter(STATS_SLOTS);
-    #prefetch: { name: string; timer: ReturnType<typeof setTimeout> } | null = null;
 
     async loadReleases(): Promise<void> {
         this.releases = { data: this.releases.data, loading: true };
@@ -244,21 +242,6 @@ export class SidebarState {
             this.hidden.add(release.id);
         }
         writeIds(HIDDEN_KEY, this.hidden);
-    }
-
-    prefetch(release: Release): void {
-        if (release.dormant || this.#prefetch?.name === release.name) return;
-        this.cancelPrefetch();
-        const timer = setTimeout(() => {
-            this.#prefetch = null;
-            this.#limiter.run(() => this.ensureStats(release));
-        }, PREFETCH_DELAY);
-        this.#prefetch = { name: release.name, timer };
-    }
-
-    cancelPrefetch(): void {
-        if (this.#prefetch) clearTimeout(this.#prefetch.timer);
-        this.#prefetch = null;
     }
 
     enterRelease(release: Release): void {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { HIDDEN_KEY, Limiter, PINS_KEY, PREFETCH_DELAY, STATS_TTL, SidebarState, type Release } from "./sidebarState.svelte";
+import { HIDDEN_KEY, Limiter, PINS_KEY, STATS_TTL, SidebarState, type Release } from "./sidebarState.svelte";
 
 const release = (name: string, extra: Partial<Release> = {}): Release => ({
     id: `${name}-id`,
@@ -136,7 +136,7 @@ describe("SidebarState.ensureStats", () => {
     });
 });
 
-describe("SidebarState prefetch", () => {
+describe("SidebarState eager stats", () => {
     it("fetches eagerly only the releases with a priority", async () => {
         const fetchMock = vi.fn().mockResolvedValue(ok(SUMMARY));
         vi.stubGlobal("fetch", fetchMock);
@@ -152,32 +152,6 @@ describe("SidebarState prefetch", () => {
             "/api/v1/release/stats/summary?release=scylla-master&force=0",
             "/api/v1/release/stats/summary?release=scylla-staging&force=0",
         ]);
-    });
-
-    it("fetches only the release the pointer rests on", async () => {
-        const fetchMock = vi.fn().mockResolvedValue(ok(SUMMARY));
-        vi.stubGlobal("fetch", fetchMock);
-        const state = new SidebarState();
-
-        state.prefetch(release("scylla-2025.4"));
-        vi.advanceTimersByTime(PREFETCH_DELAY - 1);
-        state.prefetch(release("scylla-2026.1"));
-        await vi.advanceTimersByTimeAsync(PREFETCH_DELAY);
-
-        expect(statsCalls(fetchMock)).toEqual(["/api/v1/release/stats/summary?release=scylla-2026.1&force=0"]);
-    });
-
-    it("fetches nothing once the pointer leaves before the delay", async () => {
-        const fetchMock = vi.fn().mockResolvedValue(ok(SUMMARY));
-        vi.stubGlobal("fetch", fetchMock);
-        const state = new SidebarState();
-
-        state.prefetch(release("scylla-2026.1"));
-        vi.advanceTimersByTime(PREFETCH_DELAY - 1);
-        state.cancelPrefetch();
-        await vi.advanceTimersByTimeAsync(PREFETCH_DELAY);
-
-        expect(statsCalls(fetchMock)).toEqual([]);
     });
 });
 

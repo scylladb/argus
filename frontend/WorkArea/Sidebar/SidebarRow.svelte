@@ -28,7 +28,6 @@
         onActivate: () => void;
         onKeydown?: (event: KeyboardEvent) => void;
         onFocus?: () => void;
-        onHover?: () => void;
     }
 
     let {
@@ -52,7 +51,6 @@
         onActivate,
         onKeydown,
         onFocus,
-        onHover,
     }: Props = $props();
 
     let button: HTMLButtonElement | undefined = $state();
@@ -72,11 +70,7 @@
         aria-pressed={kind === "test" ? pressed : undefined}
         onclick={() => onActivate()}
         onkeydown={(event) => onKeydown?.(event)}
-        onfocus={() => {
-            onFocus?.();
-            onHover?.();
-        }}
-        onpointerenter={() => onHover?.()}
+        onfocus={() => onFocus?.()}
     >
         <span class="d-flex align-items-center gap-2">
             {#if kind === "test"}
