@@ -48,6 +48,12 @@ def test_summary_runs_results_unknown_test_returns_empty(api_client):
     assert res["response"][test_id]["some_method"][run_id] == []
 
 
+def test_summary_runs_results_rejects_malformed_test_id(api_client):
+    payload = {"not-a-test-id": {"some_method": {"run_id": str(uuid.uuid4()), "status": "passed"}}}
+    res = api_client.post("/api/v1/views/widgets/summary/runs_results", json=payload).json()
+    assert res["response"]["exception"] == "RequestValidationError"
+
+
 def test_summary_versioned_runs_with_seeded_view(api_client, seeded_view_with_run, sct_run):
     """View pointing at a seeded SCT run returns the run's version + test info."""
     res = api_client.get(

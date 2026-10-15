@@ -14,7 +14,7 @@ from argus.backend.error_handlers import APIException
 from argus.backend.models.web import User
 from argus.backend.service.stats import ViewStatsCollector
 from argus.backend.service.user import api_current_user
-from argus.backend.service.views import UserViewService
+from argus.backend.service.views import UserViewService, ViewUpdateRequest
 from argus.backend.util.common import NoneIfEmpty
 from argus.backend.util.encoders import APIResponse
 
@@ -54,12 +54,12 @@ class CreateViewRequest(BaseModel):
 
 
 class UpdateViewRequest(BaseModel):
-    viewId: str
-    updateData: dict
+    viewId: UUID
+    updateData: ViewUpdateRequest
 
 
 class DeleteViewRequest(BaseModel):
-    viewId: str
+    viewId: UUID
 
 
 @router.get("/", name="api.view_api.index")
@@ -148,7 +148,7 @@ async def search_tests(query: str | None = Query(None), user: User = Depends(api
 
 
 @router.get("/stats", name="api.view_api.view_stats")
-async def view_stats(view_id: str = Query(..., alias="viewId"), limited: bool = Query(False),
+async def view_stats(view_id: UUID = Query(..., alias="viewId"), limited: bool = Query(False),
                version: str | None = Query(None, alias="productVersion"),
                include_no_version: bool = Query(True, alias="includeNoVersion"),
                image_id: str | None = Query(None, alias="imageId"),
@@ -167,7 +167,7 @@ async def view_stats(view_id: str = Query(..., alias="viewId"), limited: bool = 
 
 
 @router.get("/{view_id}/versions", name="api.view_api.view_versions")
-async def view_versions(view_id: str, user: User = Depends(api_current_user)):
+async def view_versions(view_id: UUID, user: User = Depends(api_current_user)):
     service = UserViewService()
     res = await service.get_versions_for_view(view_id)
     return APIResponse({
@@ -177,7 +177,7 @@ async def view_versions(view_id: str, user: User = Depends(api_current_user)):
 
 
 @router.get("/{view_id}/images", name="api.view_api.view_images")
-async def view_images(view_id: str, user: User = Depends(api_current_user)):
+async def view_images(view_id: UUID, user: User = Depends(api_current_user)):
     service = UserViewService()
     res = await service.get_images_for_view(view_id)
     return APIResponse({
@@ -187,7 +187,7 @@ async def view_images(view_id: str, user: User = Depends(api_current_user)):
 
 
 @router.get("/{view_id}/resolve", name="api.view_api.view_resolve")
-async def view_resolve(view_id: str, user: User = Depends(api_current_user)):
+async def view_resolve(view_id: UUID, user: User = Depends(api_current_user)):
     service = UserViewService()
     res = await service.resolve_view_for_edit(view_id)
     return APIResponse({
@@ -197,7 +197,7 @@ async def view_resolve(view_id: str, user: User = Depends(api_current_user)):
 
 
 @router.get("/{view_id}/resolve/tests", name="api.view_api.view_resolve_tests")
-async def view_resolve_tests(view_id: str, user: User = Depends(api_current_user)):
+async def view_resolve_tests(view_id: UUID, user: User = Depends(api_current_user)):
     service = UserViewService()
     res = await service.resolve_view_tests(view_id)
     return APIResponse({
@@ -207,7 +207,7 @@ async def view_resolve_tests(view_id: str, user: User = Depends(api_current_user
 
 
 @router.get("/{view_id}/pytest/results", name="api.view_api.view_get_pytest_results")
-async def view_get_pytest_results(view_id: str, user: User = Depends(api_current_user)):
+async def view_get_pytest_results(view_id: UUID, user: User = Depends(api_current_user)):
     service = UserViewService()
     res = await service.get_pytest_view_results(view_id)
     return APIResponse({

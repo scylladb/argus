@@ -31,7 +31,7 @@ async def get_release_pytest_results(asgi_request: Request, release_id: UUID,
 
 
 @router.get("/pytest/view/{view_id}/results", name="api.view_api.pytest.get_view_pytest_results")
-async def get_view_pytest_results(asgi_request: Request, view_id: str,
+async def get_view_pytest_results(asgi_request: Request, view_id: UUID,
                             user: User = Depends(api_current_user)):
     service = PytestViewService()
     res = await service.view_results(view_id, asgi_request.query_params)

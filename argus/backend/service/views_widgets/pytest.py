@@ -56,10 +56,10 @@ class PytestViewService:
             return not res
         return res
 
-    async def view_results(self, view_id: str | UUID, args):
+    async def view_results(self, view_id: UUID, args):
         return await self.result_filter(args)
 
-    async def release_results(self, release_id: str | UUID, args):
+    async def release_results(self, release_id: UUID, args):
         return await self.result_filter(args)
 
     def prepare_pie_chart(self, hits: list[dict]) -> dict:

@@ -328,6 +328,22 @@ def test_create_view_accepts_a_valid_config_param_filter(api_client, view_name):
     assert res["status"] == "ok"
 
 
+def test_update_view_rejects_malformed_plan_id(api_client, view_name, fake_test):
+    created = _create_view(api_client, view_name)
+    res = api_client.post("/api/v1/views/update", json={
+        "viewId": created["response"]["id"],
+        "updateData": {
+            "name": view_name,
+            "description": "",
+            "display_name": view_name,
+            "items": [f"test:{fake_test.id}"],
+            "widget_settings": "[]",
+            "plan_id": "not-a-plan-id",
+        },
+    }).json()
+    assert res["response"]["exception"] == "RequestValidationError"
+
+
 def test_update_view_rejects_duplicate_config_param_filter_names(api_client, view_name, fake_test):
     created = _create_view(api_client, view_name)
     res = api_client.post("/api/v1/views/update", json={

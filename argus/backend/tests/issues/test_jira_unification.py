@@ -199,7 +199,7 @@ async def test_graphed_stats_issue_has_required_subtype_field(
     await _link_issue_to_run(submitted_run, saved_github_issue)
     await _link_issue_to_run(submitted_run, saved_jira_issue)
 
-    result = await GraphedStatsService().get_runs_details([str(submitted_run.id)])
+    result = await GraphedStatsService().get_runs_details([submitted_run.id])
     run_issues = result[str(submitted_run.id)]["issues"]
     matching = [i for i in run_issues if i.get("subtype") == subtype]
     assert len(matching) >= 1, f"No issues with subtype='{subtype}' found in {run_issues}"
