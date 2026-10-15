@@ -36,7 +36,7 @@
     import queryString from 'query-string';
     import IssueCard from "../Common/IssueCard.svelte";
     import type { Issue, GithubSubtype, JiraSubtype, Label } from "../Common/IssueTypes";
-    import { getTitle, getRepo, label2color, priorityIndex } from "../Common/IssueTypes";
+    import { getTitle, getRepo, label2color, priorityIndex, priorityRank } from "../Common/IssueTypes";
     import { untrack } from "svelte";
     interface Props {
         id?: string;
@@ -93,11 +93,12 @@
         }
     };
 
+    type SortCriteria = "name" | "repo" | "date" | "priority";
     type FilterGroup = "state" | "priority" | "project";
     const NO_PRIORITY = "none";
     const uid = $props.id();
 
-    let sortCriteria: "name" | "repo" | "date" = $state("date");
+    let sortCriteria: SortCriteria = $state("date");
     let reverseSort = $state(true);
     let currentPage = $state(0);
     let PAGE_SIZE = $state(10);
@@ -142,6 +143,18 @@
             field: "added_on",
             friendlyString: "By date",
             f: (lhs: Issue, rhs: Issue) => reverseSort ? Date.parse(rhs.added_on) - Date.parse(lhs.added_on) : Date.parse(lhs.added_on) - Date.parse(rhs.added_on)
+        },
+        priority: {
+            field: "priority",
+            friendlyString: "By priority",
+            f: (lhs: Issue, rhs: Issue) => {
+                const lhsRank = priorityRank(lhs);
+                const rhsRank = priorityRank(rhs);
+                if (lhsRank === rhsRank) return Date.parse(rhs.added_on) - Date.parse(lhs.added_on);
+                if (lhsRank === Infinity) return 1;
+                if (rhsRank === Infinity) return -1;
+                return reverseSort ? lhsRank - rhsRank : rhsRank - lhsRank;
+            }
         }
     };
 
@@ -230,7 +243,7 @@
         return !(issue.labels ?? []).some(label => labelActive(label.name, selectedLabels));
     };
 
-    const paginateIssues = function(issues: Issue[], sortCriteria: "name" | "repo" | "date" = "name", reverse = false, filterString = "") {
+    const paginateIssues = function(issues: Issue[], sortCriteria: SortCriteria = "name", reverse = false, filterString = "") {
         if (issues.length == 0) return [];
         const sorted = Array.from(issues).sort(SORT_ORDERS[sortCriteria].f);
         const filtered = sorted.filter(v => !shouldFilter(v, filterString));
@@ -356,7 +369,7 @@
                     {/if}
                 </div>
                 <div class="col">
-                    <select class="form-select" bind:value={sortCriteria}>
+                    <select class="form-select" aria-label="Sort issues" bind:value={sortCriteria}>
                         {#each Object.entries(SORT_ORDERS) as [sortName, meta]}
                             <option value="{sortName}">{meta.friendlyString}</option>
                         {/each}
