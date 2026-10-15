@@ -7,6 +7,9 @@ shared registry. The former flask-exporter default series
 http_request_exceptions_total, exporter_info) keep their numeric status
 labels; the custom by_* counters keep werkzeug's "200 OK" format.
 """
+import logging
+from uuid import UUID
+
 from fastapi import APIRouter
 from prometheus_client import REGISTRY
 from pytest import fixture
@@ -23,6 +26,11 @@ def metrics_probe():
 @probe.get("/metrics-probe-boom", name="asgi.metrics_probe_boom")
 def metrics_probe_boom():
     raise RuntimeError("probe exploded")
+
+
+@probe.get("/metrics-probe-item/{item_id}", name="asgi.metrics_probe_item")
+def metrics_probe_item(item_id: UUID):
+    return {"status": "ok", "item": str(item_id)}
 
 
 @fixture(scope="module", autouse=True)
@@ -73,6 +81,19 @@ def test_unhandled_exception_increments_exceptions_total(api_client):
     assert response.status_code == 200
     assert response.json()["response"]["exception"] == "RuntimeError"
     assert _sample("http_request_exceptions_total", labels) == before + 1
+
+
+def test_malformed_id_is_a_client_error(api_client, caplog):
+    labels = {"method": "GET", "status": "500"}
+    before = _sample("http_request_exceptions_total", labels)
+    with caplog.at_level(logging.INFO, logger="argus.backend.error_handlers"):
+        response = api_client.get("/metrics-probe-item/not-a-uuid")
+    assert response.status_code == 200
+    assert response.json()["response"]["exception"] == "RequestValidationError"
+    assert _sample("http_request_exceptions_total", labels) == before
+    records = [r for r in caplog.records if r.name == "argus.backend.error_handlers"]
+    assert records
+    assert all(r.levelno == logging.INFO for r in records)
 
 
 def test_metrics_endpoint_serves_the_shared_registry(api_client):

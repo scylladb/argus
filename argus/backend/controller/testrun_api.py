@@ -1,8 +1,9 @@
 import logging
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, BeforeValidator
 
 from coodie.exceptions import DocumentNotFound
 from starlette.responses import RedirectResponse
@@ -32,7 +33,8 @@ class SetInvestigationStatusRequest(BaseModel):
 
 
 class SetAssigneeRequest(BaseModel):
-    assignee: str
+    assignee: Annotated[UUID | None, BeforeValidator(
+        lambda value: None if value == TestRunService.ASSIGNEE_PLACEHOLDER else value)]
 
 
 class IssueSubmitRequest(BaseModel):
@@ -47,7 +49,7 @@ class IssueDeleteRequest(BaseModel):
 class CommentRequest(BaseModel):
     message: str
     reactions: dict
-    mentions: list[str]
+    mentions: list[UUID]
 
 
 class IgnoreJobsRequest(BaseModel):
@@ -70,8 +72,8 @@ class JenkinsBuildRequest(BaseModel):
 class JenkinsCloneRequest(BaseModel):
     currentTestId: UUID
     newName: str
-    target: str
-    group: str
+    target: UUID
+    group: UUID
     advancedSettings: dict
 
 
@@ -106,7 +108,7 @@ async def get_runs_for_test(test_id: UUID, limit: int = Query(10), before: float
 
 
 @router.get("/run/{run_id}/type", name="api.testrun_api.get_type_for_run")
-async def get_type_for_run(run_id: str, user: User = Depends(api_current_user)):
+async def get_type_for_run(run_id: UUID, user: User = Depends(api_current_user)):
     service = TestRunService()
     run_type = await service.get_test_type_for_run(run_id)
 
@@ -211,7 +213,7 @@ async def set_testrun_assignee(test_id: UUID, run_id: UUID, payload: SetAssignee
     result = await service.change_run_assignee(
         test_id=test_id,
         run_id=run_id,
-        new_assignee=UUID(payload.assignee) if payload.assignee != TestRunService.ASSIGNEE_PLACEHOLDER else None,
+        new_assignee=payload.assignee,
         user=user,
     )
 
@@ -517,7 +519,7 @@ async def get_queue_info(queue_item: int = Query(..., alias="queueItem"),
 
 
 @router.get("/jenkins/clone/targets", name="api.testrun_api.get_clone_targets")
-async def get_clone_targets(test_id: str = Query(..., alias="testId"),
+async def get_clone_targets(test_id: UUID = Query(..., alias="testId"),
                       user: User = Depends(api_current_user)):
     service = JenkinsService()
     result = await service.get_releases_for_clone(test_id)
@@ -531,7 +533,7 @@ async def get_clone_targets(test_id: str = Query(..., alias="testId"),
 
 
 @router.get("/jenkins/clone/groups", name="api.testrun_api.get_groups_for_target")
-async def get_groups_for_target(target_id: str = Query(..., alias="targetId"),
+async def get_groups_for_target(target_id: UUID = Query(..., alias="targetId"),
                           user: User = Depends(api_current_user)):
     service = JenkinsService()
     result = await service.get_groups_for_release(target_id)

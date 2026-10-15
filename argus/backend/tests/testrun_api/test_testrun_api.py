@@ -22,6 +22,7 @@ import pytest
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.web import ArgusTest, ArgusTestRunComment, User, UserRoles
+from argus.backend.service.user import UserService
 
 
 API_PREFIX = "/api/v1"
@@ -238,6 +239,63 @@ def test_get_single_comment_unknown_returns_null(api_client):
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
     assert resp.json()["response"] is None
+
+
+@pytest.fixture
+async def mentioned_user() -> User:
+    suffix = uuid4().hex[:8]
+    created = await UserService().create_user(f"mentioned_{suffix}", f"mentioned_{suffix}@example.com", "Mentioned User")
+    return created["user"]
+
+
+def test_post_run_comment_with_mention_id_notifies_the_user(api_client, submitted_run, fake_test, mentioned_user):
+    rid, _ = submitted_run
+    with patch("argus.backend.service.notification_manager.NotificationManagerService.send_notification") as send:
+        resp = api_client.post(
+            f"{API_PREFIX}/test/{fake_test.id}/run/{rid}/comments/submit",
+            json={"message": "see this", "reactions": {}, "mentions": [str(mentioned_user.id)]},
+        )
+    assert resp.json()["status"] == "ok", resp.text
+    [comment] = [c for c in resp.json()["response"] if c["message"] == "see this"]
+    assert [str(m) for m in comment["mentions"]] == [str(mentioned_user.id)]
+    assert [call.kwargs["receiver"] for call in send.call_args_list] == [mentioned_user.id]
+
+
+def test_update_run_comment_keeps_mention_ids(api_client, submitted_run, fake_test, mentioned_user):
+    rid, _ = submitted_run
+    _post_comment(api_client, fake_test.id, rid, "to mention")
+    listing = api_client.get(f"{API_PREFIX}/run/{rid}/comments").json()["response"]
+    [target] = [c for c in listing if c["message"] == "to mention"]
+
+    resp = api_client.post(
+        f"{API_PREFIX}/test/{fake_test.id}/run/{rid}/comment/{target['id']}/update",
+        json={"message": "mentioned now", "reactions": {}, "mentions": [str(mentioned_user.id)]},
+    )
+    assert resp.json()["status"] == "ok", resp.text
+    [comment] = [c for c in resp.json()["response"] if c["message"] == "mentioned now"]
+    assert [str(m) for m in comment["mentions"]] == [str(mentioned_user.id)]
+
+
+def test_post_run_comment_drops_a_mention_of_an_unknown_user(api_client, submitted_run, fake_test):
+    rid, _ = submitted_run
+    with patch("argus.backend.service.notification_manager.NotificationManagerService.send_notification") as send:
+        resp = api_client.post(
+            f"{API_PREFIX}/test/{fake_test.id}/run/{rid}/comments/submit",
+            json={"message": "nobody here", "reactions": {}, "mentions": [str(uuid4())]},
+        )
+    assert resp.json()["status"] == "ok", resp.text
+    [comment] = [c for c in resp.json()["response"] if c["message"] == "nobody here"]
+    assert comment["mentions"] == []
+    send.assert_not_called()
+
+
+def test_post_run_comment_rejects_malformed_mention(api_client, submitted_run, fake_test):
+    rid, _ = submitted_run
+    resp = api_client.post(
+        f"{API_PREFIX}/test/{fake_test.id}/run/{rid}/comments/submit",
+        json={"message": "bad mention", "reactions": {}, "mentions": ["someone"]},
+    )
+    assert resp.json()["response"]["exception"] == "RequestValidationError"
 
 
 def test_update_run_comment_changes_message(api_client, submitted_run, fake_test):
@@ -550,25 +608,35 @@ def test_jenkins_clone_targets(api_client, mock_jenkins_service):
 def test_jenkins_clone_groups(api_client, mock_jenkins_service):
     inst = mock_jenkins_service.return_value
     inst.get_groups_for_release.return_value = [{"id": "g1", "name": "group-1"}]
-    target_id = str(uuid4())
+    target_id = uuid4()
     resp = api_client.get(f"{API_PREFIX}/jenkins/clone/groups?targetId={target_id}")
     assert resp.json()["response"]["groups"] == [{"id": "g1", "name": "group-1"}]
+    inst.get_groups_for_release.assert_called_once_with(target_id)
+
+
+def test_jenkins_clone_groups_rejects_malformed_target(api_client, mock_jenkins_service):
+    resp = api_client.get(f"{API_PREFIX}/jenkins/clone/groups?targetId=release-1")
+    assert resp.json()["response"]["exception"] == "RequestValidationError"
+    mock_jenkins_service.return_value.get_groups_for_release.assert_not_called()
 
 
 def test_jenkins_clone_create(api_client, mock_jenkins_service):
     inst = mock_jenkins_service.return_value
     inst.clone_job.return_value = "cloned/job/path"
+    target, group = uuid4(), uuid4()
     resp = api_client.post(
         f"{API_PREFIX}/jenkins/clone/create",
         json={
             "currentTestId": str(uuid4()),
             "newName": "clone-1",
-            "target": "release-1",
-            "group": "group-1",
+            "target": str(target),
+            "group": str(group),
             "advancedSettings": {},
         },
     )
     assert resp.json()["response"] == "cloned/job/path"
+    assert inst.clone_job.call_args.kwargs["target"] == target
+    assert inst.clone_job.call_args.kwargs["group"] == group
 
 
 def test_jenkins_clone_build(api_client, mock_jenkins_service):

@@ -38,7 +38,7 @@ async def cleanup_plans():
 
 
 def _create_plan(api_client, release, fake_test, name=None, target_version="1.0",
-                 owner=None, tests=None, groups=None):
+                 owner=None, tests=None, groups=None, assignments=None):
     payload = {
         "name": name or f"plan_{uuid.uuid4().hex[:8]}",
         "description": "test plan",
@@ -48,7 +48,7 @@ def _create_plan(api_client, release, fake_test, name=None, target_version="1.0"
         "release_id": str(release.id),
         "tests": [str(t) for t in (tests if tests is not None else [fake_test.id])],
         "groups": [str(gid) for gid in (groups or [])],
-        "assignments": {},
+        "assignments": {str(entity): str(assignee) for entity, assignee in (assignments or {}).items()},
     }
     return api_client.post("/api/v1/planning/plan/create", json=payload).json()
 
@@ -80,6 +80,39 @@ def test_create_plan_duplicate_name_version_errors(api_client, release, fake_tes
     dup = _create_plan(api_client, release, fake_test, name=name, target_version="2.0")
     assert dup["status"] == "error"
     assert "existing plan" in dup["response"]["arguments"][0]
+
+
+def test_create_plan_duplicate_with_assignments_errors(api_client, release, fake_test, cleanup_plans):
+    name = f"plan_{uuid.uuid4().hex[:8]}"
+    assignments = {fake_test.id: g.user.id}
+    first = _create_plan(api_client, release, fake_test, name=name, target_version="2.1", assignments=assignments)
+    assert first["status"] == "ok", first
+
+    response = api_client.post("/api/v1/planning/plan/create", json={
+        "name": name, "description": "test plan", "owner": str(g.user.id), "participants": [],
+        "target_version": "2.1", "release_id": str(release.id), "tests": [str(fake_test.id)], "groups": [],
+        "assignments": {str(fake_test.id): str(g.user.id)},
+    })
+
+    assert response.status_code == 200
+    assert response.json()["response"]["exception"] == "PlannerServiceException"
+    assert "existing plan" in response.json()["response"]["arguments"][0]
+
+
+async def test_copy_plan_onto_its_own_name_and_version_errors(api_client, release, fake_test, cleanup_plans):
+    source = _create_plan(api_client, release, fake_test, assignments={fake_test.id: g.user.id})["response"]
+    plan = api_client.get(f"/api/v1/planning/plan/{source['id']}/get").json()["response"]
+
+    response = api_client.post("/api/v1/planning/plan/copy", json={
+        "plan": plan,
+        "keepParticipants": True,
+        "replacements": {},
+        "targetReleaseId": str(release.id),
+        "targetReleaseName": release.name,
+    })
+
+    assert response.status_code == 200
+    assert response.json()["response"]["exception"] == "PlannerServiceException"
 
 
 def test_get_plan_unknown_id_errors(api_client):
@@ -115,6 +148,42 @@ def test_update_plan(api_client, release, fake_test, cleanup_plans):
     fetched = api_client.get(f"/api/v1/planning/plan/{plan_id}/get").json()["response"]
     assert fetched["description"] == "updated description"
     assert fetched["target_version"] == "9.9"
+
+
+def test_update_plan_changes_owner(api_client, release, fake_test, planner_user, cleanup_plans):
+    plan_id = _create_plan(api_client, release, fake_test)["response"]["id"]
+
+    res = api_client.post("/api/v1/planning/plan/update",
+                          json={"id": plan_id, "owner": str(planner_user.id)}).json()
+
+    assert res["status"] == "ok", res
+    fetched = api_client.get(f"/api/v1/planning/plan/{plan_id}/get").json()["response"]
+    assert fetched["owner"] == str(planner_user.id)
+
+
+def test_create_plan_rejects_malformed_owner(api_client, release, fake_test, cleanup_plans):
+    res = _create_plan(api_client, release, fake_test, owner="nobody")
+    assert res["response"]["exception"] == "RequestValidationError"
+
+
+def test_update_plan_relinks_view(api_client, release, fake_test, cleanup_plans):
+    created = _create_plan(api_client, release, fake_test)["response"]
+    other_view = api_client.post("/api/v1/views/create", json={
+        "name": f"plan_view_{uuid.uuid4().hex[:8]}",
+        "items": [f"test:{fake_test.id}"],
+        "settings": "[]",
+    }).json()["response"]
+
+    res = api_client.post("/api/v1/planning/plan/update",
+                          json={"id": created["id"], "view_id": other_view["id"]}).json()
+
+    assert res["status"] == "ok", res
+    fetched = api_client.get(f"/api/v1/planning/plan/{created['id']}/get").json()["response"]
+    assert fetched["view_id"] == other_view["id"]
+    relinked = api_client.get(f"/api/v1/views/get?viewId={other_view['id']}").json()["response"]
+    assert relinked["plan_id"] == created["id"]
+    previous = api_client.get(f"/api/v1/views/get?viewId={created['view_id']}").json()["response"]
+    assert previous["plan_id"] is None
 
 
 def test_change_plan_owner(api_client, release, fake_test, planner_user, cleanup_plans):
@@ -183,6 +252,12 @@ def test_search_finds_test_name(api_client, release, fake_test):
     assert res["status"] == "ok"
     names = {h.get("name") for h in res["response"]["hits"]}
     assert fake_test.name in names
+
+
+def test_search_treats_an_empty_release_id_as_unset(api_client, release, fake_test):
+    res = api_client.get(f"/api/v1/planning/search?query={fake_test.name}&releaseId=").json()
+    assert res["status"] == "ok", res
+    assert fake_test.name in {h.get("name") for h in res["response"]["hits"]}
 
 
 def test_explode_group(api_client, group, fake_test):
@@ -290,6 +365,33 @@ async def test_copy_plan_creates_plan_in_target_release(
     assert body["description"] == "copied plan"
     # keepParticipants=True copies participants from the payload
     assert body["participants"] == [participant_id]
+
+
+async def test_copy_plan_applies_replacements(api_client, release_manager_service, release, group, fake_test,
+                                             cleanup_plans):
+    source = _create_plan(api_client, release, fake_test, groups=[group.id])["response"]
+    target_release = await release_manager_service.create_release(
+        f"copy_repl_{uuid.uuid4().hex[:8]}", "Copy Replacements", False)
+    target_group = await release_manager_service.create_group(
+        "replacement_group", "Replacement Group", build_system_id=f"{target_release.name}/replacement",
+        release_id=target_release.id)
+    target_test = await release_manager_service.create_test(
+        "replacement_test", "Replacement Test", f"{target_release.name}/replacement/test", "http://ci/replacement",
+        group_id=target_group.id, release_id=target_release.id, plugin_name="scylla-cluster-tests")
+
+    plan = api_client.get(f"/api/v1/planning/plan/{source['id']}/get").json()["response"]
+    res = api_client.post("/api/v1/planning/plan/copy", json={
+        "plan": {**plan, "name": f"copied_{uuid.uuid4().hex[:8]}"},
+        "keepParticipants": False,
+        "replacements": {str(fake_test.id): str(target_test.id), str(group.id): str(target_group.id)},
+        "targetReleaseId": str(target_release.id),
+        "targetReleaseName": target_release.name,
+    }).json()
+
+    assert res["status"] == "ok", res
+    copied = api_client.get(f"/api/v1/planning/plan/{res['response']['id']}/get").json()["response"]
+    assert copied["tests"] == [str(target_test.id)]
+    assert copied["groups"] == [str(target_group.id)]
 
 
 async def test_create_plan_generates_sequential_keys_per_release(
@@ -431,7 +533,7 @@ async def test_update_plan_adds_and_removes_tests(
     second_test = await release_manager_service.create_test(
         f"t2_{uuid.uuid4().hex[:8]}", "Second Test",
         f"bsid_{uuid.uuid4().hex[:8]}", "url",
-        group_id=str(group.id), release_id=str(release.id),
+        group_id=group.id, release_id=release.id,
         plugin_name="scylla-cluster-tests",
     )
     plan_id = _create_plan(api_client, release, fake_test)["response"]["id"]
@@ -468,7 +570,7 @@ async def test_update_plan_adds_and_removes_groups(
     """groups_add / groups_remove diffs mutate the plan's group list."""
     new_group = await release_manager_service.create_group(
         f"g2_{uuid.uuid4().hex[:8]}", "Second Group",
-        build_system_id=f"gbsid_{uuid.uuid4().hex[:8]}", release_id=str(release.id),
+        build_system_id=f"gbsid_{uuid.uuid4().hex[:8]}", release_id=release.id,
     )
     plan_id = _create_plan(api_client, release, fake_test, groups=[])["response"]["id"]
 

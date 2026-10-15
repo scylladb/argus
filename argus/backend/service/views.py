@@ -3,7 +3,7 @@ import datetime
 import json
 import logging
 from functools import partial, reduce
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 from uuid import UUID
 
 from coodie.exceptions import DocumentNotFound
@@ -26,11 +26,11 @@ class UserViewException(APIException):
 
 class ViewUpdateRequest(TypedDict):
     name: str
-    description: str
-    display_name: str
-    tests: list[str]
+    description: str | None
+    display_name: str | None
+    items: list[str]
     widget_settings: str
-    plan_id: str | None
+    plan_id: NotRequired[UUID | None]
 
 
 def validate_widget_settings(widget_settings: str) -> None:
@@ -98,17 +98,14 @@ class UserViewService:
     async def test_lookup(self, query: str):
         return await TestLookup.test_lookup(query)
 
-    async def update_view(self, view_id: str | UUID, update_data: ViewUpdateRequest, user: User) -> bool:
-        view_id = UUID(view_id) if isinstance(view_id, str) else view_id
+    async def update_view(self, view_id: UUID, update_data: ViewUpdateRequest, user: User) -> bool:
         view: ArgusUserView = await ArgusUserView.get(id=view_id)
         if view.user_id != user.id and not user.is_admin():
             raise UserViewException("Unable to modify other users' views")
-        for key in ["user_id", "id"]:
-            update_data.pop(key, None)
-        items = update_data.pop("items")
+        items = update_data["items"]
         view.name = update_data["name"]
         view.description = update_data["description"]
-        view.plan_id = UUID(update_data["plan_id"]) if update_data.get("plan_id", None) else None
+        view.plan_id = update_data.get("plan_id")
         view.display_name = update_data["display_name"]
         validate_widget_settings(update_data["widget_settings"])
         view.widget_settings = update_data["widget_settings"]
@@ -130,8 +127,7 @@ class UserViewService:
         await view.save()
         return True
 
-    async def delete_view(self, view_id: str | UUID, user: User) -> bool:
-        view_id = UUID(view_id) if isinstance(view_id, str) else view_id
+    async def delete_view(self, view_id: UUID, user: User) -> bool:
         view = await ArgusUserView.get(id=view_id)
         if view.user_id != user.id and not user.is_admin():
             raise UserViewException("Unable to modify other users' views")
@@ -139,8 +135,7 @@ class UserViewService:
 
         return True
 
-    async def get_view(self, view_id: str | UUID) -> ArgusUserView:
-        view_id = UUID(view_id) if isinstance(view_id, str) else view_id
+    async def get_view(self, view_id: UUID) -> ArgusUserView:
         try:
             view: ArgusUserView = await ArgusUserView.get(id=view_id)
         except DocumentNotFound as exc:
@@ -163,8 +158,7 @@ class UserViewService:
             return list(await ArgusUserView.find(user_id=user.id).all())
         return list(await ArgusUserView.find().all())
 
-    async def resolve_view_tests(self, view_id: str | UUID) -> list[ArgusTest]:
-        view_id = UUID(view_id) if isinstance(view_id, str) else view_id
+    async def resolve_view_tests(self, view_id: UUID) -> list[ArgusTest]:
         try:
             view = await ArgusUserView.get(id=view_id)
         except DocumentNotFound as exc:
@@ -222,9 +216,7 @@ class UserViewService:
 
         return releases
 
-    async def get_pytest_view_results(self, view_id: str | UUID) -> list[PytestResultTable]:
-        view_id = UUID(view_id) if isinstance(view_id, str) else view_id
-
+    async def get_pytest_view_results(self, view_id: UUID) -> list[PytestResultTable]:
         view: ArgusUserView = await ArgusUserView.get(id=view_id)
         tests: list[ArgusTest] = []
         for batch in chunk(view.tests):
@@ -238,7 +230,7 @@ class UserViewService:
 
         return results
 
-    async def get_versions_for_view(self, view_id: str | UUID) -> list[str]:
+    async def get_versions_for_view(self, view_id: UUID) -> list[str]:
         tests = await self.resolve_view_tests(view_id)
         per_plugin = await asyncio.gather(
             *(plugin.get_distinct_versions_for_view(tests=tests) for plugin in all_plugin_models())
@@ -247,14 +239,13 @@ class UserViewService:
 
         return sorted(list(unique_versions), reverse=True)
 
-    async def get_images_for_view(self, view_id: str | UUID) -> list[str]:
+    async def get_images_for_view(self, view_id: UUID) -> list[str]:
         tests = await self.resolve_view_tests(view_id)
         images = await AVAILABLE_PLUGINS["scylla-cluster-tests"].model.get_distinct_cloud_images_for_view(tests)
 
         return images
 
-    async def resolve_view_for_edit(self, view_id: str | UUID) -> dict:
-        view_id = UUID(view_id) if isinstance(view_id, str) else view_id
+    async def resolve_view_for_edit(self, view_id: UUID) -> dict:
         view: ArgusUserView = await ArgusUserView.get(id=view_id)
         resolved = view.model_dump()
         view_groups = await self.batch_resolve_entity(ArgusGroup, "id", view.group_ids)

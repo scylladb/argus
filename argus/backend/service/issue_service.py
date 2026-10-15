@@ -46,12 +46,11 @@ class IssueService:
     async def get(
         self,
         filter_key: str,
-        filter_id: UUID | str,
+        filter_id: UUID,
         aggregate_by_issue: bool = False,
         product_version: str | None = None,
         include_no_version: bool = False,
     ):
-        filter_id = UUID(filter_id) if isinstance(filter_id, str) else filter_id
         links = await self._get_links(filter_key, filter_id)
 
         if product_version:
@@ -116,27 +115,20 @@ class IssueService:
             for run in found[:1]
         ]
 
-    async def delete(self, issue_id: UUID | str, run_id: UUID | str, user: User):
-        issue_id = UUID(issue_id) if isinstance(issue_id, str) else issue_id
-        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
+    async def delete(self, issue_id: UUID, run_id: UUID, user: User):
         try:
             return await self.gh.delete_issue(issue_id=issue_id, run_id=run_id, user=user)
         except DocumentNotFound:
             return await self.jira.delete_issue(issue_id=issue_id, run_id=run_id, user=user)
 
-    async def submit(self, issue_url: str, test_id: UUID | str, run_id: UUID | str, user: User):
-        test_id = UUID(test_id) if isinstance(test_id, str) else test_id
-        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
+    async def submit(self, issue_url: str, test_id: UUID, run_id: UUID, user: User):
         return await self._get_service(issue_url).submit_issue(
             issue_url=issue_url, test_id=test_id, run_id=run_id, user=user
         )
 
     async def submit_for_sct_event(
-        self, issue_url: str, test_id: UUID | str, event_id: UUID | str, run_id: UUID | str, user: User
+        self, issue_url: str, test_id: UUID, event_id: UUID, run_id: UUID, user: User
     ):
-        test_id = UUID(test_id) if isinstance(test_id, str) else test_id
-        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
-        event_id = UUID(event_id) if isinstance(event_id, str) else event_id
         return await self._get_service(issue_url).submit_issue(
             issue_url=issue_url, test_id=test_id, run_id=run_id, user=user, event_id=event_id
         )

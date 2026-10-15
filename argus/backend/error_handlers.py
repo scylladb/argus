@@ -6,6 +6,7 @@ import os
 from threading import Lock
 from traceback import format_exception
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 from starlette.responses import JSONResponse, RedirectResponse
 
 from argus.backend.db import ScyllaCluster
@@ -85,7 +86,7 @@ async def api_exception_handler(asgi_request: Request, exception: Exception) -> 
     except Exception:  # noqa: BLE001
         body = "<unavailable>"
 
-    if issubclass(exception.__class__, APIException):
+    if isinstance(exception, (APIException, RequestValidationError)):
         LOGGER.info("[TraceId: %s] Endpoint %s responded with error %s: %s", trace_id,
                     endpoint, exception.__class__.__name__, str(exception))
         LOGGER.info("[TraceId: %s] Headers\n%s", trace_id, dict(asgi_request.headers))

@@ -69,7 +69,6 @@ class TestRunService:
         return self.plugins.get(plugin_name)
 
     async def get_run(self, run_type: str, run_id: UUID) -> PluginModelBase:
-        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
         plugin = self.plugins.get(run_type)
         if plugin:
             try:
@@ -96,8 +95,7 @@ class TestRunService:
         runs = await plugin.model.find(build_id=build_id, build_number=build_number).allow_filtering().all()
         return runs[0] if runs else None
 
-    async def get_test_type_for_run(self, run_id: str) -> str:
-        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
+    async def get_test_type_for_run(self, run_id: UUID) -> str:
         runs = await asyncio.gather(*(plugin.model.find_one(id=run_id) for plugin in AVAILABLE_PLUGINS.values()))
         for name, run in zip(AVAILABLE_PLUGINS, runs):
             if run:
@@ -372,16 +370,16 @@ class TestRunService:
     async def get_run_comments(self, run_id: UUID):
         return sorted(await ArgusTestRunComment.find(test_run_id=run_id).all(), key=lambda c: c.posted_at)
 
-    async def post_run_comment(self, test_id: UUID, run_id: UUID, message: str, reactions: dict, mentions: list[str],
+    async def post_run_comment(self, test_id: UUID, run_id: UUID, message: str, reactions: dict, mentions: list[UUID],
                                user: User):
         message_stripped = strip_html_tags(message)
 
-        mentions = set(mentions)
         mentioned_users = await asyncio.gather(
+            *(User.find_one(id=mention_id) for mention_id in set(mentions)),
             *(User.exists_by_name(potential_mention.lstrip("@"))
               for potential_mention in re.findall(self.RE_MENTION, message_stripped))
         )
-        mentions.update(mentioned for mentioned in mentioned_users if mentioned and mentioned.id != user.id)
+        mention_ids = {mentioned.id for mentioned in mentioned_users if mentioned and mentioned.id != user.id}
 
         test: ArgusTest = await ArgusTest.get(id=test_id)
         plugin = self.get_plugin(test.plugin_name)
@@ -390,7 +388,7 @@ class TestRunService:
         comment.test_id = test.id
         comment.message = message_stripped
         comment.reactions = reactions
-        comment.mentions = [m.id for m in mentions]
+        comment.mentions = list(mention_ids)
         comment.test_run_id = run_id
         comment.release_id = release.id
         comment.user_id = user.id
@@ -399,7 +397,7 @@ class TestRunService:
 
         notifications = [
             self.notification_manager.send_notification(
-                receiver=mention.id,
+                receiver=mention_id,
                 sender=comment.user_id,
                 notification_type=ArgusNotificationTypes.Mention,
                 source_type=ArgusNotificationSourceTypes.Comment,
@@ -413,7 +411,7 @@ class TestRunService:
                     "build_number": run.build_number,
                 },
             )
-            for mention in mentions
+            for mention_id in mention_ids
         ]
         await asyncio.gather(
             *notifications,
@@ -440,7 +438,7 @@ class TestRunService:
         return await self.get_run_comments(run_id=run_id)
 
     async def update_run_comment(self, comment_id: UUID, test_id: UUID, run_id: UUID, message: str,
-                                 mentions: list[str], reactions: dict, user: User):
+                                 mentions: list[UUID], reactions: dict, user: User):
         comment: ArgusTestRunComment = await ArgusTestRunComment.get(id=comment_id)
         if comment.user_id != user.id:
             raise Exception("Unable to edit other user comments")
@@ -471,7 +469,7 @@ class TestRunService:
 
     async def resolve_run_build_id_and_number_multiple(self, runs: list[tuple[UUID, UUID]]
                                                        ) -> dict[UUID, dict[str, Any]]:
-        test_ids = [UUID(r[0]) if isinstance(r[0], str) else r[0] for r in runs]
+        test_ids = [test_id for test_id, _ in runs]
         all_tests: list = []
         for id_slice in chunk(test_ids):
             all_tests.extend(await ArgusTest.find(id__in=id_slice).all())
@@ -484,7 +482,6 @@ class TestRunService:
             model = AVAILABLE_PLUGINS.get(plugin).model
             model_runs = []
             for run_id in run_ids:
-                run_id = UUID(run_id) if isinstance(run_id, str) else run_id
                 if (found := await model.find(id=run_id).only(
                         "build_id", "start_time", "build_job_url", "build_number", "id", "test_id").first()) is not None:
                     model_runs.append(found)
@@ -620,16 +617,14 @@ class TestRunService:
             }
         }
 
-    async def get_pytest_release_results(self, release_id: str | UUID) -> list[PytestResultTable]:
+    async def get_pytest_release_results(self, release_id: UUID) -> list[PytestResultTable]:
         """
             Unbound filter function, will return all tests for a specific release
         """
-        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
         return await PytestResultTable.find(release_id=release_id).all()
 
-    async def get_pytest_run_results(self, run_id: str | UUID) -> list[PytestResultTable]:
+    async def get_pytest_run_results(self, run_id: UUID) -> list[PytestResultTable]:
         """
             Unbound filter function, will return all tests for a specific release
         """
-        run_id = UUID(run_id) if isinstance(run_id, str) else run_id
         return await PytestResultTable.find(run_id=run_id).all()

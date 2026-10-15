@@ -50,7 +50,7 @@ async def test_can_track_best_result(fake_test, client_service, results_service,
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
     await client_service.submit_run(run_type, asdict(run))
-    await client_service.submit_results(run_type, run.run_id, results.as_dict())
+    await client_service.submit_results(run_type, UUID(run.run_id), results.as_dict())
     best_results = await results_service.get_best_results(fake_test.id, results.name)
     # all results should be tracked as best - first submission
     for cell in sample_data:
@@ -71,7 +71,7 @@ async def test_can_track_best_result(fake_test, client_service, results_service,
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
     await client_service.submit_run(run_type, asdict(run))
-    await client_service.submit_results(run_type, run.run_id, results.as_dict())
+    await client_service.submit_results(run_type, UUID(run.run_id), results.as_dict())
     best_results = await results_service.get_best_results(fake_test.id, results.name)
     # best results should be updated
     assert best_results["h_is_better:row"][-1].value == 15
@@ -99,7 +99,7 @@ async def test_can_enable_best_results_tracking(fake_test, client_service, resul
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
     await client_service.submit_run(run_type, asdict(run))
-    await client_service.submit_results(run_type, run.run_id, results.as_dict())
+    await client_service.submit_results(run_type, UUID(run.run_id), results.as_dict())
     best_results = await results_service.get_best_results(fake_test.id, results.name)
     assert 'non tracked col name:row' not in best_results  # non tracked column should not be tracked
 
@@ -134,7 +134,7 @@ async def test_can_enable_best_results_tracking(fake_test, client_service, resul
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
     await client_service.submit_run(run_type, asdict(run))
-    await client_service.submit_results(run_type, run.run_id, results.as_dict())
+    await client_service.submit_results(run_type, UUID(run.run_id), results.as_dict())
     best_results = await results_service.get_best_results(fake_test.id, results.name)
     assert best_results["h_is_better:row"][-1].value == 15
     assert best_results["l_is_better:row"][-1].value == 5
@@ -154,7 +154,7 @@ async def test_ignored_runs_are_not_considered_in_best_results(fake_test, client
     for cell in sample_data:
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
     await client_service.submit_run(run_type, asdict(run))
-    await client_service.submit_results(run_type, run.run_id, results.as_dict())
+    await client_service.submit_results(run_type, UUID(run.run_id), results.as_dict())
     run_type, run2 = get_fake_test_run(test=fake_test)
     sample_data = [
         SampleCell(column="h_is_better", row="row", value=200),
@@ -164,7 +164,7 @@ async def test_ignored_runs_are_not_considered_in_best_results(fake_test, client
         results.add_result(column=cell.column, row=cell.row, value=cell.value, status=cell.status)
     await client_service.submit_run(run_type, asdict(run2))
     with pytest.raises(DataValidationError):
-        await client_service.submit_results(run_type, run2.run_id, results.as_dict())
+        await client_service.submit_results(run_type, UUID(run2.run_id), results.as_dict())
 
     # ignore the second run
     run_model = await SCTTestRun.get(id=UUID(str(run2.run_id)))

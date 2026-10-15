@@ -217,8 +217,7 @@ class JenkinsService:
                 f"provided: {', '.join(set_families)}."
             )
 
-    async def get_releases_for_clone(self, test_id: str):
-        test_id = UUID(test_id)
+    async def get_releases_for_clone(self, test_id: UUID):
         # TODO: Filtering based on origin location / user preferences
         _: ArgusTest = await ArgusTest.get(id=test_id)
 
@@ -226,8 +225,8 @@ class JenkinsService:
 
         return sorted(releases, key=lambda r: r.pretty_name if r.pretty_name else r.name)
 
-    async def get_groups_for_release(self, release_id: str):
-        groups = await ArgusGroup.find(release_id=UUID(release_id)).all()
+    async def get_groups_for_release(self, release_id: UUID):
+        groups = await ArgusGroup.find(release_id=release_id).all()
 
         return sorted(groups, key=lambda g: g.pretty_name if g.pretty_name else g.name)
 
@@ -315,11 +314,11 @@ class JenkinsService:
         await asyncio.to_thread(self._jenkins.reconfig_job, name=build_id, config_xml=adjusted_config)
 
     async def clone_job(
-        self, current_test_id: UUID, new_name: str, target: str, group: str, advanced_settings: bool | dict[str, str]
+        self, current_test_id: UUID, new_name: str, target: UUID, group: UUID, advanced_settings: bool | dict[str, str]
     ):
         cloned_test: ArgusTest = await ArgusTest.get(id=current_test_id)
-        target_release: ArgusRelease = await ArgusRelease.get(id=UUID(target))
-        target_group: ArgusGroup = await ArgusGroup.get(id=UUID(group))
+        target_release: ArgusRelease = await ArgusRelease.get(id=target)
+        target_group: ArgusGroup = await ArgusGroup.get(id=group)
 
         if target_group.id == cloned_test.group_id and new_name == cloned_test.name:
             raise JenkinsServiceError("Unable to clone: source and destination are the same")

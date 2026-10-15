@@ -1,5 +1,6 @@
 from dataclasses import asdict
 from datetime import UTC, datetime
+from uuid import UUID
 
 import pytest
 from starlette.testclient import TestClient
@@ -34,7 +35,7 @@ async def test_reads_every_page_of_a_large_partition(api_client: TestClient, cli
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "ok"
 
-    run: SCTTestRun = await testrun_service.get_run(run_type, run_req.run_id)
+    run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
     stored = await run.get_events_by_severity(SCTEventSeverity.NORMAL)
 
     assert len(stored) == EVENT_COUNT

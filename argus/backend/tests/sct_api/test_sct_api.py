@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from argus.backend.models.run_config import RunConfigParam
+from argus.backend.models.web import ArgusEventTypes
 from argus.backend.plugins.sct.service import SCTService
 from argus.backend.plugins.sct.testrun import SCTResource, SCTNemesis, SCTTestRun
 from argus.backend.tests.issues.test_issues import fake_remote_github_issue
@@ -17,7 +18,10 @@ API_PREFIX = "/api/v1/client/sct"
 
 @pytest.fixture
 def sct_run_id(api_client, fake_test):
-    # Create an SCT run that other tests can use
+    return _submit_sct_run(api_client, fake_test)
+
+
+def _submit_sct_run(api_client, fake_test) -> str:
     run_id = str(uuid4())
     payload = {
         "run_id": run_id,
@@ -76,7 +80,7 @@ async def test_submit_packages_concurrent_submissions_keep_one_row(api_client, s
         run = await original_get(*args, **kwargs)
         if not interleaved:
             interleaved = True
-            await SCTService.submit_packages(sct_run_id, [java_driver, scylla_bench])
+            await SCTService.submit_packages(UUID(sct_run_id), [java_driver, scylla_bench])
         return run
 
     monkeypatch.setattr(SCTTestRun, "get", get_then_submit_in_parallel)
@@ -470,8 +474,8 @@ async def test_stress_commands(api_client, sct_run_id):
     assert stress_cmds[0].node_name == payload["loader_name"]
 
 
-async def test_submit_gemini_results(api_client, sct_run_id):
-    payload = {
+def _gemini_payload(gemini_status: str) -> dict:
+    return {
         "gemini_data": {
             "oracle_nodes_count": 1,
             "oracle_node_ami_id": "ami-123",
@@ -479,7 +483,7 @@ async def test_submit_gemini_results(api_client, sct_run_id):
             "oracle_node_scylla_version": "6.0.0",
             "gemini_command": "gemini run",
             "gemini_version": "1.0.0",
-            "gemini_status": "PASSED",
+            "gemini_status": gemini_status,
             "gemini_seed": "42",
             "gemini_write_ops": 100,
             "gemini_write_errors": 0,
@@ -488,9 +492,18 @@ async def test_submit_gemini_results(api_client, sct_run_id):
         },
         "schema_version": "v8"
     }
+
+
+def _run_status_and_event_kinds(api_client, run_id: str) -> tuple[str, list[str]]:
+    run = api_client.get(f"/api/v1/run/scylla-cluster-tests/{run_id}").json()["response"]
+    activity = api_client.get(f"/api/v1/run/{run_id}/activity").json()["response"]
+    return run["status"], [event["kind"] for event in activity["raw_events"]]
+
+
+async def test_submit_gemini_results(api_client, sct_run_id):
     resp = api_client.post(
         f"{API_PREFIX}/{sct_run_id}/gemini/submit",
-        json=payload,
+        json=_gemini_payload("PASSED"),
     )
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
@@ -500,6 +513,49 @@ async def test_submit_gemini_results(api_client, sct_run_id):
     assert run.subtest_name == "gemini"
     assert run.gemini_command == "gemini run"
     assert run.gemini_status == "PASSED"
+
+
+def test_failed_gemini_status_fails_the_run(api_client, sct_run_id):
+    resp = api_client.post(f"{API_PREFIX}/{sct_run_id}/gemini/submit", json=_gemini_payload("FAILED"))
+
+    assert resp.json()["status"] == "ok", resp.text
+    status, event_kinds = _run_status_and_event_kinds(api_client, sct_run_id)
+    assert status == "failed"
+    assert ArgusEventTypes.TestRunStatusChanged.value in event_kinds
+
+
+def _submit_latency_results(api_client, run_id: str, latency_99th: float, latency_mean: float) -> None:
+    resp = api_client.post(f"{API_PREFIX}/{run_id}/performance/submit", json={
+        "performance_results": {
+            "test_name": "longevity_latency_test",
+            "stress_cmd": "cassandra-stress read",
+            "perf_op_rate_average": 1000.0,
+            "perf_op_rate_total": 1000.0,
+            "perf_avg_latency_99th": latency_99th,
+            "perf_avg_latency_mean": latency_mean,
+            "perf_total_errors": 0.0,
+            "histograms": None,
+        },
+        "schema_version": "v8",
+    })
+    assert resp.json()["status"] == "ok", resp.text
+
+
+def test_latency_regression_fails_the_run(api_client, fake_test):
+    baseline_run_id = _submit_sct_run(api_client, fake_test)
+    _submit_latency_results(api_client, baseline_run_id, latency_99th=10.0, latency_mean=5.0)
+    regressed_run_id = _submit_sct_run(api_client, fake_test)
+
+    _submit_latency_results(api_client, regressed_run_id, latency_99th=20.0, latency_mean=10.0)
+
+    status, event_kinds = _run_status_and_event_kinds(api_client, regressed_run_id)
+    assert status == "failed"
+    assert ArgusEventTypes.TestRunStatusChanged.value in event_kinds
+
+
+def test_events_get_rejects_malformed_run_id(api_client):
+    resp = api_client.get(f"{API_PREFIX}/not-a-run-id/events/get")
+    assert resp.json()["response"]["exception"] == "RequestValidationError"
 
 
 def test_submit_and_get_junit_report(api_client, sct_run_id):
@@ -741,7 +797,7 @@ async def test_similar_runs_info_lists_linked_github_issue(api_client, sct_run_i
     remote_client = MagicMock(name="GithubClient")
     remote_client.get_repo.return_value = remote_repo
     with patch.object(issue_service.gh, "gh", remote_client):
-        await issue_service.submit(issue_url=url, test_id=fake_test.id, run_id=sct_run_id, user=logged_in_user)
+        await issue_service.submit(issue_url=url, test_id=fake_test.id, run_id=UUID(sct_run_id), user=logged_in_user)
 
     resp = api_client.post(
         "/api/v1/client/sct/similar_runs_info",
@@ -757,6 +813,15 @@ async def test_similar_runs_info_lists_linked_github_issue(api_client, sct_run_i
     assert info["issues"][0]["number"] == 3
     assert info["issues"][0]["repo"] == repo
     assert info["issues"][0]["title"] == "Similar failure"
+
+
+def test_similar_runs_info_keys_runs_by_canonical_id(api_client, sct_run_id):
+    resp = api_client.post(
+        "/api/v1/client/sct/similar_runs_info",
+        json={"run_ids": [sct_run_id.upper(), str(uuid4())]},
+    )
+    assert resp.json()["status"] == "ok", resp.text
+    assert list(resp.json()["response"]) == [sct_run_id]
 
 
 def test_similar_runs_info_missing_run_ids(api_client):
@@ -801,7 +866,7 @@ async def test_coredump_events_in_one_batch_keep_every_log_link(api_client, sct_
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["response"] is True
-    run = await testrun_service.get_run("scylla-cluster-tests", sct_run_id)
+    run = await testrun_service.get_run("scylla-cluster-tests", UUID(sct_run_id))
     links = sorted(link for _, link in run.logs)
     assert links == [
         "https://storage.example.com/cores/node-1.core.zst",

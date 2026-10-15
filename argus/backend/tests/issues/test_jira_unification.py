@@ -7,7 +7,7 @@ Phase 1c: jira_service derives URL regex from configured server (no Docker)
 """
 from dataclasses import asdict
 from unittest.mock import patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from argus.backend.util.config import Config
@@ -25,7 +25,7 @@ async def submitted_run(client_service, testrun_service, fake_test):
     """Submit a fresh SCT test run and return the stored run object."""
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
-    return await testrun_service.get_run(run_type, run_req.run_id)
+    return await testrun_service.get_run(run_type, UUID(run_req.run_id))
 
 
 @pytest.fixture
@@ -177,7 +177,7 @@ async def test_jira_issue_returned_for_run(submitted_run, saved_jira_issue, issu
     """issue_service.get() must include a Jira issue linked to a run."""
     await _link_issue_to_run(submitted_run, saved_jira_issue)
 
-    issues = await issue_service.get("run_id", str(submitted_run.id), False)
+    issues = await issue_service.get("run_id", submitted_run.id, False)
     jira_issues = [i for i in issues if i.get("subtype") == "jira"]
     found = next((i for i in jira_issues if str(i["id"]) == str(saved_jira_issue.id)), None)
 
@@ -199,7 +199,7 @@ async def test_graphed_stats_issue_has_required_subtype_field(
     await _link_issue_to_run(submitted_run, saved_github_issue)
     await _link_issue_to_run(submitted_run, saved_jira_issue)
 
-    result = await GraphedStatsService().get_runs_details([str(submitted_run.id)])
+    result = await GraphedStatsService().get_runs_details([submitted_run.id])
     run_issues = result[str(submitted_run.id)]["issues"]
     matching = [i for i in run_issues if i.get("subtype") == subtype]
     assert len(matching) >= 1, f"No issues with subtype='{subtype}' found in {run_issues}"

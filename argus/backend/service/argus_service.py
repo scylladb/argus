@@ -5,7 +5,6 @@ import subprocess
 import json
 import logging
 import datetime
-from types import NoneType
 from uuid import UUID
 from coodie.exceptions import DocumentNotFound
 
@@ -157,8 +156,7 @@ class ArgusService:
 
         return release, release_groups, release_tests
 
-    async def get_distinct_release_versions(self, release_id: UUID | str) -> list[str]:
-        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
+    async def get_distinct_release_versions(self, release_id: UUID) -> list[str]:
         release = await ArgusRelease.get(id=release_id)
         per_plugin = await asyncio.gather(
             *(plugin.get_distinct_product_versions(release=release) for plugin in all_plugin_models())
@@ -167,8 +165,7 @@ class ArgusService:
 
         return sorted(list(unique_versions), reverse=True)
 
-    async def get_distinct_release_images(self, release_id: UUID | str) -> list[str]:
-        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
+    async def get_distinct_release_images(self, release_id: UUID) -> list[str]:
         release = await ArgusRelease.get(id=release_id)
         images = await AVAILABLE_PLUGINS["scylla-cluster-tests"].model.get_distinct_cloud_images_for_release(release)
 
@@ -212,25 +209,7 @@ class ArgusService:
         return {}
 
     # TODO: Remove - legacy scheduling, superseded by release planner
-    async def update_schedule_comment(self, payload: dict) -> dict:
-        new_comment = payload.get("newComment")
-        release_id = payload.get("releaseId")
-        group_id = payload.get("groupId")
-        test_id = payload.get("testId")
-
-        if not release_id:
-            raise Exception("No release provided")
-        if not group_id:
-            raise Exception("No group provided")
-        if not test_id:
-            raise Exception("No test provided")
-
-        if isinstance(new_comment, NoneType):
-            raise Exception("No comment provided in the body of request")
-
-        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
-        group_id = UUID(group_id) if isinstance(group_id, str) else group_id
-        test_id = UUID(test_id) if isinstance(test_id, str) else test_id
+    async def update_schedule_comment(self, release_id: UUID, group_id: UUID, test_id: UUID, new_comment: str) -> dict:
         try:
             comment = await ReleasePlannerComment.get(release=release_id, group=group_id, test=test_id)
         except DocumentNotFound:
@@ -256,9 +235,7 @@ class ArgusService:
         """Legacy scheduling removed - kept as a stub for API compatibility."""
         return {}
 
-    async def get_planner_data(self, release_id: UUID | str) -> dict:
-
-        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
+    async def get_planner_data(self, release_id: UUID) -> dict:
         release = await ArgusRelease.get(id=release_id)
         release_comments = list(await ReleasePlannerComment.find(release=release.id).all())
         groups = await ArgusGroup.find(release_id=release.id).all()
@@ -295,8 +272,7 @@ class ArgusService:
         """Legacy scheduling removed - kept as a stub for API compatibility."""
         return []
 
-    async def get_groups_assignees(self, release_id: UUID | str, version: str = None, plan_id: UUID = None):
-        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
+    async def get_groups_assignees(self, release_id: UUID, version: str = None, plan_id: UUID = None):
         release = await ArgusRelease.get(id=release_id)
         if assignments := await PlanningService().get_assignments_for_groups(release_id, version, plan_id):
             return assignments
@@ -304,8 +280,7 @@ class ArgusService:
         # Legacy scheduling removed - no fallback source of assignments.
         return {}
 
-    async def get_tests_assignees(self, group_id: UUID | str, version: str = None, plan_id: UUID = None):
-        group_id = UUID(group_id) if isinstance(group_id, str) else group_id
+    async def get_tests_assignees(self, group_id: UUID, version: str = None, plan_id: UUID = None):
         group = await ArgusGroup.get(id=group_id)
 
         release = await ArgusRelease.get(id=group.release_id)

@@ -7,7 +7,7 @@ from collections import defaultdict
 from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import reduce
-from typing import Any, Optional, TypedDict
+from typing import Annotated, Any, Optional, TypedDict
 from uuid import UUID
 from slugify import slugify
 
@@ -18,7 +18,7 @@ from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, ArgusU
 from argus.backend.service.jenkins_service import JenkinsService
 from argus.backend.service.test_lookup import TestLookup
 from argus.backend.service.views import UserViewService
-from argus.backend.util.common import chunk, gather_limited
+from argus.backend.util.common import NoneIfEmpty, chunk, gather_limited
 
 
 LOGGER = logging.getLogger(__name__)
@@ -37,16 +37,16 @@ PlanOptions = dict[str, EntityOptions]
 class CreatePlanPayload:
     name: str
     description: str
-    owner: str
-    participants: list[str]
+    owner: UUID
+    participants: list[UUID]
     target_version: str | None
-    release_id: str
-    tests: list[str]
-    groups: list[str]
-    assignments: dict[str, str]
+    release_id: UUID
+    tests: list[UUID]
+    groups: list[UUID]
+    assignments: dict[UUID, UUID]
     options: PlanOptions = field(default_factory=dict)
-    view_id: Optional[str] = None
-    created_from: Optional[str] = None
+    view_id: Optional[UUID] = None
+    created_from: Optional[UUID] = None
 
 
 @dataclass(frozen=True, init=True, repr=True, kw_only=True)
@@ -55,21 +55,21 @@ class TempPlanPayload:
     name: str
     completed: bool
     description: str
-    owner: str
+    owner: UUID
     key: str
-    participants: list[str]
+    participants: list[UUID]
     target_version: str
-    assignee_mapping: dict[str, str]
-    assignments: dict[str, str] = None
-    release_id: str
-    tests: list[str]
-    groups: list[str]
+    assignee_mapping: dict[UUID, UUID]
+    assignments: dict[UUID, UUID] | None = None
+    release_id: UUID
+    tests: list[UUID]
+    groups: list[UUID]
     creation_time: str
     last_updated: str
-    ends_at: str
-    created_from: Optional[str]
-    options: PlanOptions = None
-    view_id: Optional[str] = None
+    ends_at: str | None
+    created_from: Optional[UUID]
+    options: str | PlanOptions | None = None
+    view_id: Optional[UUID] = None
 
 
 @dataclass(frozen=True, init=True, repr=True, kw_only=True)
@@ -78,21 +78,21 @@ class PlanDiffPayload:
     # Scalar fields - only sent if changed (last-edit-wins)
     name: Optional[str] = None
     description: Optional[str] = None
-    owner: Optional[str] = None
+    owner: Optional[UUID] = None
     target_version: Optional[str] = None
     completed: Optional[bool] = None
-    ends_at: Optional[str] = None
-    view_id: Optional[str] = None
+    ends_at: Optional[datetime.datetime] = None
+    view_id: Optional[UUID] = None
     # List diffs (add/remove)
-    tests_add: list[str] = field(default_factory=list)
-    tests_remove: list[str] = field(default_factory=list)
-    groups_add: list[str] = field(default_factory=list)
-    groups_remove: list[str] = field(default_factory=list)
-    participants_add: list[str] = field(default_factory=list)
-    participants_remove: list[str] = field(default_factory=list)
+    tests_add: list[UUID] = field(default_factory=list)
+    tests_remove: list[UUID] = field(default_factory=list)
+    groups_add: list[UUID] = field(default_factory=list)
+    groups_remove: list[UUID] = field(default_factory=list)
+    participants_add: list[UUID] = field(default_factory=list)
+    participants_remove: list[UUID] = field(default_factory=list)
     # Dict diff for assignee_mapping
-    assignee_mapping_set: dict[str, str] = field(default_factory=dict)
-    assignee_mapping_remove: list[str] = field(default_factory=list)
+    assignee_mapping_set: dict[UUID, UUID] = field(default_factory=dict)
+    assignee_mapping_remove: list[UUID] = field(default_factory=list)
     # Dict diff for per-entity options (keyed by test/group UUID)
     options_set: PlanOptions = field(default_factory=dict)
     options_remove: list[str] = field(default_factory=list)
@@ -102,17 +102,17 @@ class PlanDiffPayload:
 class CopyPlanPayload:
     plan: TempPlanPayload
     keepParticipants: bool
-    replacements: dict[str, str]
-    targetReleaseId: str
+    replacements: dict[UUID, UUID]
+    targetReleaseId: UUID
     targetReleaseName: str
 
 
-class PlanTriggerPayload(TypedDict):
-    plan_id: str | None
+class PlanTriggerPayload(TypedDict, total=False):
+    plan_id: Annotated[UUID | None, NoneIfEmpty]
     release: str | None
     version: str | None
-    common_params: dict[str, str]
-    params: list[dict[str, str]]
+    common_params: dict[str, Any]
+    params: list[dict[str, Any]]
 
 
 class PlannerServiceException(Exception):
@@ -156,8 +156,7 @@ class PlanningService:
     def version(self):
         return "v1"
 
-    async def _generate_plan_key(self, release_id: UUID | str) -> str:
-        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
+    async def _generate_plan_key(self, release_id: UUID) -> str:
         release: ArgusRelease = await ArgusRelease.get(id=release_id)
         candidate = f"{release.name}#1"
         release_plans = list(await ArgusReleasePlan.find(release_id=release.id).allow_filtering().all())
@@ -177,35 +176,31 @@ class PlanningService:
                 raise DocumentNotFound(f"Plan {ref} not found")
             return plan
 
-    async def create_plan(self, payload: dict[str, Any], user: User) -> ArgusReleasePlan:
-        plan_request = CreatePlanPayload(**payload)
-
+    async def create_plan(self, plan_request: CreatePlanPayload, user: User) -> ArgusReleasePlan:
         existing = await ArgusReleasePlan.find(
             name=plan_request.name, target_version=plan_request.target_version).allow_filtering().first()
         if existing:
             raise PlannerServiceException(
-                f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, plan_request)
+                f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing)
 
         plan = ArgusReleasePlan.model_construct()
         plan.name = plan_request.name
         plan.description = plan_request.description
-        plan.owner = UUID(plan_request.owner)
+        plan.owner = plan_request.owner
         plan.target_version = plan_request.target_version
-        plan.release_id = UUID(plan_request.release_id)
-        plan.participants = [UUID(p) if isinstance(p, str) else p for p in plan_request.participants or []]
-        plan.assignee_mapping = {UUID(entity_id): UUID(user_id)
-                                 for entity_id, user_id in plan_request.assignments.items()}
-        plan.groups = [UUID(g) if isinstance(g, str) else g for g in plan_request.groups or []]
-        plan.tests = [UUID(t) if isinstance(t, str) else t for t in plan_request.tests or []]
+        plan.release_id = plan_request.release_id
+        plan.participants = list(plan_request.participants)
+        plan.assignee_mapping = dict(plan_request.assignments)
+        plan.groups = list(plan_request.groups)
+        plan.tests = list(plan_request.tests)
         plan.options = json.dumps(plan_request.options or {})
         if plan_request.created_from:
-            plan.created_from = UUID(plan_request.created_from) if isinstance(
-                plan_request.created_from, str) else plan_request.created_from
+            plan.created_from = plan_request.created_from
         if not plan_request.view_id:
             view = await self.create_view_for_plan(plan, user)
             plan.view_id = view.id
         else:
-            plan.view_id = UUID(plan_request.view_id) if isinstance(plan_request.view_id, str) else plan_request.view_id
+            plan.view_id = plan_request.view_id
             view = await self.update_view_for_plan(plan, existing=True)
 
         plan.key = await self._generate_plan_key(plan.release_id)
@@ -213,9 +208,7 @@ class PlanningService:
         await invalidate_release_snapshots(plan.release_id)
         return plan
 
-    async def update_plan(self, payload: dict[str, Any], user: User) -> bool:
-        plan_request = PlanDiffPayload(**payload)
-
+    async def update_plan(self, plan_request: PlanDiffPayload, user: User) -> bool:
         plan: ArgusReleasePlan = await self._resolve_plan(plan_request.id)
 
         if plan_request.name is not None:
@@ -235,37 +228,34 @@ class PlanningService:
             name=plan.name, target_version=plan.target_version).allow_filtering().first()
         if existing and existing.id != plan.id:
             raise PlannerServiceException(
-                f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, plan_request)
+                f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing)
 
         # Apply list diffs (remove first, then add - remove wins over concurrent edits)
         current_tests = list(plan.tests or [])
-        remove_set = set(UUID(t) for t in plan_request.tests_remove)
+        remove_set = set(plan_request.tests_remove)
         current_tests = [t for t in current_tests if t not in remove_set]
         existing_test_set = set(current_tests)
-        for t in plan_request.tests_add:
-            test = UUID(t)
+        for test in plan_request.tests_add:
             if test not in existing_test_set:
                 current_tests.append(test)
                 existing_test_set.add(test)
         plan.tests = current_tests
 
         current_groups = list(plan.groups or [])
-        remove_set = set(UUID(g) for g in plan_request.groups_remove)
+        remove_set = set(plan_request.groups_remove)
         current_groups = [g for g in current_groups if g not in remove_set]
         existing_group_set = set(current_groups)
-        for grp in plan_request.groups_add:
-            group = UUID(grp)
+        for group in plan_request.groups_add:
             if group not in existing_group_set:
                 current_groups.append(group)
                 existing_group_set.add(group)
         plan.groups = current_groups
 
         current_participants = list(plan.participants or [])
-        remove_set = set(UUID(p) for p in plan_request.participants_remove)
+        remove_set = set(plan_request.participants_remove)
         current_participants = [p for p in current_participants if p not in remove_set]
         existing_participant_set = set(current_participants)
         for user_id in plan_request.participants_add:
-            user_id = UUID(user_id)
             if user_id not in existing_participant_set:
                 current_participants.append(user_id)
                 existing_participant_set.add(user_id)
@@ -274,9 +264,8 @@ class PlanningService:
         # Apply assignee_mapping diff (remove first, then set)
         current_mapping = dict(plan.assignee_mapping or {})
         for key in plan_request.assignee_mapping_remove:
-            current_mapping.pop(UUID(key), None)
-        mapping = {UUID(k): UUID(v) for k, v in plan_request.assignee_mapping_set.items()}
-        for key, value in mapping.items():
+            current_mapping.pop(key, None)
+        for key, value in plan_request.assignee_mapping_set.items():
             current_mapping[key] = value
         # Also clean up mapping entries for removed tests/groups
         all_entity_ids = set(str(eid) for eid in plan.tests + plan.groups)
@@ -296,7 +285,7 @@ class PlanningService:
 
         # Handle view_id changes
         if plan_request.view_id is not None:
-            if plan_request.view_id != str(plan.view_id) if plan.view_id else True:
+            if plan_request.view_id != plan.view_id:
                 if plan.view_id:
                     try:
                         old_view: ArgusUserView = await ArgusUserView.get(
@@ -305,7 +294,7 @@ class PlanningService:
                         await old_view.save()
                     except DocumentNotFound:
                         pass
-                plan.view_id = UUID(plan_request.view_id) if isinstance(plan_request.view_id, str) else plan_request.view_id
+                plan.view_id = plan_request.view_id
             await self.update_view_for_plan(plan, existing=True)
         else:
             if plan.view_id:
@@ -382,8 +371,8 @@ class PlanningService:
         await service.refresh_stale_view(view)
         return view
 
-    async def change_plan_owner(self, plan_id: UUID | str, new_owner: UUID | str) -> bool:
-        user: User = await User.get(id=UUID(str(new_owner)))
+    async def change_plan_owner(self, plan_id: UUID | str, new_owner: UUID) -> bool:
+        user: User = await User.get(id=new_owner)
         plan: ArgusReleasePlan = await self._resolve_plan(plan_id)
 
         plan.owner = user.id
@@ -395,8 +384,7 @@ class PlanningService:
     async def get_plan(self, plan_id: str | UUID) -> ArgusReleasePlan:
         return await self._resolve_plan(plan_id)
 
-    async def get_gridview_for_release(self, release_id: str | UUID) -> dict[str, dict]:
-        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
+    async def get_gridview_for_release(self, release_id: UUID) -> dict[str, dict]:
         release = await ArgusRelease.get(id=release_id)
         release = TestLookup.index_mapper(release, "release")
         groups: list[ArgusGroup] = list(
@@ -432,11 +420,10 @@ class PlanningService:
             name=payload.plan.name, target_version=payload.plan.target_version).allow_filtering().first()
         if existing:
             raise PlannerServiceException(
-                f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing, payload)
+                f"Found existing plan {existing.name} ({existing.target_version}) with the same name and version", existing)
 
         original_plan: ArgusReleasePlan = await self._resolve_plan(payload.plan.id)
-        target_release: ArgusRelease = await ArgusRelease.get(
-            id=UUID(payload.targetReleaseId) if isinstance(payload.targetReleaseId, str) else payload.targetReleaseId)
+        target_release: ArgusRelease = await ArgusRelease.get(id=payload.targetReleaseId)
         original_release: ArgusRelease = await ArgusRelease.get(
             id=original_plan.release_id)
 
@@ -463,10 +450,7 @@ class PlanningService:
             new_build_id = test.build_system_id.replace(
                 original_release.name, target_release.name, 1)
             new_test = tests_by_build_id.get(new_build_id)
-            new_test_id = new_test.id if new_test else payload.replacements.get(
-                test.id)
-            if isinstance(new_test_id, str):
-                new_test_id = UUID(new_test_id)
+            new_test_id = new_test.id if new_test else payload.replacements.get(test.id)
             if new_test_id:
                 new_tests.append(new_test_id)
                 if original_assignee and payload.keepParticipants:
@@ -480,10 +464,7 @@ class PlanningService:
             new_build_id = group.build_system_id.replace(
                 original_release.name, target_release.name, 1)
             new_group = groups_by_build_id.get(new_build_id)
-            new_group_id = new_group.id if new_group else payload.replacements.get(
-                group.id)
-            if isinstance(new_group_id, str):
-                new_group_id = UUID(new_group_id)
+            new_group_id = new_group.id if new_group else payload.replacements.get(group.id)
             if new_group_id:
                 new_groups.append(new_group_id)
                 if original_assignee and payload.keepParticipants:
@@ -494,12 +475,11 @@ class PlanningService:
 
         new_plan = ArgusReleasePlan.model_construct()
         new_plan.release_id = target_release.id
-        new_plan.owner = UUID(payload.plan.owner) if isinstance(payload.plan.owner, str) else payload.plan.owner
+        new_plan.owner = payload.plan.owner
         new_plan.name = payload.plan.name
         new_plan.description = payload.plan.description
         if payload.keepParticipants:
-            new_plan.participants = [UUID(p) if isinstance(p, str) else p
-                                     for p in payload.plan.participants or []]
+            new_plan.participants = list(payload.plan.participants)
         new_plan.assignee_mapping = new_assignee_mapping
         new_plan.tests = new_tests
         new_plan.groups = new_groups
@@ -513,8 +493,7 @@ class PlanningService:
         await invalidate_release_snapshots(new_plan.release_id)
         return new_plan
 
-    async def check_plan_copy_eligibility(self, plan_id: str | UUID, target_release_id: str | UUID) -> dict:
-        target_release_id = UUID(target_release_id) if isinstance(target_release_id, str) else target_release_id
+    async def check_plan_copy_eligibility(self, plan_id: str | UUID, target_release_id: UUID) -> dict:
         target_release: ArgusRelease = await ArgusRelease.get(id=target_release_id)
         plan: ArgusReleasePlan = await self._resolve_plan(plan_id)
         original_release: ArgusRelease = await ArgusRelease.get(id=plan.release_id)
@@ -576,8 +555,7 @@ class PlanningService:
             "plans": plans,
         }
 
-    async def get_plans_for_release(self, release_id: str | UUID) -> list[ArgusReleasePlan]:
-        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
+    async def get_plans_for_release(self, release_id: UUID) -> list[ArgusReleasePlan]:
         return list(await ArgusReleasePlan.find(release_id=release_id).all())
 
     async def delete_plan(self, plan_id: str | UUID, delete_view: bool = True):
@@ -594,9 +572,8 @@ class PlanningService:
         await invalidate_release_snapshots(plan.release_id)
         return True
 
-    async def get_assignments_for_groups(self, release_id: str | UUID, version: str = None,
+    async def get_assignments_for_groups(self, release_id: UUID, version: str = None,
                                          plan_id: UUID = None) -> dict[str, UUID]:
-        release_id = UUID(release_id) if isinstance(release_id, str) else release_id
         release: ArgusRelease = await ArgusRelease.get(id=release_id)
         if not plan_id:
             plans: list[ArgusReleasePlan] = list(
@@ -604,7 +581,7 @@ class PlanningService:
             plans = plans if not version else [
                 plan for plan in plans if plan.target_version == version]
         else:
-            plans = [await ArgusReleasePlan.get(id=UUID(plan_id) if isinstance(plan_id, str) else plan_id)]
+            plans = [await ArgusReleasePlan.get(id=plan_id)]
 
         all_assignments = {}
         for plan in reversed(plans):
@@ -614,9 +591,8 @@ class PlanningService:
 
         return all_assignments
 
-    async def get_assignments_for_tests(self, group_id: str | UUID, version: str = None,
-                                        plan_id: UUID | str = None) -> dict[str, UUID]:
-        group_id = UUID(group_id) if isinstance(group_id, str) else group_id
+    async def get_assignments_for_tests(self, group_id: UUID, version: str = None,
+                                        plan_id: UUID = None) -> dict[str, UUID]:
         group: ArgusGroup = await ArgusGroup.get(id=group_id)
         release: ArgusRelease = await ArgusRelease.get(id=group.release_id)
         if not plan_id:
@@ -625,7 +601,7 @@ class PlanningService:
             plans = plans if not version else [
                 plan for plan in plans if plan.target_version == version]
         else:
-            plans = [await ArgusReleasePlan.get(id=UUID(plan_id) if isinstance(plan_id, str) else plan_id)]
+            plans = [await ArgusReleasePlan.get(id=plan_id)]
 
         all_assignments = {}
 
@@ -685,7 +661,7 @@ class PlanningService:
                 release = await ArgusRelease.get(name=release_name)
                 filter_expr = {"release_id": release.id}
             case (False, True, False):
-                filter_expr = {"id": UUID(plan_id) if isinstance(plan_id, str) else plan_id}
+                filter_expr = {"id": plan_id}
             case (False, False, True):
                 filter_expr = {"target_version": version}
             case (True, False, True):

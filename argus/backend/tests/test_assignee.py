@@ -38,9 +38,9 @@ def jenkins_service():
 async def fake_test(release_manager_service) -> ArgusTest:
     name = f"assignee_{time.time_ns()}"
     release = await release_manager_service.create_release(name, name, False)
-    group = await release_manager_service.create_group(name, name, build_system_id=name, release_id=str(release.id))
-    return await release_manager_service.create_test(name, name, name, name, group_id=str(group.id),
-                                               release_id=str(release.id), plugin_name="scylla-cluster-tests")
+    group = await release_manager_service.create_group(name, name, build_system_id=name, release_id=release.id)
+    return await release_manager_service.create_test(name, name, name, name, group_id=group.id,
+                                               release_id=release.id, plugin_name="scylla-cluster-tests")
 
 
 @pytest.fixture

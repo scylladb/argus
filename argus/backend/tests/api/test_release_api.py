@@ -86,8 +86,7 @@ async def isolated_release(release_manager_service):
 async def isolated_group(release_manager_service, isolated_release):
     name = f"release_api_iso_group_{time.time_ns()}"
     return await release_manager_service.create_group(
-        name, name, build_system_id=isolated_release.name, release_id=str(
-            isolated_release.id)
+        name, name, build_system_id=isolated_release.name, release_id=isolated_release.id
     )
 
 
@@ -96,7 +95,7 @@ async def isolated_test(release_manager_service, isolated_release, isolated_grou
     name = f"release_api_iso_test_{time.time_ns()}"
     return await release_manager_service.create_test(
         name, name, name, name,
-        group_id=str(isolated_group.id), release_id=str(isolated_release.id),
+        group_id=isolated_group.id, release_id=isolated_release.id,
         plugin_name="scylla-cluster-tests",
     )
 
@@ -238,6 +237,17 @@ def test_release_schedules_missing_release_id(api_client):
     resp = api_client.get(f"{API_PREFIX}/release/schedules")
     assert resp.status_code == 200
     assert resp.json()["status"] == "error"
+
+
+def test_release_schedule_comment_update_rejects_malformed_test_id(api_client, isolated_release, isolated_group):
+    payload = {
+        "releaseId": str(isolated_release.id),
+        "groupId": str(isolated_group.id),
+        "testId": "not-a-test-id",
+        "newComment": "never-stored",
+    }
+    resp = _api_post(api_client, f"{API_PREFIX}/release/schedules/comment/update", payload)
+    assert resp.json()["response"]["exception"] == "RequestValidationError"
 
 
 def test_release_schedule_comment_update(api_client, isolated_release, isolated_group, isolated_test):

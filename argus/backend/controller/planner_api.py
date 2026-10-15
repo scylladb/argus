@@ -1,13 +1,21 @@
 import logging
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from argus.backend.models.web import User
-from argus.backend.service.planner_service import CopyPlanPayload, PlanningService
+from argus.backend.service.planner_service import (
+    CopyPlanPayload,
+    CreatePlanPayload,
+    PlanDiffPayload,
+    PlanningService,
+    PlanTriggerPayload,
+)
 from argus.backend.service.test_lookup import TestLookup
 from argus.backend.service.user import api_current_user
+from argus.backend.util.common import NoneIfEmpty
 from argus.backend.util.encoders import APIResponse
 
 LOGGER = logging.getLogger(__name__)
@@ -16,7 +24,7 @@ router = APIRouter(prefix="/planning")
 
 
 class ChangePlanOwnerRequest(BaseModel):
-    newOwner: str
+    newOwner: UUID
 
 
 @router.get("/", name="api.planning_api.version")
@@ -51,8 +59,9 @@ async def grid_view_for_release(release_id: UUID, user: User = Depends(api_curre
 
 
 @router.get("/search", name="api.planning_api.search_tests")
-async def search_tests(query: str | None = Query(None), release_id: str | None = Query(None, alias="releaseId"),
-                 user: User = Depends(api_current_user)):
+async def search_tests(query: str | None = Query(None),
+                       release_id: Annotated[UUID | None, NoneIfEmpty, Query(alias="releaseId")] = None,
+                       user: User = Depends(api_current_user)):
     if query:
         res = await TestLookup.test_lookup(query, release_id=release_id)
     else:
@@ -67,7 +76,7 @@ async def search_tests(query: str | None = Query(None), release_id: str | None =
 
 
 @router.get("/group/{group_id}/explode", name="api.planning_api.explode_group")
-async def explode_group(group_id: str, user: User = Depends(api_current_user)):
+async def explode_group(group_id: UUID, user: User = Depends(api_current_user)):
     res = await TestLookup.explode_group(group_id=group_id)
     return APIResponse({
         "status": "ok",
@@ -86,7 +95,7 @@ async def get_plan(plan_id: str, user: User = Depends(api_current_user)):
 
 
 @router.get("/release/{release_id}/all", name="api.planning_api.get_plans_for_release")
-async def get_plans_for_release(release_id: str, user: User = Depends(api_current_user)):
+async def get_plans_for_release(release_id: UUID, user: User = Depends(api_current_user)):
     result = await PlanningService().get_plans_for_release(release_id)
 
     return APIResponse({
@@ -96,7 +105,7 @@ async def get_plans_for_release(release_id: str, user: User = Depends(api_curren
 
 
 @router.post("/plan/create", name="api.planning_api.create_plan")
-async def create_plan(payload: dict = Body(...), user: User = Depends(api_current_user)):
+async def create_plan(payload: CreatePlanPayload, user: User = Depends(api_current_user)):
     result = await PlanningService().create_plan(payload, user)
 
     return APIResponse({
@@ -106,7 +115,7 @@ async def create_plan(payload: dict = Body(...), user: User = Depends(api_curren
 
 
 @router.post("/plan/update", name="api.planning_api.update_plan")
-async def update_plan(payload: dict = Body(...), user: User = Depends(api_current_user)):
+async def update_plan(payload: PlanDiffPayload, user: User = Depends(api_current_user)):
     result = await PlanningService().update_plan(payload, user)
 
     return APIResponse({
@@ -159,7 +168,7 @@ async def resolve_plan_entities(plan_id: str, user: User = Depends(api_current_u
 
 
 @router.post("/plan/trigger", name="api.planning_api.trigger_jobs_for_plans")
-async def trigger_jobs_for_plans(payload: dict = Body(...), user: User = Depends(api_current_user)):
+async def trigger_jobs_for_plans(payload: PlanTriggerPayload, user: User = Depends(api_current_user)):
     service = PlanningService()
     result = await service.trigger_jobs(payload, user.username)
 
