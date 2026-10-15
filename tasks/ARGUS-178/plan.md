@@ -112,17 +112,17 @@ Steps:
 **Internals:**
 - In `IssueTypes.ts`:
   - `JiraSubtype.priority: string | null`.
-  - `export const JIRA_PRIORITIES = ["P0", "P1", "P2", "P3", "P4"] as const`.
+  - `export const JIRA_PRIORITIES = ["P0", "P1", "P2", "P3", "P4"]`.
   - `export const JiraPriorityClass: Record<string, string>` maps P0 to P4 to
     `text-bg-danger`, `text-bg-warning`, `text-bg-primary`,
     `text-bg-secondary` and `text-bg-light`.
   - `export const priorityClass = (priority: string) => JiraPriorityClass[priority] ?? "text-bg-secondary"`.
-  - `export const priorityRank = (i: Issue): number`. A known priority returns
-    its index in `JIRA_PRIORITIES`. An unknown name returns
-    `JIRA_PRIORITIES.length`. A GitHub issue, or a null priority, returns
-    `Infinity`.
-  - Remove the `StateFilter` type, together with its re-export and its import
-    in `Issues.svelte`.
+  - `export const priorityIndex = (priority: string | null): number`. A known
+    priority returns its index in `JIRA_PRIORITIES`. An unknown name returns
+    `JIRA_PRIORITIES.length`, and a null priority returns `Infinity`.
+    `Issues.svelte` uses it to order the Priority checkboxes.
+  - `export const priorityRank = (i: Issue): number` applies `priorityIndex` to
+    the priority of a Jira issue, and returns `Infinity` for a GitHub issue.
 - In `JiraIssue.svelte`:
   - Add the prop `showRunsLink?: boolean`, defaulting to `true`.
   - After the state pill, render
@@ -134,7 +134,7 @@ Steps:
 - The `JIRA_ISSUE` fixture in `IssueCard.test.ts` gains `priority: "P1"`.
 
 Steps:
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - `IssueCard.test.ts`: the Jira card shows `P1`. Its "Runs" link has
     `href="/issues/FROBNICATOR-123"`. With `showRunsLink: false`, no link
     named "Runs" exists. A card with `priority: null` shows no priority badge.
@@ -144,10 +144,10 @@ Steps:
     - It gives `Infinity` for a null priority and for a GitHub issue.
     - `priorityClass` falls back to `text-bg-secondary`.
   - `IssueLinks.test.ts`: the issue page renders no "Runs" link.
-- [ ] Run `yarn test` and confirm that the new tests fail.
-- [ ] Make the changes.
-- [ ] Run the verify sequence and `yarn build`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run `yarn test` and confirm that the new tests fail.
+- [x] Make the changes.
+- [x] Run the verify sequence and `yarn build`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 4 — Checkbox filters for status, priority and Jira Space
 

@@ -60,6 +60,7 @@ export interface JiraSubtype extends Issue {
     key: string;
     summary: string;
     project: string;
+    priority: string | null;
     permalink: string;
     state: JiraState;
     assignees: string[];
@@ -139,6 +140,20 @@ export const JiraIssueIcon: Record<JiraState, IconDefinition> = {
     new: faDotCircle,
 };
 
+export const JIRA_PRIORITIES = ["P0", "P1", "P2", "P3", "P4"];
+
+export const JiraPriorityClass: Record<string, string> = {
+    P0: "text-bg-danger",
+    P1: "text-bg-warning",
+    P2: "text-bg-primary",
+    P3: "text-bg-secondary",
+    P4: "text-bg-light",
+};
+
+export const priorityClass = function (priority: string): string {
+    return JiraPriorityClass[priority] ?? "text-bg-secondary";
+};
+
 // ---- Polymorphic helpers ----
 
 export const getTitle = function (i: Issue): string {
@@ -197,6 +212,16 @@ export const getAssigneesRich = function (i: Issue): RichAssignee[] {
     } else {
         return (i as JiraSubtype).assignees.map((v) => ({ login: v, html_url: "#" }));
     }
+};
+
+export const priorityIndex = function (priority: string | null): number {
+    if (!priority) return Infinity;
+    const rank = JIRA_PRIORITIES.indexOf(priority);
+    return rank === -1 ? JIRA_PRIORITIES.length : rank;
+};
+
+export const priorityRank = function (i: Issue): number {
+    return priorityIndex(i.subtype === "jira" ? (i as JiraSubtype).priority : null);
 };
 
 export const label2color = function (label: Label): string {

@@ -24,6 +24,7 @@ const ISSUE = {
     key: "SCT-1234",
     summary: "Nemesis fails to restart node",
     project: "SCT",
+    priority: "P2",
     permalink: "https://zxqtesting.atlassian.net/browse/SCT-1234",
     assignees: [],
 };
@@ -94,6 +95,15 @@ describe("IssueLinks", () => {
 
         expect(await screen.findByText("Nemesis fails to restart node")).toBeTruthy();
         expect(screen.getByText("No test runs are linked to SCT-1234.")).toBeTruthy();
+    });
+
+    it("does not link the issue card back to this page", async () => {
+        stubFetch({ status: "ok", response: { issue: ISSUE, links: [link(413, "longevity-frobnicator-4h")] } });
+
+        render(IssueLinks, { props: { issueKey: "SCT-1234" } });
+
+        expect(await screen.findByText("Nemesis fails to restart node")).toBeTruthy();
+        expect(screen.queryByRole("link", { name: /^\s*Runs$/ })).toBeNull();
     });
 
     it("shows the API error", async () => {
