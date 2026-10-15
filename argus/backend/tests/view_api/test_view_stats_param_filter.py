@@ -15,7 +15,7 @@ async def make_test(release_manager_service, group, release):
     name = f"test_{uuid.uuid4().hex[:12]}"
     return await release_manager_service.create_test(
         name, name, name, name,
-        group_id=str(group.id), release_id=str(release.id), plugin_name="scylla-cluster-tests",
+        group_id=group.id, release_id=release.id, plugin_name="scylla-cluster-tests",
     )
 
 

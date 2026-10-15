@@ -56,7 +56,7 @@ async def driver_matrix_test(release_manager_service, group: ArgusGroup, release
     name = f"dmt_test_{time.time_ns()}"
     return await release_manager_service.create_test(
         name, name, name, name,
-        group_id=str(group.id), release_id=str(release.id),
+        group_id=group.id, release_id=release.id,
         plugin_name=RUN_TYPE,
     )
 

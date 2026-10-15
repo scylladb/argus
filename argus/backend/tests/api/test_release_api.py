@@ -86,8 +86,7 @@ async def isolated_release(release_manager_service):
 async def isolated_group(release_manager_service, isolated_release):
     name = f"release_api_iso_group_{time.time_ns()}"
     return await release_manager_service.create_group(
-        name, name, build_system_id=isolated_release.name, release_id=str(
-            isolated_release.id)
+        name, name, build_system_id=isolated_release.name, release_id=isolated_release.id
     )
 
 
@@ -96,7 +95,7 @@ async def isolated_test(release_manager_service, isolated_release, isolated_grou
     name = f"release_api_iso_test_{time.time_ns()}"
     return await release_manager_service.create_test(
         name, name, name, name,
-        group_id=str(isolated_group.id), release_id=str(isolated_release.id),
+        group_id=isolated_group.id, release_id=isolated_release.id,
         plugin_name="scylla-cluster-tests",
     )
 
@@ -132,7 +131,7 @@ async def test_list_releases_puts_priority_first_and_dormant_last(api_client, re
         "id": prioritized.id, "pretty_name": prioritized.pretty_name, "description": None,
         "valid_version_regex": None, "enabled": True, "perpetual": False, "dormant": False, "priority": 10,
     })
-    await release_manager_service.set_release_dormancy(str(dormant.id), True)
+    await release_manager_service.set_release_dormancy(dormant.id, True)
 
     resp = api_client.get(f"{API_PREFIX}/releases")
     assert resp.status_code == 200, resp.content

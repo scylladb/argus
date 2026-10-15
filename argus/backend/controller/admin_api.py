@@ -10,6 +10,7 @@ from argus.backend.models.web import User, UserRoles
 from argus.backend.service.release_manager import ReleaseManagerService
 from argus.backend.service.tunnel_service import TunnelService
 from argus.backend.service.user import UserService, require_roles
+from argus.backend.util.common import NoneIfEmpty
 from argus.backend.util.encoders import APIResponse
 
 LOGGER = logging.getLogger(__name__)
@@ -26,17 +27,17 @@ class CreateReleaseRequest(BaseModel):
 
 
 class SetReleasePerpetualRequest(BaseModel):
-    release_id: str
+    release_id: UUID
     perpetual: bool
 
 
 class SetReleaseStateRequest(BaseModel):
-    release_id: str
+    release_id: UUID
     state: bool
 
 
 class SetReleaseDormancyRequest(BaseModel):
-    release_id: str
+    release_id: UUID
     dormant: bool
 
 
@@ -44,7 +45,7 @@ MAX_RELEASE_PRIORITY = 2**31 - 1
 
 
 class EditReleaseRequest(BaseModel):
-    id: str
+    id: UUID
     pretty_name: str | None = None
     description: str | None = None
     valid_version_regex: str | None = None
@@ -55,18 +56,18 @@ class EditReleaseRequest(BaseModel):
 
 
 class DeleteReleaseRequest(BaseModel):
-    releaseId: str
+    releaseId: UUID
 
 
 class CreateGroupRequest(BaseModel):
     group_name: str
     pretty_name: str
     build_system_id: str
-    release_id: str
+    release_id: UUID
 
 
 class UpdateGroupRequest(BaseModel):
-    group_id: str
+    group_id: UUID
     name: str
     pretty_name: str
     enabled: bool
@@ -74,9 +75,9 @@ class UpdateGroupRequest(BaseModel):
 
 
 class DeleteGroupRequest(BaseModel):
-    group_id: str
+    group_id: UUID
     delete_tests: bool = True
-    new_group_id: str = ""
+    new_group_id: Annotated[UUID | None, NoneIfEmpty] = None
 
 
 class CreateTestRequest(BaseModel):
@@ -84,29 +85,29 @@ class CreateTestRequest(BaseModel):
     pretty_name: str
     build_id: str
     build_url: str
-    group_id: str
-    release_id: str
+    group_id: UUID
+    release_id: UUID
     plugin_name: str
 
 
 class UpdateTestRequest(BaseModel):
-    test_id: str
+    test_id: UUID
     name: str
     pretty_name: str
     plugin_name: str
     enabled: bool
     build_system_id: str
     build_system_url: str
-    group_id: str
+    group_id: UUID
 
 
 class BatchMoveTestsRequest(BaseModel):
-    new_group_id: str
-    tests: list[str]
+    new_group_id: UUID
+    tests: list[UUID]
 
 
 class DeleteTestRequest(BaseModel):
-    test_id: str
+    test_id: UUID
 
 
 class ToggleEntityStateRequest(BaseModel):
@@ -365,7 +366,7 @@ async def user_change_email(user_id: UUID, payload: UserEmailChangeRequest,
 
 
 @router.post("/user/{user_id}/delete", name="admin.admin_api.user_delete")
-async def user_delete(user_id: str, user: User = Depends(admin_user)):
+async def user_delete(user_id: UUID, user: User = Depends(admin_user)):
     result = await UserService().delete_user(user_id=user_id, current_user=user)
 
     return APIResponse({
@@ -388,7 +389,7 @@ async def user_change_password(user_id: UUID, payload: UserPasswordChangeRequest
 
 
 @router.post("/user/{user_id}/admin/toggle", name="admin.admin_api.user_toggle_admin")
-async def user_toggle_admin(user_id: str, user: User = Depends(admin_user)):
+async def user_toggle_admin(user_id: UUID, user: User = Depends(admin_user)):
     result = await UserService().toggle_admin(user_id=user_id, current_user=user)
 
     return APIResponse({
@@ -398,7 +399,7 @@ async def user_toggle_admin(user_id: str, user: User = Depends(admin_user)):
 
 
 @router.get("/proxy-tunnel/config", name="admin.admin_api.get_proxy_tunnel_config")
-async def get_proxy_tunnel_config(tunnel_id: str | None = Query(None),
+async def get_proxy_tunnel_config(tunnel_id: Annotated[UUID | None, NoneIfEmpty, Query()] = None,
                             user: User = Depends(admin_user)):
     config = await TunnelService().get_proxy_tunnel_config(tunnel_id=tunnel_id)
     return APIResponse({

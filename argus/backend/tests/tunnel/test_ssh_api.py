@@ -472,6 +472,17 @@ async def test_get_user_keys_returns_only_current_user(api_client: TestClient, a
 
 
 @pytest.mark.docker_required
+def test_get_user_keys_treats_an_empty_tunnel_id_as_unset(api_client: TestClient, argus_db, active_config):
+    own_key = _make_public_key()
+    _json_post(api_client, f"{API_PREFIX}/tunnel", {"public_key": own_key})
+
+    resp = api_client.get(f"{API_PREFIX}/tunnel/keys?tunnel_id=")
+
+    assert resp.json()["status"] == "ok", resp.text
+    assert own_key.strip() in {row["public_key"] for row in resp.json()["response"]}
+
+
+@pytest.mark.docker_required
 async def test_get_user_keys_can_filter_by_tunnel(api_client: TestClient, argus_db, active_config):
     from datetime import UTC, datetime
 

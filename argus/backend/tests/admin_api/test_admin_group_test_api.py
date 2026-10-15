@@ -329,6 +329,22 @@ def test_admin_delete_group_relocates_tests(api_client, admin_release, admin_gro
 # Negative paths
 # ---------------------------------------------------------------------------
 
+def test_admin_delete_group_without_target_group_keeps_the_group(api_client, admin_group_via_api,
+                                                                admin_test_via_api):
+    payload = {"group_id": admin_group_via_api["id"], "delete_tests": False, "new_group_id": ""}
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/group/delete", payload)
+    assert resp.json()["status"] == "error"
+    assert resp.json()["response"]["exception"] == "ReleaseManagerException"
+
+    group = api_client.get(f"{API_PREFIX}/group/{admin_group_via_api['id']}/details")
+    assert group.json()["status"] == "ok"
+
+
+def test_admin_delete_test_rejects_malformed_id(api_client):
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/test/delete", {"test_id": "not-a-test-id"})
+    assert resp.json()["response"]["exception"] == "RequestValidationError"
+
+
 def test_admin_delete_test_unknown_id_errors(api_client):
     resp = client_post(
         api_client, f"{ADMIN_PREFIX}/test/delete", {"test_id": str(uuid.uuid4())}

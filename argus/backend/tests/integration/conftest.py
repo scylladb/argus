@@ -127,7 +127,7 @@ async def _plugin_test(release_manager_service: ReleaseManagerService, group: Ar
                  release: ArgusRelease, plugin_name: str, prefix: str) -> ArgusTest:
     name = f"{prefix}_{time.time_ns()}"
     return await release_manager_service.create_test(name, name, name, name,
-                                               group_id=str(group.id), release_id=str(release.id),
+                                               group_id=group.id, release_id=release.id,
                                                plugin_name=plugin_name)
 
 

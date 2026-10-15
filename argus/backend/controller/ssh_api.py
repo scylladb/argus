@@ -1,5 +1,7 @@
 import logging
 from dataclasses import asdict
+from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -8,6 +10,7 @@ from starlette.responses import PlainTextResponse
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.tunnel_service import TunnelService, TunnelServiceException
 from argus.backend.service.user import allow_ssh_tunnel_server_scope, api_current_user, require_roles
+from argus.backend.util.common import NoneIfEmpty
 from argus.backend.util.encoders import APIResponse
 
 LOGGER = logging.getLogger(__name__)
@@ -51,7 +54,8 @@ async def get_tunnel_connection(proxy_host: str | None = Query(None),
 
 
 @router.get("/tunnel/keys", name="api.client_api.ssh_api.get_user_keys")
-async def get_user_keys(tunnel_id: str | None = Query(None), user: User = Depends(api_current_user)):
+async def get_user_keys(tunnel_id: Annotated[UUID | None, NoneIfEmpty, Query()] = None,
+                        user: User = Depends(api_current_user)):
     """
     Return SSH keys owned by the authenticated user.
 

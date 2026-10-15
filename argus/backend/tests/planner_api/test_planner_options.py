@@ -136,10 +136,10 @@ async def test_copy_plan_remaps_options(planning_service, release_manager_servic
     # copy_plan can remap them onto the target release by substring replacement.
     src_release = await release_manager_service.create_release(f"opt_src_{ns}", f"opt_src_{ns}", False)
     src_group = await release_manager_service.create_group(
-        f"g_{ns}", f"g_{ns}", build_system_id=f"{src_release.name}/g", release_id=str(src_release.id))
+        f"g_{ns}", f"g_{ns}", build_system_id=f"{src_release.name}/g", release_id=src_release.id)
     src_test = await release_manager_service.create_test(
         f"t_{ns}", f"t_{ns}", f"{src_release.name}/g/t", f"{src_release.name}/g/t",
-        group_id=str(src_group.id), release_id=str(src_release.id),
+        group_id=src_group.id, release_id=src_release.id,
         plugin_name="scylla-cluster-tests")
 
     source_options = {str(src_test.id): {"labels": ["carry-me"]}}
@@ -150,12 +150,12 @@ async def test_copy_plan_remaps_options(planning_service, release_manager_servic
     target_group = await release_manager_service.create_group(
         src_group.name, src_group.pretty_name,
         build_system_id=src_group.build_system_id.replace(src_release.name, target_release.name, 1),
-        release_id=str(target_release.id))
+        release_id=target_release.id)
     target_test = await release_manager_service.create_test(
         src_test.name, src_test.pretty_name,
         src_test.build_system_id.replace(src_release.name, target_release.name, 1),
         src_test.build_system_url,
-        group_id=str(target_group.id), release_id=str(target_release.id),
+        group_id=target_group.id, release_id=target_release.id,
         plugin_name=src_test.plugin_name)
 
     temp_plan = TempPlanPayload(
@@ -168,7 +168,7 @@ async def test_copy_plan_remaps_options(planning_service, release_manager_servic
         participants=[],
         target_version=f"2.0.0-{ns}",
         assignee_mapping={},
-        release_id=str(target_release.id),
+        release_id=target_release.id,
         tests=[str(src_test.id)],
         groups=[],
         creation_time="",
