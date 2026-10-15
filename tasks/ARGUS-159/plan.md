@@ -151,11 +151,11 @@ stays in every plan built from a spec.
   - `TestChildPath_RejectsServerNameWithPath`: `../x-monitor-set.tar.zst` and
     `sub/monitor-set.tar.zst`.
 
-- [ ] Write the failing tests.
-- [ ] Run them and confirm the failures.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Write the failing tests.
+- [x] Run them and confirm the failures.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 4 — Run the container as the calling user
 
@@ -183,11 +183,11 @@ stays in every plan built from a spec.
   by `1000:1001` and comes before `promImage`.
 - `TestPromDockerRunArgs_OmitsUserWhenUIDUnknown`
 
-- [ ] Write the failing tests.
-- [ ] Run them and confirm the failures.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Write the failing tests.
+- [x] Run them and confirm the failures.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 5 — Keep the archive in its cache entry and the TSDB with its container
 
@@ -270,31 +270,37 @@ stays in every plan built from a spec.
     `wal/` to 0500, and restore it in `t.Cleanup`. The warning names the file,
     and the dir is still there.
 
-- [ ] Write the failing tests.
-- [ ] Run them and confirm the failures.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Write the failing tests.
+- [x] Run them and confirm the failures.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 6 — Check it on rootful Docker
 
-Komachi runs `sudo rm -rf ~/.cache/argus-cli/prometheus` once first. Then,
-with a build of the branch:
+With a build of the branch. The run used `XDG_CACHE_HOME` pointed at a scratch
+root, seeded with a copy of the run's archive, and `ARGUS_DISABLE_CLOUDFLARE=1`,
+so no step needed `sudo` or the Argus API. Komachi still runs
+`sudo rm -rf ~/.cache/argus-cli/prometheus` once for the real cache.
 
-- [ ] Run `argus prometheus start --run-id 1e72eebe-a48d-4a3e-a560-c6ad0d85b1af`.
-  `curl -s localhost:<port>/api/v1/status/tsdb` reports `numSeries > 0`.
-- [ ] `find ~/.cache/argus-cli \( ! -user $USER -o -perm -o+w \)` prints
+- [x] Run `argus prometheus start --run-id 1e72eebe-a48d-4a3e-a560-c6ad0d85b1af`.
+  `curl -s localhost:<port>/api/v1/label/__name__/values` lists the run's
+  metrics: 1379 names, 598 of them Scylla. The container runs as `1000:1000`.
+- [x] `find ~/.cache/argus-cli \( ! -user $USER -o -perm -o+w \)` prints
   nothing.
-- [ ] `stop --run-id …` removes `prometheus/<run>/` and keeps the archive in
+- [x] `stop --run-id …` removes `prometheus/<run>/` and keeps the archive in
   `cache/prometheus-logs/<run>/`. A second `start` prints no download.
-- [ ] `cache info` counts the archive under `prometheus-logs`, and `cache clear`
+- [x] `cache info` counts the archive under `prometheus-logs`, and `cache clear`
   removes it.
-- [ ] Set `expires_at` in that `meta.json` to the past, then run
+- [x] Set `expires_at` in that `meta.json` to the past, then run
   `argus cache info`. The entry and its archive are gone.
 - [ ] Run `argus --no-cache prometheus start …` and then `stop`. Nothing is
-  left behind.
-- [ ] Ctrl-C during the download removes the run dir.
-- [ ] `start --run-id ../..` and `stop --run-id ../..` fail with
+  left behind. Only the failure path ran: without credentials, `start` failed
+  at the API and removed its run dir. The download path needs Komachi's
+  credentials.
+- [ ] Ctrl-C during the download removes the run dir. Not run: it needs a
+  download, so it needs Komachi's credentials.
+- [x] `start --run-id ../..` and `stop --run-id ../..` fail with
   `invalid run ID`.
-- [ ] In a scratch dir that holds `./cache/x`, run `argus --no-cache cache clear`.
+- [x] In a scratch dir that holds `./cache/x`, run `argus --no-cache cache clear`.
   `./cache/x` survives.

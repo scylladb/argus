@@ -11,11 +11,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/scylladb/argus/cli/internal/api"
 	"github.com/scylladb/argus/cli/internal/cache"
+	"github.com/scylladb/argus/cli/internal/config"
 	"github.com/scylladb/argus/cli/internal/logging"
 	"github.com/scylladb/argus/cli/internal/models"
 	"github.com/spf13/cobra"
@@ -25,7 +27,6 @@ const (
 	promContainerPrefix = "argus-prom-"
 	promMaxTTL          = 1 * time.Hour
 	promImage           = "prom/prometheus:latest"
-	promConfigMode      = 0o644
 )
 
 const promConfig = `global:
@@ -59,16 +60,10 @@ var promListCmd = &cobra.Command{
 
 		out := OutputterFrom(cmd.Context())
 
-		// Get container names
-		raw, err := exec.CommandContext(cmd.Context(), "docker", "ps", "-a",
-			"--filter", "name="+promContainerPrefix,
-			"--format", "{{.Names}}",
-		).Output()
+		names, err := promContainerNames(cmd.Context())
 		if err != nil {
-			return fmt.Errorf("docker ps: %w", err)
+			return err
 		}
-
-		names := strings.Fields(strings.TrimSpace(string(raw)))
 		if len(names) == 0 {
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No argus prometheus containers found.")
 			return nil
@@ -103,13 +98,23 @@ var promStartCmd = &cobra.Command{
 		log := logging.For(LoggerFrom(ctx), "prometheus-start")
 
 		runID, _ := cmd.Flags().GetString("run-id")
+		root := promDataRoot()
+		dataDir, err := promRunDir(root, runID)
+		if err != nil {
+			return err
+		}
 
 		if err := checkDocker(); err != nil {
 			return err
 		}
 
-		// Prune stale containers
+		// Prune stale containers and the data they leave behind
 		pruneOldContainers(ctx)
+		if names, err := promContainerNames(ctx); err != nil {
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: skipping prometheus data cleanup: %v\n", err)
+		} else {
+			removeOrphanDataDirs(cmd.ErrOrStderr(), root, names)
+		}
 
 		// Check if container already exists for this run
 		containerName := promContainerName(runID)
@@ -119,19 +124,23 @@ var promStartCmd = &cobra.Command{
 			return nil
 		}
 
+		if err := os.MkdirAll(dataDir, 0o755); err != nil {
+			return fmt.Errorf("creating data directory: %w", err)
+		}
+		started := false
+		defer func() {
+			if !started {
+				removePromData(cmd.ErrOrStderr(), dataDir)
+			}
+		}()
+
 		// 1. Check cache for previously downloaded archive
 		appCache := CacheFrom(ctx)
 		cacheKey := cache.PrometheusLogKey(runID)
-		dataDir, err := promDataDir(runID)
-		if err != nil {
-			return fmt.Errorf("creating data directory: %w", err)
-		}
+		archivePath := cachedArchivePath(appCache, cacheKey)
+		downloaded := archivePath == ""
 
-		cachedLogName, _, cacheErr := cache.Get[string](appCache, cacheKey)
-		cachedArchive := filepath.Join(dataDir, cachedLogName)
-		haveCached := cacheErr == nil && cachedLogName != "" && fileExists(cachedArchive)
-
-		if !haveCached {
+		if downloaded {
 			// 2. List logs and find the monitor-set archive
 			log.Debug().Str("run_id", runID).Msg("listing logs to find monitor-set archive")
 			monitorLog, err := findMonitorSetLog(ctx, client, runID)
@@ -139,8 +148,10 @@ var promStartCmd = &cobra.Command{
 				return fmt.Errorf("finding monitor-set log: %w", err)
 			}
 			log.Info().Str("log_name", monitorLog).Msg("found monitor-set archive")
-			cachedLogName = monitorLog
-			cachedArchive = filepath.Join(dataDir, monitorLog)
+			archivePath, err = childPath(dataDir, monitorLog)
+			if err != nil {
+				return fmt.Errorf("monitor-set log name: %w", err)
+			}
 
 			// 3. Download the archive
 			pluginName, err := ResolveRunType(ctx, client, runID)
@@ -164,8 +175,7 @@ var promStartCmd = &cobra.Command{
 				return fmt.Errorf("server returned %d: %s", resp.StatusCode, http.StatusText(resp.StatusCode))
 			}
 
-			// Save archive to data dir for future reuse
-			archiveFile, err := os.Create(cachedArchive)
+			archiveFile, err := os.Create(archivePath)
 			if err != nil {
 				return fmt.Errorf("creating archive file: %w", err)
 			}
@@ -173,7 +183,11 @@ var promStartCmd = &cobra.Command{
 				_ = archiveFile.Close()
 				return fmt.Errorf("saving archive: %w", err)
 			}
-			_ = archiveFile.Close()
+			if err := archiveFile.Close(); err != nil {
+				return fmt.Errorf("saving archive: %w", err)
+			}
+		} else {
+			_ = cache.Set(appCache, cacheKey, filepath.Base(archivePath), "", cache.TTLPrometheusLog)
 		}
 
 		// 4. Extract outer archive to temp dir
@@ -183,14 +197,15 @@ var promStartCmd = &cobra.Command{
 		}
 		defer func() { _ = os.RemoveAll(tempDir) }()
 
-		archiveReader, err := os.Open(cachedArchive)
-		if err != nil {
-			return fmt.Errorf("opening cached archive: %w", err)
-		}
-		defer func() { _ = archiveReader.Close() }()
-
-		if err := extractTarZst(archiveReader, tempDir); err != nil {
+		if err := extractTarZstFile(archivePath, tempDir); err != nil {
 			return fmt.Errorf("extracting outer archive: %w", err)
+		}
+
+		// Keep the verified archive in the cache for the next start
+		if downloaded {
+			if err := moveArchiveToCache(appCache, cacheKey, archivePath); err != nil {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not cache the monitor-set archive: %v\n", err)
+			}
 		}
 
 		// 5. Find prometheus_data_*.tar.zst in extracted content
@@ -200,14 +215,8 @@ var promStartCmd = &cobra.Command{
 		}
 		log.Info().Str("path", promArchive).Msg("found prometheus data archive")
 
-		// 6. Extract TSDB data to persistent directory
-		promFile, err := os.Open(promArchive)
-		if err != nil {
-			return fmt.Errorf("opening prometheus archive: %w", err)
-		}
-		defer func() { _ = promFile.Close() }()
-
-		if err := extractTarZst(promFile, dataDir); err != nil {
+		// 6. Extract TSDB data to the run's data directory
+		if err := extractTarZstFile(promArchive, dataDir); err != nil {
 			return fmt.Errorf("extracting prometheus data: %w", err)
 		}
 
@@ -218,9 +227,6 @@ var promStartCmd = &cobra.Command{
 			return fmt.Errorf("flattening snapshot directory: %w", err)
 		}
 
-		// Make data dir writable by the prometheus container user (uid 65534)
-		_ = chmodRecursive(dataDir, 0777)
-
 		// 7. Write minimal prometheus.yml
 		configPath := filepath.Join(dataDir, "prometheus.yml")
 		if err := writePromConfig(configPath, promConfig); err != nil {
@@ -228,23 +234,16 @@ var promStartCmd = &cobra.Command{
 		}
 
 		// 8. Start Docker container
-		dockerArgs := []string{
-			"run", "-d",
-			"--name", containerName,
-			"-v", dataDir + ":/prometheus",
-			"-v", configPath + ":/etc/prometheus/prometheus.yml:ro",
-			"-p", "0:9090",
-			promImage,
-			"--config.file=/etc/prometheus/prometheus.yml",
-			"--storage.tsdb.path=/prometheus",
-			"--storage.tsdb.retention.time=90d",
-			"--storage.tsdb.no-lockfile",
-			"--web.listen-address=:9090",
-		}
-
+		dockerArgs := promDockerRunArgs(containerName, dataDir, configPath, os.Getuid(), os.Getgid())
 		output, err := exec.CommandContext(ctx, "docker", dockerArgs...).CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("docker run failed: %w\n%s", err, string(output))
+		}
+		started = true
+
+		// Store run ID metadata for list command
+		if err := os.WriteFile(filepath.Join(dataDir, "run_id"), []byte(runID), 0o644); err != nil {
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not record the run ID: %v\n", err)
 		}
 
 		// Get assigned port
@@ -252,12 +251,6 @@ var promStartCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("getting container port: %w", err)
 		}
-
-		// Store run ID metadata for list command
-		writeRunIDFile(runID)
-
-		// Write cache entry now that everything succeeded
-		_ = cache.Set(appCache, cacheKey, cachedLogName, "", cache.TTLPrometheusLog)
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Prometheus running at http://localhost:%s\n", port)
 		return nil
@@ -290,6 +283,11 @@ var promStopCmd = &cobra.Command{
 			return stopAllContainers(ctx, cmd)
 		}
 
+		dir, err := promRunDir(promDataRoot(), runID)
+		if err != nil {
+			return err
+		}
+
 		containerName := promContainerName(runID)
 		output, err := exec.CommandContext(ctx, "docker", "rm", "-f", containerName).CombinedOutput()
 		if err != nil {
@@ -297,10 +295,7 @@ var promStopCmd = &cobra.Command{
 		}
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Stopped and removed %s\n", containerName)
 
-		// Clean up extracted data but preserve the cached archive
-		if dir, err := promDataDir(runID); err == nil {
-			cleanDataDir(dir)
-		}
+		removePromData(cmd.ErrOrStderr(), dir)
 		return nil
 	},
 }
@@ -321,19 +316,84 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-// cleanDataDir removes all contents of dir except .tar.zst archive files and the run_id marker.
-func cleanDataDir(dir string) {
-	entries, err := os.ReadDir(dir)
+// removePromData removes a run's data directory, or the whole data root, and
+// warns on w about anything left behind.
+func removePromData(w io.Writer, dir string) {
+	if err := os.RemoveAll(dir); err != nil {
+		_, _ = fmt.Fprintf(w, "warning: could not remove prometheus data: %v\n", err)
+	}
+}
+
+// removeOrphanDataDirs removes the data directories under root whose container
+// is gone.
+func removeOrphanDataDirs(w io.Writer, root string, containers []string) {
+	entries, err := os.ReadDir(root)
 	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			_, _ = fmt.Fprintf(w, "warning: could not list prometheus data: %v\n", err)
+		}
 		return
 	}
 	for _, e := range entries {
-		name := e.Name()
-		if strings.HasSuffix(name, ".tar.zst") || name == "run_id" {
+		if !e.IsDir() || slices.Contains(containers, promContainerName(e.Name())) {
 			continue
 		}
-		_ = os.RemoveAll(filepath.Join(dir, name))
+		dir := filepath.Join(root, e.Name())
+		// A directory without run_id belongs to a start that has not created
+		// its container yet, unless that start is long gone.
+		if !fileExists(filepath.Join(dir, "run_id")) {
+			info, err := e.Info()
+			if err != nil || time.Since(info.ModTime()) < promMaxTTL {
+				continue
+			}
+		}
+		removePromData(w, dir)
 	}
+}
+
+// cachedArchivePath returns the monitor-set archive held by the cache entry
+// at key, or "" when the entry or its archive is missing.
+func cachedArchivePath(c *cache.Cache, key string) string {
+	name, _, err := cache.Get[string](c, key)
+	if err != nil {
+		return ""
+	}
+	dir, err := c.EntryDir(key)
+	if err != nil {
+		return ""
+	}
+	archive, err := childPath(dir, name)
+	if err != nil || !fileExists(archive) {
+		return ""
+	}
+	return archive
+}
+
+// moveArchiveToCache moves a downloaded archive into the cache entry at key,
+// so it expires and clears with the entry. It leaves the archive in place
+// when the cache is disabled.
+func moveArchiveToCache(c *cache.Cache, key, archivePath string) error {
+	dir, err := c.EntryDir(key)
+	if errors.Is(err, cache.ErrDisabled) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	name := filepath.Base(archivePath)
+	if err := cache.Set(c, key, name, "", cache.TTLPrometheusLog); err != nil {
+		return err
+	}
+	return os.Rename(archivePath, filepath.Join(dir, name))
+}
+
+func extractTarZstFile(path, dest string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	return extractTarZst(f, dest)
 }
 
 func checkDocker() error {
@@ -352,25 +412,33 @@ func promContainerName(runID string) string {
 	return promContainerPrefix + short
 }
 
-func promDataDir(runID string) (string, error) {
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		return "", fmt.Errorf("getting user cache dir: %w", err)
+// childPath returns root/name when name is a single path element, so the path
+// cannot leave root.
+func childPath(root, name string) (string, error) {
+	p := filepath.Join(root, name)
+	if !filepath.IsLocal(name) || filepath.Dir(p) != root || filepath.Base(p) != name {
+		return "", fmt.Errorf("%q is not a single path element", name)
 	}
-	dir := filepath.Join(cacheDir, "argus-cli", "prometheus", runID)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", fmt.Errorf("creating prometheus data dir: %w", err)
+	return p, nil
+}
+
+// promDataRoot is the directory that holds one data directory per run.
+func promDataRoot() string {
+	return filepath.Join(config.CacheDir(), "prometheus")
+}
+
+// promRunDir returns the data directory of runID under root.
+func promRunDir(root, runID string) (string, error) {
+	dir, err := childPath(root, runID)
+	if err != nil {
+		return "", fmt.Errorf("invalid run ID: %w", err)
 	}
 	return dir, nil
 }
 
 func readRunIDFromDataDir(containerName string) string {
 	// Container name is "argus-prom-XXXXXXXX"; enumerate data dirs to find matching run_id
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		return ""
-	}
-	promBase := filepath.Join(cacheDir, "argus-cli", "prometheus")
+	promBase := promDataRoot()
 	entries, err := os.ReadDir(promBase)
 	if err != nil {
 		return ""
@@ -392,12 +460,17 @@ func readRunIDFromDataDir(containerName string) string {
 	return ""
 }
 
-func writeRunIDFile(runID string) {
-	dir, err := promDataDir(runID)
+// promContainerNames lists the names of all argus prometheus containers,
+// running or not.
+func promContainerNames(ctx context.Context) ([]string, error) {
+	raw, err := exec.CommandContext(ctx, "docker", "ps", "-a",
+		"--filter", "name="+promContainerPrefix,
+		"--format", "{{.Names}}",
+	).Output()
 	if err != nil {
-		return
+		return nil, fmt.Errorf("docker ps: %w", err)
 	}
-	_ = os.WriteFile(filepath.Join(dir, "run_id"), []byte(runID), 0644)
+	return strings.Fields(string(raw)), nil
 }
 
 func containerExists(ctx context.Context, name string) bool {
@@ -425,24 +498,19 @@ func stopAllContainers(ctx context.Context, cmd *cobra.Command) error {
 		return fmt.Errorf("listing containers: %w", err)
 	}
 
-	ids := strings.TrimSpace(string(out))
-	if ids == "" {
+	ids := strings.Fields(string(out))
+	if len(ids) == 0 {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No argus prometheus containers found.")
-		return nil
+	} else {
+		args := append([]string{"rm", "-f"}, ids...)
+		output, err := exec.CommandContext(ctx, "docker", args...).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("removing containers: %w\n%s", err, string(output))
+		}
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "All argus prometheus containers stopped and removed.")
 	}
 
-	args := append([]string{"rm", "-f"}, strings.Fields(ids)...)
-	output, err := exec.CommandContext(ctx, "docker", args...).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("removing containers: %w\n%s", err, string(output))
-	}
-	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "All argus prometheus containers stopped and removed.")
-
-	// Clean up all data directories
-	cacheDir, err := os.UserCacheDir()
-	if err == nil {
-		_ = os.RemoveAll(filepath.Join(cacheDir, "argus-cli", "prometheus"))
-	}
+	removePromData(cmd.ErrOrStderr(), promDataRoot())
 	return nil
 }
 
@@ -599,26 +667,32 @@ func flattenSnapshotDir(dataDir string) error {
 	return nil
 }
 
-// The prometheus container runs as uid 65534 and reads this file through a bind
-// mount, so the mode has to hold whatever umask the caller was started with.
-// WriteFile passes the mode to open(2), which masks it; Chmod does not.
 func writePromConfig(configPath, contents string) error {
-	if err := os.WriteFile(configPath, []byte(contents), promConfigMode); err != nil {
+	if err := os.WriteFile(configPath, []byte(contents), 0o644); err != nil {
 		return fmt.Errorf("writing prometheus config: %w", err)
-	}
-	if err := os.Chmod(configPath, promConfigMode); err != nil {
-		return fmt.Errorf("setting prometheus config permissions: %w", err)
 	}
 	return nil
 }
 
-func chmodRecursive(dir string, mode os.FileMode) error {
-	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		return os.Chmod(path, mode)
-	})
+// promDockerRunArgs returns the docker run arguments that start Prometheus as
+// the calling user on the run's data directory.
+func promDockerRunArgs(containerName, dataDir, configPath string, uid, gid int) []string {
+	args := []string{"run", "-d", "--name", containerName}
+	// os.Getuid reports -1 on Windows, where the container keeps the image's user.
+	if uid != -1 {
+		args = append(args, "--user", fmt.Sprintf("%d:%d", uid, gid))
+	}
+	return append(args,
+		"-v", dataDir+":/prometheus",
+		"-v", configPath+":/etc/prometheus/prometheus.yml:ro",
+		"-p", "0:9090",
+		promImage,
+		"--config.file=/etc/prometheus/prometheus.yml",
+		"--storage.tsdb.path=/prometheus",
+		"--storage.tsdb.retention.time=90d",
+		"--storage.tsdb.no-lockfile",
+		"--web.listen-address=:9090",
+	)
 }
 
 // ---------------------------------------------------------------------------
