@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { Limiter, PINS_KEY, PREFETCH_DELAY, STATS_TTL, SidebarState, type Release } from "./sidebarState.svelte";
+import { HIDDEN_KEY, Limiter, PINS_KEY, PREFETCH_DELAY, STATS_TTL, SidebarState, type Release } from "./sidebarState.svelte";
 
 const release = (name: string, extra: Partial<Release> = {}): Release => ({
     id: `${name}-id`,
@@ -230,6 +230,43 @@ describe("SidebarState pins", () => {
         await state.loadEager();
 
         expect(statsCalls(fetchMock)).toEqual(["/api/v1/release/stats/summary?release=scylla-2025.1&force=0"]);
+    });
+});
+
+describe("SidebarState hidden releases", () => {
+    it("keeps the hidden releases in the browser across page loads", () => {
+        const old = release("scylla-2025.1");
+
+        new SidebarState().toggleHidden(old);
+
+        expect(JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? "[]")).toEqual([old.id]);
+        expect(new SidebarState().hidden.has(old.id)).toBe(true);
+    });
+
+    it("unhides a hidden release", () => {
+        const old = release("scylla-2025.1");
+        const state = new SidebarState();
+
+        state.toggleHidden(old);
+        state.toggleHidden(old);
+
+        expect(state.hidden.has(old.id)).toBe(false);
+    });
+
+    it("fetches no stats eagerly for a hidden release, prioritized or pinned", async () => {
+        const fetchMock = vi.fn().mockResolvedValue(ok(SUMMARY));
+        vi.stubGlobal("fetch", fetchMock);
+        localStorage.setItem(PINS_KEY, JSON.stringify(["scylla-2025.1-id"]));
+        localStorage.setItem(HIDDEN_KEY, JSON.stringify(["scylla-master-id", "scylla-2025.1-id"]));
+        const state = new SidebarState();
+        state.releases = {
+            loading: false,
+            data: [release("scylla-master", { priority: 10 }), release("scylla-2025.1"), release("scylla-staging", { priority: 5 })],
+        };
+
+        await state.loadEager();
+
+        expect(statsCalls(fetchMock)).toEqual(["/api/v1/release/stats/summary?release=scylla-staging&force=0"]);
     });
 });
 

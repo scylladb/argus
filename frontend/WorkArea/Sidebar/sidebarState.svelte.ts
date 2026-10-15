@@ -6,6 +6,7 @@ export const STATS_TTL = 300_000;
 export const PREFETCH_DELAY = 150;
 export const STATS_SLOTS = 2;
 export const PINS_KEY = "argus-workspace-pinned-releases";
+export const HIDDEN_KEY = "argus-workspace-hidden-releases";
 
 export interface Release extends NamedEntity {
     enabled: boolean;
@@ -65,20 +66,20 @@ interface SearchPageParams {
 
 type Assignees = Record<string, string[]>;
 
-const readPins = (): string[] => {
+const readIds = (key: string): string[] => {
     try {
-        const ids = JSON.parse(localStorage.getItem(PINS_KEY) ?? "[]");
+        const ids = JSON.parse(localStorage.getItem(key) ?? "[]");
         return Array.isArray(ids) ? ids.filter((id) => typeof id === "string") : [];
     } catch {
         return [];
     }
 };
 
-const writePins = (ids: Iterable<string>): void => {
+const writeIds = (key: string, ids: Iterable<string>): void => {
     try {
-        localStorage.setItem(PINS_KEY, JSON.stringify([...ids]));
+        localStorage.setItem(key, JSON.stringify([...ids]));
     } catch {
-        // Storage is blocked, as in a private window: the pins last for this page.
+        // Storage is blocked, as in a private window: the ids last for this page.
     }
 };
 
@@ -132,7 +133,9 @@ export class SidebarState {
     groupAssignees = new SvelteMap<string, Assignees>();
     testAssignees = new SvelteMap<string, Assignees>();
     stats = new SvelteMap<string, StatsEntry>();
-    pinned = new SvelteSet<string>(readPins());
+    pinned = new SvelteSet<string>(readIds(PINS_KEY));
+    hidden = new SvelteSet<string>(readIds(HIDDEN_KEY));
+    showHidden = $state(false);
     #limiter = new Limiter(STATS_SLOTS);
     #prefetch: { name: string; timer: ReturnType<typeof setTimeout> } | null = null;
 
@@ -214,10 +217,12 @@ export class SidebarState {
         return data && !("dormant" in data) ? data : undefined;
     }
 
+    #isEager(release: Release): boolean {
+        return !this.hidden.has(release.id) && (this.pinned.has(release.id) || (release.priority ?? 0) > 0);
+    }
+
     loadEager(): Promise<unknown> {
-        const eager = (this.releases.data ?? []).filter(
-            (release) => this.pinned.has(release.id) || (release.priority ?? 0) > 0
-        );
+        const eager = (this.releases.data ?? []).filter((release) => this.#isEager(release));
         return Promise.all(eager.map((release) => this.#limiter.run(() => this.ensureStats(release))));
     }
 
@@ -228,7 +233,17 @@ export class SidebarState {
             this.pinned.add(release.id);
             this.#limiter.run(() => this.ensureStats(release));
         }
-        writePins(this.pinned);
+        writeIds(PINS_KEY, this.pinned);
+    }
+
+    toggleHidden(release: Release): void {
+        if (this.hidden.has(release.id)) {
+            this.hidden.delete(release.id);
+            if (this.#isEager(release)) this.#limiter.run(() => this.ensureStats(release));
+        } else {
+            this.hidden.add(release.id);
+        }
+        writeIds(HIDDEN_KEY, this.hidden);
     }
 
     prefetch(release: Release): void {

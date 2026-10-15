@@ -1,6 +1,6 @@
 <script lang="ts">
     import Fa from "svelte-fa";
-    import { faChevronRight, faThumbtack, faTriangleExclamation } from "@fortawesome/free-solid-svg-icons";
+    import { faChevronRight, faEyeSlash, faThumbtack, faTriangleExclamation } from "@fortawesome/free-solid-svg-icons";
     import { timestampToISODate } from "../../Common/DateUtils";
     import AssigneeList from "../AssigneeList.svelte";
     import StatusDot from "./StatusDot.svelte";
@@ -20,6 +20,8 @@
         startTime?: string | null;
         pinned?: boolean;
         onTogglePin?: () => void;
+        hidden?: boolean;
+        onToggleHidden?: () => void;
         dormant?: boolean;
         assignees?: string[];
         focusRequest?: number;
@@ -42,6 +44,8 @@
         startTime = null,
         pinned,
         onTogglePin,
+        hidden,
+        onToggleHidden,
         dormant = false,
         assignees = [],
         focusRequest = 0,
@@ -58,7 +62,7 @@
     });
 </script>
 
-<div class="d-flex border-bottom">
+<div class="d-flex border-bottom" class:is-hidden={hidden}>
     <button
         bind:this={button}
         type="button"
@@ -116,8 +120,8 @@
     {#if pinned !== undefined}
         <button
             type="button"
-            class="pin-toggle btn rounded-0 border-0 px-2"
-            class:is-pinned={pinned}
+            class="row-toggle btn rounded-0 border-0 px-2"
+            class:is-on={pinned}
             tabindex={active ? 0 : -1}
             aria-pressed={pinned}
             aria-label={`Pin ${name} to the top`}
@@ -126,6 +130,21 @@
             onkeydown={(event) => onKeydown?.(event)}
         >
             <Fa icon={faThumbtack} />
+        </button>
+    {/if}
+    {#if hidden !== undefined}
+        <button
+            type="button"
+            class="row-toggle btn rounded-0 border-0 px-2"
+            class:is-on={hidden}
+            tabindex={active ? 0 : -1}
+            aria-pressed={hidden}
+            aria-label={`Hide ${name}`}
+            title={hidden ? "Unhide" : "Hide"}
+            onclick={() => onToggleHidden?.()}
+            onkeydown={(event) => onKeydown?.(event)}
+        >
+            <Fa icon={faEyeSlash} />
         </button>
     {/if}
 </div>
@@ -142,18 +161,22 @@
         outline-offset: -2px;
     }
 
-    .pin-toggle {
+    .row-toggle {
         --bs-btn-hover-bg: var(--bs-tertiary-bg);
         color: var(--bs-tertiary-color);
     }
 
-    .pin-toggle.is-pinned {
+    .row-toggle.is-on {
         color: var(--bs-primary);
     }
 
-    .pin-toggle:focus-visible {
+    .row-toggle:focus-visible {
         outline: 2px solid var(--bs-primary);
         outline-offset: -2px;
+    }
+
+    .is-hidden .sidebar-row {
+        opacity: 0.6;
     }
 
     .open-test {
