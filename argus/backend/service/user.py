@@ -288,8 +288,8 @@ class UserService:
 
         return True
 
-    async def toggle_admin(self, user_id: str, current_user: User):
-        user: User = await User.get(id=UUID(user_id))
+    async def toggle_admin(self, user_id: UUID, current_user: User):
+        user: User = await User.get(id=user_id)
 
         if user.id == current_user.id:
             raise UserServiceException("Cannot toggle admin role from yourself.")
@@ -375,8 +375,8 @@ class UserService:
 
         return result
 
-    async def delete_user(self, user_id: str, current_user: User):
-        user: User = await User.get(id=UUID(user_id))
+    async def delete_user(self, user_id: UUID, current_user: User):
+        user: User = await User.get(id=user_id)
         if user.id == current_user.id:
             raise UserServiceException("Cannot delete user that you are logged in as.")
 

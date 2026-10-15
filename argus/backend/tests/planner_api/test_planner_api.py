@@ -431,7 +431,7 @@ async def test_update_plan_adds_and_removes_tests(
     second_test = await release_manager_service.create_test(
         f"t2_{uuid.uuid4().hex[:8]}", "Second Test",
         f"bsid_{uuid.uuid4().hex[:8]}", "url",
-        group_id=str(group.id), release_id=str(release.id),
+        group_id=group.id, release_id=release.id,
         plugin_name="scylla-cluster-tests",
     )
     plan_id = _create_plan(api_client, release, fake_test)["response"]["id"]
@@ -468,7 +468,7 @@ async def test_update_plan_adds_and_removes_groups(
     """groups_add / groups_remove diffs mutate the plan's group list."""
     new_group = await release_manager_service.create_group(
         f"g2_{uuid.uuid4().hex[:8]}", "Second Group",
-        build_system_id=f"gbsid_{uuid.uuid4().hex[:8]}", release_id=str(release.id),
+        build_system_id=f"gbsid_{uuid.uuid4().hex[:8]}", release_id=release.id,
     )
     plan_id = _create_plan(api_client, release, fake_test, groups=[])["response"]["id"]
 

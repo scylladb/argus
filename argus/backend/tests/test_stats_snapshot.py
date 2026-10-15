@@ -358,11 +358,11 @@ async def test_run_finishing_on_one_release_does_not_invalidate_another(argus_db
     release_b = await release_manager_service.create_release(f"release_b_{time.time_ns()}", "Release B", False)
     group_b = await release_manager_service.create_group(
         f"group_b_{time.time_ns()}", "Group B",
-        build_system_id=release_b.name, release_id=str(release_b.id),
+        build_system_id=release_b.name, release_id=release_b.id,
     )
     test_b = await release_manager_service.create_test(
         f"test_b_{time.time_ns()}", "test_b", "test_b", "test_b",
-        group_id=str(group_b.id), release_id=str(release_b.id), plugin_name="scylla-cluster-tests",
+        group_id=group_b.id, release_id=release_b.id, plugin_name="scylla-cluster-tests",
     )
 
     key = snapshot_filter_key(None, None, True, False)
@@ -445,7 +445,7 @@ async def test_delete_release_removes_indexes_and_snapshots(argus_db, release_ma
     await ReleaseDistinctImages.create(release_id=rid, image_id="ami-cleanup")
     await write_snapshot(rid, snapshot_filter_key(None, None, True, False))
 
-    await release_manager_service.delete_release(str(rid))
+    await release_manager_service.delete_release(rid)
 
     assert list(await ReleaseDistinctVersions.find(release_id=rid).all()) == []
     assert list(await ReleaseDistinctImages.find(release_id=rid).all()) == []

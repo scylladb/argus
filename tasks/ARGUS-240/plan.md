@@ -187,16 +187,16 @@ the rest only.
     `integration/conftest.py`, `planner_api/`, `testrun_api/`,
     `view_api/`
 
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - group delete with `delete_tests: false` and `new_group_id: ""` is
     rejected by the service, which names the missing target group
   - `POST /admin/api/v1/user/<bad>/delete` returns
     `RequestValidationError`
   - `GET /client/ssh/tunnel/keys?tunnel_id=` lists the keys
-- [ ] Run them and confirm the failures.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failures.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 6 — Planner
 

@@ -351,14 +351,14 @@ async def release(release_manager_service) -> ArgusRelease:
 @fixture(scope='session')
 async def group(release_manager_service, release) -> ArgusGroup:
     name = f"br_group{time.time_ns()}"
-    return await release_manager_service.create_group(name, name, build_system_id=release.name, release_id=str(release.id))
+    return await release_manager_service.create_group(name, name, build_system_id=release.name, release_id=release.id)
 
 
 @fixture
 async def fake_test(release_manager_service, group: ArgusGroup, release: ArgusRelease) -> ArgusTest:
     name = f"test_{time.time_ns()}"
     return await release_manager_service.create_test(name, name, name, name,
-                                               group_id=str(group.id), release_id=str(release.id), plugin_name='scylla-cluster-tests')
+                                               group_id=group.id, release_id=release.id, plugin_name='scylla-cluster-tests')
 
 
 # ---------------------------------------------------------------------------

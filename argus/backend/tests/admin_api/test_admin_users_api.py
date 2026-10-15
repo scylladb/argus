@@ -70,6 +70,12 @@ def test_admin_users_returns_dict_without_password(api_client, regular_user):
 # /user/<id>/email/set
 # ---------------------------------------------------------------------------
 
+def test_admin_user_delete_rejects_malformed_id(api_client):
+    resp = api_client.post(f"{ADMIN_PREFIX}/user/not-a-user-id/delete")
+    assert resp.status_code == 200
+    assert resp.json()["response"]["exception"] == "RequestValidationError"
+
+
 def test_admin_user_change_email(api_client, regular_user):
     new_email = f"new_{uuid.uuid4().hex[:8]}@scylladb.com"
     resp = client_post(

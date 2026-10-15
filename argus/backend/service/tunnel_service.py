@@ -353,7 +353,7 @@ class TunnelService:
     # ------------------------------------------------------------------
 
     async def list_keys(
-        self, tunnel_id: UUID | str | None = None, user_id: UUID | str | None = None
+        self, tunnel_id: UUID | None = None, user_id: UUID | None = None
     ) -> list[SSHTunnelKeyDTO]:
         """
         Return a list of dicts describing all non-expired keys.
@@ -367,13 +367,7 @@ class TunnelService:
         """
         query = SSHTunnelKey.find()
 
-        if tunnel_id is not None:
-            if not isinstance(tunnel_id, UUID):
-                tunnel_id = UUID(str(tunnel_id))
-
         if user_id is not None:
-            if not isinstance(user_id, UUID):
-                user_id = UUID(str(user_id))
             query = query.filter(user_id=user_id)
 
         if tunnel_id is not None and user_id is None:
@@ -388,10 +382,8 @@ class TunnelService:
 
         return [self._to_ssh_tunnel_key_dto(row) for row in rows]
 
-    async def delete_key(self, key_id: UUID | str) -> None:
+    async def delete_key(self, key_id: UUID) -> None:
         """Delete a key. ScyllaDB removes the matching view row."""
-        if not isinstance(key_id, UUID):
-            key_id = UUID(str(key_id))
         try:
             key = await SSHTunnelKey.get(id=key_id)
         except DocumentNotFound:
@@ -404,7 +396,7 @@ class TunnelService:
     # Proxy tunnel config management
     # ------------------------------------------------------------------
 
-    async def get_proxy_tunnel_config(self, tunnel_id: UUID | str | None = None) -> ProxyTunnelConfigDTO | None:
+    async def get_proxy_tunnel_config(self, tunnel_id: UUID | None = None) -> ProxyTunnelConfigDTO | None:
         """
         Return one active proxy tunnel config.
 
@@ -416,8 +408,6 @@ class TunnelService:
         Returns ``None`` if no matching active config exists.
         """
         if tunnel_id is not None:
-            if not isinstance(tunnel_id, UUID):
-                tunnel_id = UUID(str(tunnel_id))
             try:
                 config = await ProxyTunnelConfig.get(id=tunnel_id)
                 if not config.is_active:
@@ -498,7 +488,7 @@ class TunnelService:
         rows = sorted(rows, key=lambda row: (row.host or "", str(row.id)))
         return [self._to_proxy_tunnel_config_dto(row) for row in rows]
 
-    async def delete_proxy_tunnel_config(self, tunnel_id: UUID | str, delete_user: bool = False) -> None:
+    async def delete_proxy_tunnel_config(self, tunnel_id: UUID, delete_user: bool = False) -> None:
         """
         Permanently delete a proxy tunnel config.
 
@@ -514,8 +504,6 @@ class TunnelService:
             associated elsewhere, while still neutralising its ability to act
             as a tunnel proxy.
         """
-        if not isinstance(tunnel_id, UUID):
-            tunnel_id = UUID(str(tunnel_id))
         try:
             config = await ProxyTunnelConfig.get(id=tunnel_id)
         except DocumentNotFound as exc:
@@ -540,10 +528,8 @@ class TunnelService:
 
         await config.delete()
 
-    async def set_proxy_tunnel_config_active(self, tunnel_id: UUID | str, is_active: bool) -> ProxyTunnelConfigDTO:
+    async def set_proxy_tunnel_config_active(self, tunnel_id: UUID, is_active: bool) -> ProxyTunnelConfigDTO:
         """Enable or disable a specific proxy tunnel config."""
-        if not isinstance(tunnel_id, UUID):
-            tunnel_id = UUID(str(tunnel_id))
         try:
             config = await ProxyTunnelConfig.get(id=tunnel_id)
         except DocumentNotFound as exc:

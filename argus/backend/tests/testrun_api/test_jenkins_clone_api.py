@@ -82,7 +82,7 @@ async def test_clone_job_rejects_used_build_system_id(api_client, fake_jenkins, 
     used_name = f"used_{time.time_ns()}"
     used_test = await release_manager_service.create_test(
         used_name, used_name, f"{group.build_system_id}/{used_name}", used_name,
-        group_id=str(group.id), release_id=str(release.id), plugin_name="scylla-cluster-tests")
+        group_id=group.id, release_id=release.id, plugin_name="scylla-cluster-tests")
     try:
         resp = api_client.post(f"{API_PREFIX}/jenkins/clone/create", json={
             "currentTestId": str(fake_test.id),
