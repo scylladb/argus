@@ -58,6 +58,10 @@ stays in every plan built from a spec.
 - `Clear` and `Stats`: return early when `c == nil || c.baseDir == ""`.
 - `Stats`: replace the `data.json`/`meta.json` loop with `os.ReadDir(entryDir)`
   and add up `Info().Size()` of each regular file.
+- `removeEntry(dir string) error`, used by `PurgeExpired` (decided in the
+  build): `RemoveAll` every child except `meta.json`, stopping at the first
+  error, then `RemoveAll(dir)`. The doc comment of `PurgeExpired` stops calling
+  the removal atomic.
 
 **Tests** (`package cache`, matching `keys_test.go`):
 - **Entry files:**
@@ -81,12 +85,16 @@ stays in every plan built from a spec.
 - **`--no-cache` root:**
   - `TestClear_EmptiesADisabledCacheWithARoot`: `cache clear` under
     `--no-cache`.
+- **Interrupted purge** (`cache_unix_test.go`, `//go:build unix`):
+  - `TestPurgeExpired_KeepsMetaUntilTheEntryIsEmpty`: a 0500 subdirectory
+    blocks the removal. `meta.json` survives the first purge, and the second
+    purge finishes the entry once the mode is restored.
 
-- [ ] Write the failing tests.
-- [ ] Run `go test -race ./internal/cache/` and confirm the failures.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Write the failing tests.
+- [x] Run `go test -race ./internal/cache/` and confirm the failures.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 2 — Keep the cache root under `--no-cache`
 

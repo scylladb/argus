@@ -83,6 +83,7 @@ belongs to a `start` that has not yet created its container.
 | A run dir cannot be fully removed (files from an earlier version owned by `nobody`) | Warning naming the file; the command goes on |
 | `docker ps` fails during the sweep | Warning; `start` goes on without the sweep |
 | `PurgeExpired` removes the entry while `start` runs | `start` keeps working from the run dir. At worst the archive is not cached and the next `start` downloads it |
+| The process exits while `PurgeExpired` removes an entry | `meta.json` goes last, so the next purge finds the expired entry and finishes it |
 
 ## Contracts
 
@@ -156,6 +157,7 @@ func (c *Cache) EntryDir(key string) (string, error) // ErrDisabled, ErrInvalidK
 func Get[T any](c *Cache, key string) (T, Meta, error)                                  // + ErrInvalidKey
 func Set[T any](c *Cache, key string, value T, sourceURL string, ttl time.Duration) error // + ErrInvalidKey
 func (c *Cache) Invalidate(key string) error                                             // + ErrInvalidKey
+func (c *Cache) PurgeExpired() int     // an entry loses its meta.json last
 func (c *Cache) Stats() (Stats, error) // Bytes: every regular file in an entry
 ```
 
@@ -170,7 +172,6 @@ ID itself.
 | Rootless Docker and Podman map `--user` to a subordinate uid, so Prometheus cannot write the run dir. The 0777 used to hide this | Out of scope. `start` fails with Prometheus's own error. Detection is deferred work |
 | Run dirs from earlier versions keep files owned by `nobody` | Each sweep prints a warning naming the file. The pull request says to run `sudo rm -rf ~/.cache/argus-cli/prometheus` once |
 | On Windows the data root moves, so the old `%LocalAppData%\argus-cli\prometheus` is left behind | Its files have no ownership problem. The pull request names the path |
-| A process killed while `PurgeExpired` removes an entry can leave the archive without `meta.json`, which no purge sees | The window is a few microseconds. `cache clear` still removes it |
 | `stop --all` used to free the archives and no longer does | `cache clear` frees them, and the entry expires 7 days after its last use |
 
 ## Deferred work
@@ -202,3 +203,8 @@ ID itself.
   user owns the file, and Docker Desktop does not apply host modes. (spec)
 - The data root moves to `config.CacheDir()`, so the archive moves into the
   cache entry with a rename on one file system. (spec)
+- `PurgeExpired` removes an entry's `meta.json` last. The purge goroutine dies
+  when a quick command exits: in three runs out of three, `argus cache info`
+  exited before the purge of an entry with a 98 MB archive finished, and left
+  the entry directory behind. An entry without `meta.json` is invisible to
+  every later purge. (build)
