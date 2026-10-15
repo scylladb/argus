@@ -536,8 +536,7 @@ class TestLookup:
         return mapped
 
     @classmethod
-    async def explode_group(cls, group_id: UUID | str):
-        group_id = UUID(group_id) if isinstance(group_id, str) else group_id
+    async def explode_group(cls, group_id: UUID):
         group = await ArgusGroup.get(id=group_id)
         release = await ArgusRelease.get(id=group.release_id)
         tests = await ArgusTest.find(group_id=group.id).all()
@@ -667,10 +666,8 @@ class TestLookup:
         return await cls.make_single_run_response(entity_id)
 
     @classmethod
-    async def test_lookup(cls, query: str, release_id: UUID | str | None = None,
+    async def test_lookup(cls, query: str, release_id: UUID | None = None,
                           limit: int | None = None, offset: int = 0) -> tuple[list[dict], int]:
-        if isinstance(release_id, str):
-            release_id = UUID(release_id) if release_id else None
         if len(query) > MAX_QUERY_LENGTH:
             raise DataValidationError(f"A search query holds at most {MAX_QUERY_LENGTH} characters")
         if len(_tokenize(query)) > MAX_QUERY_TOKENS:
