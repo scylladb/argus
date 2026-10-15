@@ -26,9 +26,9 @@ func SetVersionInfo(version, commit, date string) {
 }
 
 var cliVersionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Print the version and build information",
-	Long:  `Display the version, commit SHA, and build date of this argus binary.`,
+	Use:         "version",
+	Short:       "Print the version and build information",
+	Long:        `Display the version, commit SHA, and build date of this argus binary.`,
 	Annotations: map[string]string{SkipAuthRetryAnnotation: "true"},
 	// Override PersistentPreRunE so the root setup (config load, API client,
 	// CF auth) is skipped — the version command needs none of that.
