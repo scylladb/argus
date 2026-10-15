@@ -718,7 +718,7 @@ class ViewStatsCollector:
         self.view_stats = None
         self.view_rows = []
         self.runs_by_build_id = {}
-        self.view_id = UUID(view_id) if isinstance(view_id, str) else view_id
+        self.view_id = view_id
         self.filter = filter
         self.param_filters: list[ConfigParamFilter] = []
 

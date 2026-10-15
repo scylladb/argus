@@ -70,20 +70,12 @@ class ActionItem(Highlight):
         )
 
 
-def _coerce_uuid(value: UUID | str | None) -> UUID | None:
-    return UUID(value) if isinstance(value, str) else value
-
-
 @dataclass
 class CommentCreate:
     view_id: UUID
     index: int
     highlight_created_at: float
     content: str
-
-    def __post_init__(self):
-        self.view_id = _coerce_uuid(self.view_id)
-        self.index = int(self.index)
 
 
 @dataclass
@@ -94,10 +86,6 @@ class CommentUpdate:
     created_at: float
     content: str
 
-    def __post_init__(self):
-        self.view_id = _coerce_uuid(self.view_id)
-        self.index = int(self.index)
-
 
 @dataclass
 class CommentDelete:
@@ -105,9 +93,6 @@ class CommentDelete:
     index: int
     highlight_created_at: float
     created_at: float
-
-    def __post_init__(self):
-        self.view_id = _coerce_uuid(self.view_id)
 
 
 @dataclass
@@ -141,10 +126,6 @@ class HighlightCreate:
     is_task: bool
     group: str | None = None
 
-    def __post_init__(self):
-        self.view_id = _coerce_uuid(self.view_id)
-        self.index = int(self.index)
-
 
 @dataclass
 class HighlightGroupCreate:
@@ -153,20 +134,12 @@ class HighlightGroupCreate:
     name: str
     items: list[str]
 
-    def __post_init__(self):
-        self.view_id = _coerce_uuid(self.view_id)
-        self.index = int(self.index)
-
 
 @dataclass
 class HighlightArchive:
     view_id: UUID
     index: int
     created_at: float
-
-    def __post_init__(self):
-        self.view_id = _coerce_uuid(self.view_id)
-        self.index = int(self.index)
 
 
 @dataclass
@@ -176,10 +149,6 @@ class HighlightUpdate:
     created_at: float
     content: str
 
-    def __post_init__(self):
-        self.view_id = _coerce_uuid(self.view_id)
-        self.index = int(self.index)
-
 
 @dataclass
 class HighlightSetAssignee:
@@ -188,12 +157,6 @@ class HighlightSetAssignee:
     created_at: float
     assignee_id: UUID | None = None
 
-    def __post_init__(self):
-        self.view_id = _coerce_uuid(self.view_id)
-        self.index = int(self.index)
-        if self.assignee_id and not isinstance(self.assignee_id, UUID):
-            self.assignee_id = UUID(self.assignee_id)
-
 
 @dataclass
 class HighlightSetCompleted:
@@ -201,10 +164,6 @@ class HighlightSetCompleted:
     index: int
     created_at: float
     completed: bool
-
-    def __post_init__(self):
-        self.view_id = _coerce_uuid(self.view_id)
-        self.index = int(self.index)
 
 
 class HighlightsService:

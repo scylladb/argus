@@ -13,7 +13,7 @@ router = APIRouter(prefix="/widgets")
 
 
 class RunsDetailsRequest(BaseModel):
-    run_ids: list[str]
+    run_ids: list[UUID]
 
 
 @router.get("/graphed_stats", name="api.view_api.graphed_stats.get_graphed_stats")

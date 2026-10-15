@@ -1,6 +1,10 @@
 import uuid
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from argus.backend.plugins.sct.testrun import SCTTestRun
 
 
 @pytest.fixture
@@ -53,6 +57,31 @@ def test_runs_details_unknown_run_ids(api_client):
             "version": "unknown",
             "issues": [],
         }
+
+
+def test_runs_details_reports_a_run_that_fails_to_load_under_its_id(api_client):
+    run_id = str(uuid.uuid4())
+    run_without_start_time = SimpleNamespace(build_id="job", build_number=1, packages=[], status="failed",
+                                             start_time=None, assignee=None, investigation_status="in_progress")
+    query = MagicMock()
+    query.only.return_value.first = AsyncMock(return_value=run_without_start_time)
+
+    with patch.object(SCTTestRun, "find", return_value=query):
+        res = api_client.post("/api/v1/views/widgets/runs_details", json={"run_ids": [run_id]}).json()
+
+    assert res["status"] == "ok", res
+    assert res["response"] == {run_id: {
+        "build_id": None,
+        "start_time": None,
+        "assignee": None,
+        "version": "unknown",
+        "issues": [],
+    }}
+
+
+def test_runs_details_rejects_malformed_run_id(api_client):
+    res = api_client.post("/api/v1/views/widgets/runs_details", json={"run_ids": ["not-a-run-id"]}).json()
+    assert res["response"]["exception"] == "RequestValidationError"
 
 
 def test_runs_details_missing_run_ids_errors(api_client):

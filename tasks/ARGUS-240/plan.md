@@ -261,17 +261,17 @@ the rest only.
 **Internals:** `VersionedRun(BaseModel)` with `run_id: UUID` in
 `summary.py`.
 
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - `runs_details` with a run that fails to load returns its error entry
     under the string ID
   - `/views/update` with `plan_id: "<bad>"` returns
     `RequestValidationError`
   - `summary/runs_results` with a malformed key returns
     `RequestValidationError`
-- [ ] Run them and confirm the failures.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failures.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 8 — api, notifications, and the guards behind UUID routes
 
