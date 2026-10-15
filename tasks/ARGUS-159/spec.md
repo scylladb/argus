@@ -21,8 +21,9 @@ no longer moves the cache root into the current directory.
   reading.
 - Under `--no-cache`, `start` downloads the archive, uses it and drops it. It
   caches nothing.
-- Two `start` commands for different runs may run in parallel. Agents do. A
-  `start` never removes the data of another run that is still starting.
+- Two `start` commands may run in parallel. Agents do. A `start` never
+  removes the data of another run that is still starting, and two starts of
+  one run never share its run dir.
 - A second `start` for the same run within the TTL does not download the archive
   again.
 - No new dependency.
@@ -35,7 +36,8 @@ no longer moves the cache root into the current directory.
   and every file in it belongs to the entry. Refuses a key that leaves the root.
   A cache built with no root reads, writes and removes nothing.
 - `prometheus start`: validates the run ID, prunes old containers, sweeps
-  orphan run dirs, takes the archive from the cache or downloads it, hands a
+  orphan run dirs, claims its run dir with an exclusive create, takes the
+  archive from the cache or downloads it, hands a
   verified download to the cache, extracts the TSDB, and runs the container as
   the calling user.
 - `prometheus stop` and `stop --all`: remove the containers and their run dirs.
@@ -50,7 +52,9 @@ flowchart TD
     V -->|yes| P["prune containers older than 1h, sweep orphan run dirs"]
     P --> C{"container for R exists?"}
     C -->|yes| A["print address"]
-    C -->|no| H{"archive in the cache entry?"}
+    C -->|no| K{"claim the run dir"}
+    K -->|exists| Y["error naming the dir, exit 1"]
+    K -->|created| H{"archive in the cache entry?"}
     H -->|yes| T["refresh the entry's TTL"]
     H -->|no| D["download into the run dir"]
     D --> O["extract the outer archive, zstd checksum verified"]
@@ -70,11 +74,14 @@ flowchart TD
 
 The sweep on `start` removes a run dir that has no container when the dir holds
 `run_id`, or when the dir is older than one hour. A dir with no `run_id`
-belongs to a `start` that has not yet created its container.
+belongs to a `start` that has not yet created its container. The sweep reads
+the run dirs before it lists the containers: `run_id` is written once the
+container exists, so a `run_id` the sweep saw has its container in the list.
 
 | Condition | Behavior |
 |---|---|
 | `--run-id` is empty, `.`, `..`, or holds a path separator | `invalid run ID`, exit 1, before any file system or docker call |
+| The run dir exists and the run has no container: another start of the run holds it, or the sweep could not remove it | Error naming the dir and saying to remove it, exit 1. Nothing in the dir is touched |
 | The server's monitor-set name is not a plain file name | Error naming the file, exit 1, nothing written |
 | The cache entry names a file that is not a plain file name, or that is missing | Cache miss, download |
 | A cache key leaves the cache root | `Get`, `Set` and `Invalidate` return `ErrInvalidKey` and change nothing on disk |
@@ -141,6 +148,7 @@ docker run -d --name argus-prom-<run-id[:8]> --user <uid>:<gid> \
 package cache
 
 // ErrInvalidKey: the key does not name a directory inside the cache root.
+// The root itself is not an entry.
 var ErrInvalidKey = errors.New("cache: key leaves the cache root")
 
 // ErrDisabled: the cache is in pass-through mode and has no entry directories.
@@ -170,7 +178,7 @@ ID itself.
 | Risk | Response |
 |---|---|
 | Rootless Docker and Podman map `--user` to a subordinate uid, so Prometheus cannot write the run dir. The 0777 used to hide this | Out of scope. `start` fails with Prometheus's own error. Detection is deferred work |
-| Run dirs from earlier versions keep files owned by `nobody` | Each sweep prints a warning naming the file. The pull request says to run `sudo rm -rf ~/.cache/argus-cli/prometheus` once |
+| Run dirs from earlier versions keep files owned by `nobody` | Each sweep prints a warning naming the file, and a `start` of that run refuses with the dir to remove. The pull request says to run `sudo rm -rf ~/.cache/argus-cli/prometheus` once |
 | On Windows the data root moves, so the old `%LocalAppData%\argus-cli\prometheus` is left behind | Its files have no ownership problem. The pull request names the path |
 | `stop --all` used to free the archives and no longer does | `cache clear` frees them, and the entry expires 7 days after its last use |
 
@@ -208,3 +216,8 @@ ID itself.
   exited before the purge of an entry with a 98 MB archive finished, and left
   the entry directory behind. An entry without `meta.json` is invisible to
   every later purge. (build)
+- `start` claims its run dir with an exclusive create. A second start of the
+  run used to extract into the same dir, and its failed `docker run` removed
+  the dir under the first start's container. A leftover dir the sweep cannot
+  empty now stops the start before Prometheus meets files it cannot write.
+  (review)

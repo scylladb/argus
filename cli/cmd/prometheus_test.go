@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -123,6 +124,11 @@ func TestWritePromConfig_ReportsAFailedWrite(t *testing.T) {
 
 const promTestRunID = "1e72eebe-a48d-4a3e-a560-c6ad0d85b1af"
 
+// listed returns a container lister for removeOrphanDataDirs.
+func listed(names ...string) func() ([]string, error) {
+	return func() ([]string, error) { return names, nil }
+}
+
 // makeRunDir creates root/runID, with a run_id file when started is true.
 func makeRunDir(t *testing.T, root, runID string, started bool) string {
 	t.Helper()
@@ -139,7 +145,7 @@ func TestRemoveOrphanDataDirs_RemovesDirOfRemovedContainer(t *testing.T) {
 	dir := makeRunDir(t, root, promTestRunID, true)
 	var warnings bytes.Buffer
 
-	removeOrphanDataDirs(&warnings, root, nil)
+	removeOrphanDataDirs(&warnings, root, listed())
 
 	assert.NoDirExists(t, dir)
 	assert.Empty(t, warnings.String())
@@ -149,7 +155,7 @@ func TestRemoveOrphanDataDirs_KeepsDirWithContainer(t *testing.T) {
 	root := t.TempDir()
 	dir := makeRunDir(t, root, promTestRunID, true)
 
-	removeOrphanDataDirs(io.Discard, root, []string{promContainerName(promTestRunID)})
+	removeOrphanDataDirs(io.Discard, root, listed(promContainerName(promTestRunID)))
 
 	assert.DirExists(t, dir)
 }
@@ -158,9 +164,35 @@ func TestRemoveOrphanDataDirs_KeepsRecentDirOfStartInProgress(t *testing.T) {
 	root := t.TempDir()
 	dir := makeRunDir(t, root, promTestRunID, false)
 
-	removeOrphanDataDirs(io.Discard, root, nil)
+	removeOrphanDataDirs(io.Discard, root, listed())
 
 	assert.DirExists(t, dir)
+}
+
+// The containers are listed after the scan: a run whose container starts
+// during the sweep wrote no run_id yet when the scan saw its directory.
+func TestRemoveOrphanDataDirs_KeepsDirWhoseContainerStartsDuringTheSweep(t *testing.T) {
+	root := t.TempDir()
+	dir := makeRunDir(t, root, promTestRunID, false)
+	startsNow := func() ([]string, error) {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "run_id"), []byte(promTestRunID), 0o644))
+		return nil, nil
+	}
+
+	removeOrphanDataDirs(io.Discard, root, startsNow)
+
+	assert.DirExists(t, dir)
+}
+
+func TestRemoveOrphanDataDirs_WarnsWhenContainersCannotBeListed(t *testing.T) {
+	root := t.TempDir()
+	dir := makeRunDir(t, root, promTestRunID, true)
+	var warnings bytes.Buffer
+
+	removeOrphanDataDirs(&warnings, root, func() ([]string, error) { return nil, errors.New("docker ps: exit status 1") })
+
+	assert.DirExists(t, dir)
+	assert.Contains(t, warnings.String(), "warning: skipping prometheus data cleanup")
 }
 
 func TestRemoveOrphanDataDirs_RemovesStaleDirOfAbortedStart(t *testing.T) {
@@ -169,7 +201,7 @@ func TestRemoveOrphanDataDirs_RemovesStaleDirOfAbortedStart(t *testing.T) {
 	old := time.Now().Add(-2 * promMaxTTL)
 	require.NoError(t, os.Chtimes(dir, old, old))
 
-	removeOrphanDataDirs(io.Discard, root, nil)
+	removeOrphanDataDirs(io.Discard, root, listed())
 
 	assert.NoDirExists(t, dir)
 }
@@ -177,18 +209,18 @@ func TestRemoveOrphanDataDirs_RemovesStaleDirOfAbortedStart(t *testing.T) {
 func TestRemoveOrphanDataDirs_IgnoresMissingRoot(t *testing.T) {
 	var warnings bytes.Buffer
 
-	removeOrphanDataDirs(&warnings, filepath.Join(t.TempDir(), "absent"), nil)
+	removeOrphanDataDirs(&warnings, filepath.Join(t.TempDir(), "absent"), listed())
 
 	assert.Empty(t, warnings.String())
 }
 
-func TestMoveArchiveToCache_PutsArchiveInCacheEntry(t *testing.T) {
+func TestCacheArchive_PutsArchiveInCacheEntry(t *testing.T) {
 	c := cache.New(t.TempDir())
 	key := cache.PrometheusLogKey(promTestRunID)
 	archive := filepath.Join(t.TempDir(), "monitor-set-1e72eebe.tar.zst")
 	require.NoError(t, os.WriteFile(archive, []byte("archive"), 0o644))
 
-	require.NoError(t, moveArchiveToCache(c, key, archive))
+	require.NoError(t, cacheArchive(c, key, archive))
 
 	assert.NoFileExists(t, archive)
 	cached := cachedArchivePath(c, key)
@@ -198,16 +230,38 @@ func TestMoveArchiveToCache_PutsArchiveInCacheEntry(t *testing.T) {
 	assert.Equal(t, "archive", string(got))
 }
 
-func TestMoveArchiveToCache_KeepsArchiveInPlaceWhenCacheDisabled(t *testing.T) {
+func TestCacheArchive_DropsArchiveWhenCacheDisabled(t *testing.T) {
 	c := cache.New(t.TempDir(), cache.WithDisabled(true))
 	key := cache.PrometheusLogKey(promTestRunID)
 	archive := filepath.Join(t.TempDir(), "monitor-set-1e72eebe.tar.zst")
 	require.NoError(t, os.WriteFile(archive, []byte("archive"), 0o644))
 
-	require.NoError(t, moveArchiveToCache(c, key, archive))
+	require.NoError(t, cacheArchive(c, key, archive))
 
-	assert.FileExists(t, archive)
+	assert.NoFileExists(t, archive)
 	assert.Empty(t, cachedArchivePath(c, key))
+}
+
+func TestClaimRunDir_CreatesTheDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "prometheus", promTestRunID)
+
+	require.NoError(t, claimRunDir(dir))
+
+	assert.DirExists(t, dir)
+}
+
+// The dir of a start in progress, or a leftover the sweep could not remove.
+func TestClaimRunDir_RefusesAnExistingDir(t *testing.T) {
+	dir := makeRunDir(t, t.TempDir(), promTestRunID, false)
+	marker := filepath.Join(dir, "wal", "00000000")
+	require.NoError(t, os.WriteFile(marker, []byte("wal"), 0o644))
+
+	err := claimRunDir(dir)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), dir)
+	assert.Contains(t, err.Error(), "already exists")
+	assert.FileExists(t, marker)
 }
 
 func TestCachedArchivePath_MissesWhenEntryHasNoArchive(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -110,11 +111,9 @@ var promStartCmd = &cobra.Command{
 
 		// Prune stale containers and the data they leave behind
 		pruneOldContainers(ctx)
-		if names, err := promContainerNames(ctx); err != nil {
-			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: skipping prometheus data cleanup: %v\n", err)
-		} else {
-			removeOrphanDataDirs(cmd.ErrOrStderr(), root, names)
-		}
+		removeOrphanDataDirs(cmd.ErrOrStderr(), root, func() ([]string, error) {
+			return promContainerNames(ctx)
+		})
 
 		// Check if container already exists for this run
 		containerName := promContainerName(runID)
@@ -124,8 +123,8 @@ var promStartCmd = &cobra.Command{
 			return nil
 		}
 
-		if err := os.MkdirAll(dataDir, 0o755); err != nil {
-			return fmt.Errorf("creating data directory: %w", err)
+		if err := claimRunDir(dataDir); err != nil {
+			return err
 		}
 		started := false
 		defer func() {
@@ -203,7 +202,7 @@ var promStartCmd = &cobra.Command{
 
 		// Keep the verified archive in the cache for the next start
 		if downloaded {
-			if err := moveArchiveToCache(appCache, cacheKey, archivePath); err != nil {
+			if err := cacheArchive(appCache, cacheKey, archivePath); err != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not cache the monitor-set archive: %v\n", err)
 			}
 		}
@@ -325,8 +324,10 @@ func removePromData(w io.Writer, dir string) {
 }
 
 // removeOrphanDataDirs removes the data directories under root whose container
-// is gone.
-func removeOrphanDataDirs(w io.Writer, root string, containers []string) {
+// is gone. It lists the containers after it scans the directories: run_id is
+// written once the container exists, so a run_id the scan saw has its
+// container in the list.
+func removeOrphanDataDirs(w io.Writer, root string, listContainers func() ([]string, error)) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
@@ -334,21 +335,49 @@ func removeOrphanDataDirs(w io.Writer, root string, containers []string) {
 		}
 		return
 	}
+	var candidates []string
 	for _, e := range entries {
-		if !e.IsDir() || slices.Contains(containers, promContainerName(e.Name())) {
+		if !e.IsDir() {
 			continue
 		}
-		dir := filepath.Join(root, e.Name())
 		// A directory without run_id belongs to a start that has not created
 		// its container yet, unless that start is long gone.
-		if !fileExists(filepath.Join(dir, "run_id")) {
+		if !fileExists(filepath.Join(root, e.Name(), "run_id")) {
 			info, err := e.Info()
 			if err != nil || time.Since(info.ModTime()) < promMaxTTL {
 				continue
 			}
 		}
-		removePromData(w, dir)
+		candidates = append(candidates, e.Name())
 	}
+	if len(candidates) == 0 {
+		return
+	}
+	containers, err := listContainers()
+	if err != nil {
+		_, _ = fmt.Fprintf(w, "warning: skipping prometheus data cleanup: %v\n", err)
+		return
+	}
+	for _, name := range candidates {
+		if !slices.Contains(containers, promContainerName(name)) {
+			removePromData(w, filepath.Join(root, name))
+		}
+	}
+}
+
+// claimRunDir creates a run's data directory and fails when it exists: another
+// start of the run holds it, or the sweep could not remove what it holds.
+func claimRunDir(dir string) error {
+	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+		return fmt.Errorf("creating data directory: %w", err)
+	}
+	if err := os.Mkdir(dir, 0o755); errors.Is(err, fs.ErrExist) {
+		return fmt.Errorf("%s already exists: another start of this run may be in progress, "+
+			"otherwise remove it (files an older argus left as nobody need sudo rm -rf)", dir)
+	} else if err != nil {
+		return fmt.Errorf("creating data directory: %w", err)
+	}
+	return nil
 }
 
 // cachedArchivePath returns the monitor-set archive held by the cache entry
@@ -369,13 +398,13 @@ func cachedArchivePath(c *cache.Cache, key string) string {
 	return archive
 }
 
-// moveArchiveToCache moves a downloaded archive into the cache entry at key,
-// so it expires and clears with the entry. It leaves the archive in place
-// when the cache is disabled.
-func moveArchiveToCache(c *cache.Cache, key, archivePath string) error {
+// cacheArchive moves a downloaded archive into the cache entry at key, so it
+// expires and clears with the entry. It removes the archive when the cache is
+// disabled.
+func cacheArchive(c *cache.Cache, key, archivePath string) error {
 	dir, err := c.EntryDir(key)
 	if errors.Is(err, cache.ErrDisabled) {
-		return nil
+		return os.Remove(archivePath)
 	}
 	if err != nil {
 		return err

@@ -50,7 +50,7 @@ var (
 	ErrExpired = errors.New("cache: entry expired")
 
 	// ErrInvalidKey is returned for a key that does not name a directory
-	// inside the cache root.
+	// inside the cache root. The root itself is not an entry.
 	ErrInvalidKey = errors.New("cache: key leaves the cache root")
 
 	// ErrDisabled is returned by [Cache.EntryDir] when the cache is in
@@ -130,7 +130,7 @@ func (c *Cache) EntryDir(key string) (string, error) {
 		return "", ErrDisabled
 	}
 	rel := filepath.FromSlash(key)
-	if !filepath.IsLocal(rel) {
+	if !filepath.IsLocal(rel) || filepath.Clean(rel) == "." {
 		return "", fmt.Errorf("%w: %q", ErrInvalidKey, key)
 	}
 	return filepath.Join(c.baseDir, rel), nil

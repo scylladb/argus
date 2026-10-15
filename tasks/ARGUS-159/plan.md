@@ -304,3 +304,52 @@ so no step needed `sudo` or the Argus API. Komachi still runs
   `invalid run ID`.
 - [x] In a scratch dir that holds `./cache/x`, run `argus --no-cache cache clear`.
   `./cache/x` survives.
+
+## Task 7 — Fix the review findings
+
+**Files:**
+- Modify: `cli/internal/cache/cache.go`, `cli/internal/cache/cache_test.go`
+- Modify: `cli/cmd/prometheus.go`, `cli/cmd/prometheus_test.go`
+- Create: `cli/cmd/prometheus_cmd_unix_test.go` (`//go:build unix`)
+
+**Internals:**
+- `EntryDir` also refuses a key that cleans to `.`, which is the cache root.
+- `claimRunDir(dir string) error`: `MkdirAll` the parent, then `os.Mkdir`.
+  `fs.ErrExist` turns into an error that names the dir and says to remove it.
+  `start` calls it in place of `MkdirAll`, before it sets up the deferred
+  cleanup.
+- `removeOrphanDataDirs(w, root, listContainers func() ([]string, error))`:
+  scans for candidates first, then lists the containers. It skips the list
+  when there are no candidates. A list error prints
+  `warning: skipping prometheus data cleanup`.
+- `moveArchiveToCache` becomes `cacheArchive`. It removes the archive when
+  the cache is disabled, as the spec's `--no-cache` constraint states.
+
+**Tests:**
+- **Cache keys:** `TestKeysOutsideTheRootAreRefused` adds `.` and `a/..`.
+- **Orphan sweep:**
+  - `TestRemoveOrphanDataDirs_KeepsDirWhoseContainerStartsDuringTheSweep`
+  - `TestRemoveOrphanDataDirs_WarnsWhenContainersCannotBeListed`
+- **Run dir and archive:**
+  - `TestClaimRunDir_CreatesTheDir`
+  - `TestClaimRunDir_RefusesAnExistingDir`
+  - `TestCacheArchive_PutsArchiveInCacheEntry`
+  - `TestCacheArchive_DropsArchiveWhenCacheDisabled`
+- **Command level**, run against a fake `docker` on `PATH` and an
+  `XDG_CACHE_HOME` under `t.TempDir()`. The helper checks that
+  `config.CacheDir()` sits there before anything runs:
+  - `TestPromStart_ReusesTheCachedArchive`
+  - `TestPromStart_FailedRunLeavesNoRunDir`
+  - `TestPromStart_RefusesARunDirThatAlreadyExists`
+  - `TestPromStop_RemovesTheRunDirAndKeepsTheArchive`
+
+- [x] Write the failing tests.
+- [x] Run them and confirm the failures.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence.
+- [x] On rootful Docker with a scratch `XDG_CACHE_HOME`, two parallel starts
+  of one run: one runs Prometheus, the other fails with `already exists`, and
+  the running one keeps its data.
+- [x] A leftover run dir that the sweep cannot empty: the sweep warns, and
+  `start` refuses with the dir to remove.
+- [x] Commit, with the boxes of this task checked.
