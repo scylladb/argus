@@ -44,9 +44,9 @@ everywhere except on that page.
   - **Space** lists every distinct project of the fetched Jira issues.
   - The groups record the values the user unchecked. A value that first appears
     after a re-fetch starts checked.
-  - The "All Labels" panel lists the distinct labels of the fetched issues, in
-    the colors their cards use. Picking one shares the selection that a click
-    on a card label makes.
+  - The "All Labels" panel lists the distinct label names of the fetched
+    issues, in the colors their cards use. Picking one shares the selection
+    that a click on a card label makes, and both match a label by its name.
   - "By priority" orders P0 to P4 when "Descending order" is on, and P4 to P0
     when it is off. Issues without a priority come last either way.
 
@@ -189,3 +189,6 @@ None.
 - The "All Labels" panel fix and the priority sort join this task. (spec)
 - Issues without a priority sort last in both directions, so the ordered
   priorities stay at the top. (spec)
+- The label filter matches by name, not by id. GitHub gives the same label a
+  different id in each repository, so the dev release dashboard listed `bug`
+  three times. (build)
