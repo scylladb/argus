@@ -211,34 +211,38 @@ Steps:
 - Test: `frontend/Github/Issues.test.ts`
 
 **Internals:**
-- Add `type PanelLabel = { label: Label; color: string }`.
-- Add `const availableLabels: PanelLabel[] = $derived(...)`:
-  - It covers the labels of every fetched issue, deduplicated by `label.id`
-    and sorted by `label.name`.
+- Replace `availableLabels` with `const availableLabels = $derived.by(...)`, a
+  list of `{ label, color }`:
+  - It covers the labels of every fetched issue, deduplicated by `label.name`
+    and sorted by it.
   - `color` is `#${label.color}` for a GitHub issue, and `label2color(label)`
     for a Jira issue.
 - Each chip is a button:
   - It uses `style="background-color: {color}; color: {Color(color).isDark() ? 'white' : 'black'}"`.
-  - It carries `aria-pressed={labelActive(label.id, selectedLabels)}`.
-  - When the label is active, it gets the class `border border-2 border-dark`
-    and shows a `faCheck` icon.
+  - It carries `aria-pressed={labelActive(label.name, selectedLabels)}`.
+  - It has the class `border border-dark`. When the label is active, it gets
+    `border-2 border-light` instead and shows a `faCheck` icon.
   - `onclick` calls `handleLabelClick(label)`.
 - Render the panel row only when `availableLabels.length > 0`.
+- `labelActive`, `handleLabelClick` and the label check of `shouldFilter`
+  compare `label.name`, so a card click and a panel click select the same
+  labels.
 - `handleLabelClick` also resets `currentPage = 0`.
 
 Steps:
-- [ ] Write the failing tests in `Issues.test.ts`:
-  - Use two issues that share the label `bug`, and one with the label
-    `perf`.
+- [x] Write the failing tests in `Issues.test.ts`:
+  - Use two issues that carry the label `bug` under two different ids, and
+    one with the label `perf`.
   - Opening "All Labels" shows one `bug` button and one `perf` button.
+  - Clicking `bug` keeps both `bug` issues.
   - Clicking `perf` leaves only the issue with `perf`, and sets
     `aria-pressed="true"`.
   - Clicking `perf` again shows all three issues.
   - Issues without labels render no "All Labels" panel.
-- [ ] Run `yarn test` and confirm that the new tests fail.
-- [ ] Make the changes.
-- [ ] Run the verify sequence and `yarn build`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run `yarn test` and confirm that the new tests fail.
+- [x] Make the changes.
+- [x] Run the verify sequence and `yarn build`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 6 — Sort by priority
 

@@ -29,7 +29,7 @@
     import { PLUGIN_NAMES } from "../Common/PluginNames";
     import { newIssueDestinations } from "../Common/IssueDestinations";
     import { sendMessage } from "../Stores/AlertStore";
-    import { faChevronDown, faChevronUp, faCopy } from "@fortawesome/free-solid-svg-icons";
+    import { faCheck, faChevronDown, faChevronUp, faCopy } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import Color from "color";
     import IssuesCopyModal from "./IssuesCopyModal.svelte";
@@ -102,7 +102,6 @@
     let currentPage = $state(0);
     let PAGE_SIZE = $state(10);
     let filterString = $state("");
-    let availableLabels: Label[] = [];
     let selectedLabels: Label[] = $state([]);
     const excluded: Record<FilterGroup, Record<string, boolean>> = $state({ state: {}, priority: {}, project: {} });
 
@@ -114,6 +113,17 @@
         priority: distinct(jiraIssues.map((issue) => issue.priority ?? NO_PRIORITY))
             .sort((lhs, rhs) => optionPriority(lhs) - optionPriority(rhs) || 0),
         project: distinct(jiraIssues.map((issue) => issue.project)),
+    });
+
+    const availableLabels = $derived.by(() => {
+        const labels = new Map<string, { label: Label; color: string }>();
+        for (const issue of issues) {
+            for (const label of issue.labels ?? []) {
+                if (labels.has(label.name)) continue;
+                labels.set(label.name, { label, color: issue.subtype === "github" ? `#${label.color}` : label2color(label) });
+            }
+        }
+        return [...labels.values()].sort((lhs, rhs) => lhs.label.name.localeCompare(rhs.label.name));
     });
 
 
@@ -135,22 +145,18 @@
         }
     };
 
-    /**
-     *
-     * @param {number} id
-     * @param {Object[]} selectedLabels
-     */
-    const labelActive = function(id: string, selectedLabels: Label[]) {
-        return !!selectedLabels.find(l => l.id == id);
+    const labelActive = function(name: string, selectedLabels: Label[]) {
+        return selectedLabels.some(l => l.name == name);
     };
 
     const handleLabelClick = function(label: Label) {
-        if (labelActive(label.id, selectedLabels)) {
-            selectedLabels = selectedLabels.filter((l: Label) => l.id != label.id);
+        if (labelActive(label.name, selectedLabels)) {
+            selectedLabels = selectedLabels.filter((l: Label) => l.name != label.name);
         } else {
             selectedLabels.push(label);
             selectedLabels = selectedLabels;
         }
+        currentPage = 0;
     };
 
     const toggleFilter = function(group: FilterGroup, value: string, checked: boolean) {
@@ -221,7 +227,7 @@
 
     const shouldFilterByLabels = function(issue: Issue, selectedLabels: Label[]) {
         if (selectedLabels.length == 0) return false;
-        return !issue.labels.map(label => !!selectedLabels.find(selectedLabel => label.id == selectedLabel.id)).includes(true);
+        return !(issue.labels ?? []).some(label => labelActive(label.name, selectedLabels));
     };
 
     const paginateIssues = function(issues: Issue[], sortCriteria: "name" | "repo" | "date" = "name", reverse = false, filterString = "") {
@@ -364,24 +370,29 @@
                     </select>
                 </div>
             </div>
-            <div class="row">
-                <div class="rounded border p-2 bg-light-one">
-                    <div role="button" tabindex="0" class="mb-1 w-100" onkeypress={() => (showAllLabels = !showAllLabels)} onclick={() => (showAllLabels = !showAllLabels)}>All Labels <Fa icon={showAllLabels ? faChevronUp : faChevronDown}/></div>
-                    <div class="collapse" class:show={showAllLabels}>
-                        <div class="d-flex p-2 bg-dark rounded shadow-sm flex-wrap">
-                            {#each availableLabels as label}
-                                <button
-                                    class="ms-2 btn btn-sm btn-secondary m-1"
-                                    style="border-color: #{label.color}; color: #{label.color}; background-color: {labelActive(label.id, selectedLabels) ? Color(`#${label.color}`).darken(0.75) : "rgba(1,1,1,0)"}"
-                                    onclick={() => handleLabelClick(label)}
-                                >
-                                    {label.name}
-                                </button>
-                            {/each}
+            {#if availableLabels.length > 0}
+                <div class="row">
+                    <div class="rounded border p-2 bg-light-one">
+                        <div role="button" tabindex="0" class="mb-1 w-100" onkeypress={() => (showAllLabels = !showAllLabels)} onclick={() => (showAllLabels = !showAllLabels)}>All Labels <Fa icon={showAllLabels ? faChevronUp : faChevronDown}/></div>
+                        <div class="collapse" class:show={showAllLabels}>
+                            <div class="d-flex p-2 bg-dark rounded shadow-sm flex-wrap" role="group" aria-label="All labels">
+                                {#each availableLabels as { label, color } (label.name)}
+                                    {@const active = labelActive(label.name, selectedLabels)}
+                                    <button
+                                        class="btn btn-sm m-1 border {active ? 'border-2 border-light' : 'border-dark'}"
+                                        style="background-color: {color}; color: {Color(color).isDark() ? 'white' : 'black'};"
+                                        aria-pressed={active}
+                                        onclick={() => handleLabelClick(label)}
+                                    >
+                                        {#if active}<Fa icon={faCheck} />{/if}
+                                        {label.name}
+                                    </button>
+                                {/each}
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            {/if}
             <div class="row">
                 {#each sortedIssues[currentPage] ?? [] as issue, idx (issue.id)}
                     <IssueCard {runId} issue={sortedIssues[currentPage][idx]} aggregated={aggregateByIssue} deleteEnabled={!submitDisabled} on:submitToCurrent on:issueDeleted={fetchIssues} on:labelClick={(e: any) => handleLabelClick(e.detail)}/>

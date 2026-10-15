@@ -15,7 +15,7 @@ vi.mock("../Stores/UserlistSubscriber.js", () => ({
 }));
 
 import Issues from "./Issues.svelte";
-import type { GithubSubtype, JiraSubtype } from "../Common/IssueTypes";
+import type { GithubSubtype, JiraSubtype, Label } from "../Common/IssueTypes";
 
 // ---------------------------------------------------------------------------
 // Module-level fixtures
@@ -183,8 +183,10 @@ describe("Issues.svelte — productVersion filtering", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Checkbox filters over fetched issues
+// Filters and labels over fetched issues
 // ---------------------------------------------------------------------------
+
+const label = (id: string, name: string, color = "d73a4a"): Label => ({ id, name, color, description: "" });
 
 const githubIssue = (number: number, title: string, state: "open" | "closed", extra: Partial<GithubSubtype> = {}): GithubSubtype => ({
     subtype: "github",
@@ -230,7 +232,7 @@ const MIXED_ISSUES = [
     jiraIssue("SCT-30", "SCT done without priority", "done", null),
 ];
 
-const ALL_TITLES = /^(GitHub open issue|GitHub closed issue|SCT todo P1|Scylla in progress P0|SCT done without priority)$/;
+const ALL_TITLES = /^(GitHub open issue|GitHub closed issue|SCT todo P1|Scylla in progress P0|SCT done without priority|Labelled bug one|Labelled bug two|Labelled perf)$/;
 
 const shownTitles = () => screen.queryAllByText(ALL_TITLES).map((el) => el.textContent);
 
@@ -303,5 +305,54 @@ describe("Issues.svelte — checkbox filters", () => {
         expect(optionNames("Status")).toEqual(["closed", "open"]);
         expect(screen.queryByRole("group", { name: "Priority" })).toBeNull();
         expect(screen.queryByRole("group", { name: "Space" })).toBeNull();
+    });
+});
+
+describe("Issues.svelte — All Labels panel", () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        cleanup();
+    });
+
+    const LABELLED_ISSUES = [
+        githubIssue(1, "Labelled bug one", "open", { labels: [label("11", "bug")] }),
+        jiraIssue("SCT-2", "Labelled bug two", "to do", "P2", { labels: [label("33", "bug", "000")] }),
+        jiraIssue("SCT-3", "Labelled perf", "to do", "P2", { labels: [label("22", "perf", "000")] }),
+    ];
+
+    const panel = () => screen.getByRole("group", { name: "All labels" });
+
+    it("lists each label of the fetched issues once", async () => {
+        await renderWith(LABELLED_ISSUES);
+
+        expect(within(panel()).getAllByRole("button").map((button) => button.textContent?.trim())).toEqual(["bug", "perf"]);
+    });
+
+    it("filters by a label picked in the panel and restores the list when it is picked again", async () => {
+        await renderWith(LABELLED_ISSUES);
+        const perf = within(panel()).getByRole("button", { name: "perf" });
+
+        await fireEvent.click(perf);
+        expect(shownTitles()).toEqual(["Labelled perf"]);
+        expect(perf.getAttribute("aria-pressed")).toBe("true");
+
+        await fireEvent.click(perf);
+        expect(shownTitles()).toHaveLength(3);
+        expect(perf.getAttribute("aria-pressed")).toBe("false");
+    });
+
+    it("matches a label by name across trackers", async () => {
+        await renderWith(LABELLED_ISSUES);
+
+        await fireEvent.click(within(panel()).getByRole("button", { name: "bug" }));
+
+        expect(shownTitles().sort()).toEqual(["Labelled bug one", "Labelled bug two"]);
+    });
+
+    it("renders no panel when the issues carry no labels", async () => {
+        await renderWith(MIXED_ISSUES);
+
+        expect(screen.queryByRole("group", { name: "All labels" })).toBeNull();
+        expect(screen.queryByText(/All Labels/)).toBeNull();
     });
 });
