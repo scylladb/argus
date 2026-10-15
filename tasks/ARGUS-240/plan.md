@@ -45,21 +45,20 @@ stays in every plan built from a spec.
 
 **Files:**
 - Modify: `argus/backend/error_handlers.py` (`api_exception_handler`)
-- Test: `argus/backend/tests/test_error_handlers.py` (create)
+- Test: `argus/backend/tests/asgi/test_metrics.py`
 
 **Internals:** the INFO branch of `api_exception_handler` takes
 `APIException` and `RequestValidationError`. `record_exception` runs for
 the rest only.
 
-- [ ] Write the failing test: a request with a malformed UUID path
-      parameter to a route already typed `UUID` (`GET
-      /api/v1/run/<bad>/activity`) returns the envelope. No ERROR record is
+- [x] Write the failing test: a request with a malformed UUID path
+      parameter to a probe route typed `UUID` returns the envelope. No ERROR record is
       logged by `argus.backend.error_handlers`, and `record_exception` is
       not called.
-- [ ] Run it and confirm the failure.
-- [ ] Write the smallest change that passes it.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run it and confirm the failure.
+- [x] Write the smallest change that passes it.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 2 — testrun_api: clone, run type, comments, assignee
 
