@@ -207,10 +207,10 @@ async def _release_tree(release_manager_service, test_names: list[str], priority
             "enabled": True, "perpetual": False, "dormant": False, "priority": priority,
         })
     group = await release_manager_service.create_group(
-        f"search_grp_{uuid.uuid4().hex}", None, build_system_id=release.name, release_id=str(release.id))
+        f"search_grp_{uuid.uuid4().hex}", None, build_system_id=release.name, release_id=release.id)
     tests = [
         await release_manager_service.create_test(
-            name, None, f"{release.name}/{name}", "", group_id=str(group.id), release_id=str(release.id),
+            name, None, f"{release.name}/{name}", "", group_id=group.id, release_id=release.id,
             plugin_name="scylla-cluster-tests")
         for name in test_names
     ]
@@ -533,7 +533,7 @@ async def test_search_sees_a_new_group_after_the_index_is_cleared(api_client, re
     release, _, _ = await _release_tree(release_manager_service, [])
     assert _search(api_client, query=token, limit=10)["total"] == 0
 
-    await release_manager_service.create_group(token, None, build_system_id=token, release_id=str(release.id))
+    await release_manager_service.create_group(token, None, build_system_id=token, release_id=release.id)
     assert _search(api_client, query=token, limit=10)["total"] == 0
     lookup.TestLookup.clear_index()
 
@@ -787,7 +787,7 @@ async def test_update_plan_adds_and_removes_tests(
     second_test = await release_manager_service.create_test(
         f"t2_{uuid.uuid4().hex[:8]}", "Second Test",
         f"bsid_{uuid.uuid4().hex[:8]}", "url",
-        group_id=str(group.id), release_id=str(release.id),
+        group_id=group.id, release_id=release.id,
         plugin_name="scylla-cluster-tests",
     )
     plan_id = _create_plan(api_client, release, fake_test)["response"]["id"]
@@ -824,7 +824,7 @@ async def test_update_plan_adds_and_removes_groups(
     """groups_add / groups_remove diffs mutate the plan's group list."""
     new_group = await release_manager_service.create_group(
         f"g2_{uuid.uuid4().hex[:8]}", "Second Group",
-        build_system_id=f"gbsid_{uuid.uuid4().hex[:8]}", release_id=str(release.id),
+        build_system_id=f"gbsid_{uuid.uuid4().hex[:8]}", release_id=release.id,
     )
     plan_id = _create_plan(api_client, release, fake_test, groups=[])["response"]["id"]
 
