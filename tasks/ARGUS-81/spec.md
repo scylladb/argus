@@ -10,9 +10,10 @@ calls `planning/search`, which now answers from a per-worker in-memory index,
 parses a richer query, and returns ranked pages.
 
 Releases gain an admin-set `priority` that orders them on the server, and a
-viewer can pin releases in the browser to list them above everything else. The
-sidebar loads a compact stats summary only for prioritized, pinned, hovered and
-opened releases, and re-sorts tests whenever stats change.
+viewer can pin releases in the browser to list them above everything else, or
+hide them from the list. The sidebar loads a compact stats summary only for
+prioritized, pinned and opened releases, and re-sorts tests whenever stats
+change.
 
 Below the `md` breakpoint the sidebar becomes an off-canvas drawer, opened
 from a fixed bottom-left button.
@@ -47,6 +48,11 @@ The Jinja `/releases` page uses the same service, so it gets the same order.
 The sidebar then lifts the releases this viewer pinned above all others, in
 server order. A pin toggle sits beside each release row. The pins live in the
 browser's `localStorage`; when storage is blocked they last for the page.
+
+A hide toggle sits beside the pin. The release list leaves out the releases
+this viewer hid, and a button above the list, shown while any are hidden,
+shows them again, muted. Hidden releases stay in the search results and load
+no stats eagerly. They live in `localStorage` like the pins.
 
 **Search.** `TestLookup` keeps one `SearchIndex` per worker. The index is
 compact: one entry per release, group and test, plus parent refs and a
@@ -84,14 +90,13 @@ Ranking applies these keys in order:
 6. `id`, so that pages stay stable between requests.
 
 **Stats.** The sidebar keeps one summary per release, with a 5-minute TTL. It
-merges requests that are already in flight. Eager loads and hover prefetches
-share a limiter of 2 concurrent requests.
+merges requests that are already in flight. Eager loads share a limiter of 2
+concurrent requests.
 
 ```mermaid
 flowchart TD
-    E{Trigger} -->|page load, priority above 0 or pinned| Q[limiter, 2 slots]
-    E -->|pinned now| Q
-    E -->|hover or focus 150 ms| Q
+    E{Trigger} -->|page load, priority above 0 or pinned, not hidden| Q[limiter, 2 slots]
+    E -->|pinned now, or unhidden with priority or pin| Q
     E -->|release opened| F
     Q --> F{dormant?}
     F -->|yes| N[no request]
@@ -143,6 +148,9 @@ open. A chip switches it to all releases.
 - When two siblings share a display name, each row also shows the raw `name`,
   muted.
 - A test that never ran shows no date.
+- Every row keeps room for the line under its name, which holds the status
+  bar, the stats spinner or the last run date, so a row keeps its height while
+  its stats load.
 
 **Status indicator.** The status indicator is a 6 px bar of status segments
 drawn to true proportion. Beside it are counts with icons for failed,
@@ -323,7 +331,7 @@ def summarize_release_stats(stats: dict) -> dict: ...
 |---|---|
 | The index holds about 20–30 MB per worker | Store compact slotted entries only. Measure on the dev snapshot (~42k entries). |
 | Workers serve results up to 60 s old, and two pages may come from different workers | Accept it. The TTL bounds the drift. The `api_usage.md` entry states it. |
-| Eager and hover fetches hit cold snapshots, which recompute the stats | Two slots, prioritized releases only, and hover after 150 ms. Measure a cold scylla-master summary. |
+| Eager fetches hit cold snapshots, which recompute the stats | Two slots, prioritized and pinned releases only. Measure a cold scylla-master summary. |
 | The new ranking reorders results in the planner and the CLI | Exact matches and prioritized releases come first, which helps both. The fields do not change. |
 | The `/test_runs` breakout page loses its search box | The page shows a shared selection. The PR body states the loss. |
 | Nothing moves to the top until an admin sets `priority` | The PR body asks an admin to set scylla-master and scylla-staging after the deploy. |
@@ -388,3 +396,12 @@ def summarize_release_stats(stats: dict) -> dict: ...
 - `-<uuid>` excludes that entity instead of looking it up. (review)
 - The admin priority is a whole number from 0 to the `int` column's maximum,
   checked in the editor and the API. (review)
+- Viewers hide releases in the browser, like the pins. A hidden release stays
+  in the search results, so it is never out of reach. (review)
+- The status indicator stays a bar. A staging round showed badges in its
+  place, and the feedback on it preferred the bar. (review)
+- Groups keep the name order. The staging review asked to sort them by the
+  number of runs. (review)
+- Hovering or focusing a release row fetches no stats. The staging review
+  asked the release list to fetch stats only for the releases a viewer marks
+  and the one they open. (review)
