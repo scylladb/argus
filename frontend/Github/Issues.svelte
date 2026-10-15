@@ -31,12 +31,11 @@
     import { sendMessage } from "../Stores/AlertStore";
     import { faCheck, faChevronDown, faChevronUp, faCopy } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
-    import Color from "color";
     import IssuesCopyModal from "./IssuesCopyModal.svelte";
     import queryString from 'query-string';
     import IssueCard from "../Common/IssueCard.svelte";
     import type { Issue, GithubSubtype, JiraSubtype, Label } from "../Common/IssueTypes";
-    import { getTitle, getRepo, label2color, priorityIndex, priorityRank } from "../Common/IssueTypes";
+    import { getTitle, getRepo, label2color, labelTextColor, priorityIndex, priorityRank } from "../Common/IssueTypes";
     import { untrack } from "svelte";
     interface Props {
         id?: string;
@@ -393,7 +392,7 @@
                                     {@const active = labelActive(label.name, selectedLabels)}
                                     <button
                                         class="btn btn-sm m-1 border {active ? 'border-2 border-light' : 'border-dark'}"
-                                        style="background-color: {color}; color: {Color(color).isDark() ? 'white' : 'black'};"
+                                        style="background-color: {color}; color: {labelTextColor(color)};"
                                         aria-pressed={active}
                                         onclick={() => handleLabelClick(label)}
                                     >

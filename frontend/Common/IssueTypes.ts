@@ -1,4 +1,5 @@
 import { sha1 } from "js-sha1";
+import Color from "color";
 import { faCheckCircle, faDotCircle, faSquare, type IconDefinition } from "@fortawesome/free-solid-svg-icons";
 
 // ---- State types ----
@@ -222,14 +223,21 @@ export const priorityRank = function (i: Issue): number {
     return priorityIndex(i.subtype === "jira" ? (i as JiraSubtype).priority : null);
 };
 
-export const label2color = function (label: Label): string {
-    const START_COLOR = [255, 238, 0];
-    const END_COLOR = [0, 32, 255];
-    const factor = (parseInt(sha1(label.name).slice(0, 16), 16) % 10000) / 10000;
+const LABEL_SCOPE = /^([^/:]+)[/:]/;
 
-    const lerp = (c1: number, c2: number, frac: number) => Math.round((c2 - c1) * frac + c1) & 0xff;
-    const color = START_COLOR.map((c1, idx) => lerp(c1, END_COLOR[idx], factor)).join(", ");
-    return `rgb(${color})`;
+const hash32 = (text: string): number => parseInt(sha1(text).slice(0, 8), 16);
+
+export const label2color = function (label: Label): string {
+    const scope = (LABEL_SCOPE.exec(label.name)?.[1] ?? label.name).toLowerCase();
+    const variant = hash32(label.name);
+    const hue = ((hash32(scope) % 360) + (variant % 25) - 12 + 360) % 360;
+    const lightness = 36 + ((variant >>> 8) % 13);
+    return `hsl(${hue}, 65%, ${lightness}%)`;
+};
+
+export const labelTextColor = function (background: string): "white" | "black" {
+    const color = Color(background);
+    return color.contrast(Color("white")) >= color.contrast(Color("black")) ? "white" : "black";
 };
 
 // ---- Shared async helpers for issue card components ----
