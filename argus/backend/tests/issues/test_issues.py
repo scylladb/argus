@@ -96,7 +96,7 @@ def fake_github_assignee(login: str) -> SimpleNamespace:
 def fake_remote_jira_issue(key: str, status: str = "To Do", summary: str = "Remote Jira Issue",
                            labels: list[str] | None = None, assignee: SimpleNamespace | None = None,
                            seen_again: float | None = None, counter_on_screen: bool = False,
-                           issue_type: str = "Bug") -> SimpleNamespace:
+                           issue_type: str = "Bug", priority: str | None = "P2") -> SimpleNamespace:
     """Mimics the subset of ``jira.Issue`` that JiraService reads and updates."""
     project, _ = key.split("-")
     fields = SimpleNamespace(
@@ -106,6 +106,7 @@ def fake_remote_jira_issue(key: str, status: str = "To Do", summary: str = "Remo
         labels=labels if labels is not None else [],
         assignee=assignee,
         issuetype=SimpleNamespace(name=issue_type),
+        priority=SimpleNamespace(name=priority) if priority else None,
     )
     setattr(fields, SEEN_AGAIN_FIELD, seen_again)
     editmeta_fields = {SEEN_AGAIN_FIELD: {"name": "Seen Again Counter"}} if counter_on_screen else {}
@@ -314,6 +315,28 @@ async def test_submit_jira_issue_with_hidden_assignee_email_falls_back_to_displa
 
     assert result["assignees"] == ["Hidden Dev"]
     assert len(await IssueLink.find(run_id=run.id).all()) == 1
+
+
+async def test_submit_unknown_jira_issue_stores_its_priority(run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):
+    key = f"FROBNICATOR-{int(time.time_ns() % 10**9)}"
+    url = f"{JIRA_SERVER}/browse/{key}"
+    mocked_issue_service.jira.jira.issue.return_value = fake_remote_jira_issue(key, priority="P1")
+
+    result = await mocked_issue_service.submit(issue_url=url, test_id=run.test_id, run_id=run.id, user=logged_in_user)
+
+    assert result["priority"] == "P1"
+    assert [issue["priority"] for issue in await mocked_issue_service.get("run_id", run.id)] == ["P1"]
+
+
+async def test_submit_jira_issue_without_priority_stores_none(run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):
+    key = f"FROBNICATOR-{int(time.time_ns() % 10**9)}"
+    url = f"{JIRA_SERVER}/browse/{key}"
+    mocked_issue_service.jira.jira.issue.return_value = fake_remote_jira_issue(key, priority=None)
+
+    result = await mocked_issue_service.submit(issue_url=url, test_id=run.test_id, run_id=run.id, user=logged_in_user)
+
+    assert result["priority"] is None
+    assert [issue["priority"] for issue in await mocked_issue_service.get("run_id", run.id)] == [None]
 
 
 async def test_submit_same_issue_twice_reuses_issue_and_adds_second_link(
@@ -537,6 +560,19 @@ async def test_refresh_stale_jira_issues_updates_state_from_remote(run: SCTTestR
     assert for_run[0]["subtype"] == "jira"
 
     await assert_refreshed_after(JiraService.LAST_RAN_KEY, before_refresh)
+
+
+async def test_refresh_stale_jira_issues_updates_priority(run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):
+    key = f"FROBNICATOR-{int(time.time_ns() % 10**9)}"
+    url = f"{JIRA_SERVER}/browse/{key}"
+    mocked_issue_service.jira.jira.issue.return_value = fake_remote_jira_issue(key, priority="P3")
+    await mocked_issue_service.submit(issue_url=url, test_id=run.test_id, run_id=run.id, user=logged_in_user)
+
+    mocked_issue_service.jira.jira.search_issues.return_value = [fake_remote_jira_issue(key, priority="P0")]
+
+    await mocked_issue_service.jira.refresh_stale_issues()
+
+    assert [issue["priority"] for issue in await mocked_issue_service.get("run_id", run.id)] == ["P0"]
 
 
 async def test_refresh_stale_jira_issues_clears_assignee_when_unassigned(run: SCTTestRun, mocked_issue_service: IssueService, logged_in_user: User):

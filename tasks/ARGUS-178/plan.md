@@ -44,7 +44,7 @@ stays in every plan built from a spec.
   given, and to `None` otherwise.
 
 Steps:
-- [ ] Write the failing tests in `test_issues.py`:
+- [x] Write the failing tests in `test_issues.py`:
   - `test_submit_unknown_jira_issue_stores_its_priority`: submitting an issue
     whose remote is P1 returns `priority == "P1"`, and so does
     `IssueService.get("run_id", run.id)`.
@@ -52,15 +52,14 @@ Steps:
     `priority=None` returns `priority is None`.
   - `test_refresh_stale_jira_issues_updates_priority`: submit at P3, have
     `search_issues` return P0, refresh, and `IssueService.get` returns `"P0"`.
-- [ ] Add `"priority": "P2"` to `expected_jira_issue` in
-  `test_issue_version_filter.py`, matching what its fixture seeds through the
-  mocked remote. Check how that fixture creates the issue first; if it does
-  not go through the remote, use the value it stores.
-- [ ] Run `uv run pytest argus/backend/tests/issues` and confirm that the new
+- [x] Add `"priority": None` to `expected_jira_issue` in
+  `test_issue_version_filter.py`. Its fixture creates the issue row directly,
+  without a priority.
+- [x] Run `uv run pytest argus/backend/tests/issues` and confirm that the new
   tests fail.
-- [ ] Add the field, `priority_name`, and the two assignments.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Add the field, `priority_name`, and the two assignments.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 2 — Backfill the priority of the stored issues
 

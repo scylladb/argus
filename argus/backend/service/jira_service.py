@@ -63,6 +63,10 @@ class JiraService:
         # Jira Cloud omits emailAddress when the user hides it, so fall back to displayName.
         return getattr(assignee, "emailAddress", None) or getattr(assignee, "displayName", None)
 
+    @staticmethod
+    def priority_name(fields) -> str | None:
+        return getattr(getattr(fields, "priority", None), "name", None)
+
     async def refresh_stale_issues(self):
         try:
             last_ran = await RuntimeStore.get(key=self.LAST_RAN_KEY)
@@ -86,6 +90,7 @@ class JiraService:
                 LOGGER.debug("Updating %s...", issue.key)
                 local_issue.summary = issue.fields.summary
                 local_issue.state = issue.fields.status.name.lower()
+                local_issue.priority = self.priority_name(issue.fields)
                 identity = self.assignee_identity(issue.fields.assignee)
                 local_issue.assignees = [identity] if identity else []
                 local_issue.labels = [
@@ -124,6 +129,7 @@ class JiraService:
             issue.state = remote_issue.fields.status.name.lower()
             issue.summary = remote_issue.fields.summary
             issue.project = remote_issue.fields.project.key
+            issue.priority = self.priority_name(remote_issue.fields)
             issue.permalink = remote_issue.permalink()
             for label in remote_issue.fields.labels:
                 l = IssueLabel.model_construct()
