@@ -15,6 +15,8 @@ import {
     GithubIssueIcon,
     JiraIssueColorMap,
     JiraIssueIcon,
+    priorityClass,
+    priorityRank,
 } from "./IssueTypes";
 import type { GithubSubtype, JiraSubtype, Issue, Label, Link } from "./IssueTypes";
 
@@ -51,6 +53,7 @@ const JIRA_ISSUE: JiraSubtype = {
     key: "FROBNICATOR-123",
     summary: "Improve performance",
     project: "FROBNICATOR",
+    priority: "P1",
     permalink: "https://zxqtesting.atlassian.net/browse/FROBNICATOR-123",
     assignees: ["bob"],
 };
@@ -239,6 +242,40 @@ it.each(ALL_JIRA_STATES)("JiraIssueColorMap has a CSS class for state '%s'", (st
 
 it.each(ALL_JIRA_STATES)("JiraIssueIcon has an icon for state '%s'", (state) => {
     expect(JiraIssueIcon[state]).toBeDefined();
+});
+
+// ---------------------------------------------------------------------------
+// Priority helpers
+// ---------------------------------------------------------------------------
+
+describe("priorityRank", () => {
+    it.each([
+        ["P0", 0],
+        ["P2", 2],
+        ["P4", 4],
+        ["Critical", 5],
+    ])("ranks Jira priority %s at %s", (priority, rank) => {
+        expect(priorityRank({ ...JIRA_ISSUE, priority })).toBe(rank);
+    });
+
+    it("ranks a Jira issue without a priority last", () => {
+        expect(priorityRank({ ...JIRA_ISSUE, priority: null })).toBe(Infinity);
+    });
+
+    it("ranks a GitHub issue last", () => {
+        expect(priorityRank(GITHUB_ISSUE)).toBe(Infinity);
+    });
+});
+
+describe("priorityClass", () => {
+    it.each([
+        ["P0", "text-bg-danger"],
+        ["P1", "text-bg-warning"],
+        ["P4", "text-bg-light"],
+        ["Critical", "text-bg-secondary"],
+    ])("gives priority %s the badge class %s", (priority, badgeClass) => {
+        expect(priorityClass(priority)).toBe(badgeClass);
+    });
 });
 
 // ---------------------------------------------------------------------------

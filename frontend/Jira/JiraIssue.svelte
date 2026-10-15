@@ -11,13 +11,14 @@
     import { faJira } from "@fortawesome/free-brands-svg-icons";
     import {
         faExternalLinkSquareAlt,
+        faList,
         faTrash,
     } from "@fortawesome/free-solid-svg-icons";
     import { sendMessage } from "../Stores/AlertStore";
     import { userList } from "../Stores/UserlistSubscriber";
     import { timestampToISODate } from "../Common/DateUtils";
     import { stateEncoder } from "../Common/StateManagement";
-    import { label2color, type JiraState, type JiraSubtype, type Link, type TestRun, JiraIssueColorMap, JiraIssueIcon, resolveRuns as resolveRunsHelper, resolveFirstUserForAggregation as resolveFirstUserHelper, deleteIssue as deleteIssueHelper } from '../Common/IssueTypes';
+    import { label2color, priorityClass, type JiraState, type JiraSubtype, type Link, type TestRun, JiraIssueColorMap, JiraIssueIcon, resolveRuns as resolveRunsHelper, resolveFirstUserForAggregation as resolveFirstUserHelper, deleteIssue as deleteIssueHelper } from '../Common/IssueTypes';
     import { getUser } from '../Common/UserUtils';
 
     const dispatch = createEventDispatcher();
@@ -31,6 +32,7 @@
         runId: string;
         deleteEnabled?: boolean;
         aggregated?: boolean;
+        showRunsLink?: boolean;
     }
 
     let {
@@ -39,6 +41,7 @@
         key: "NONE-01",
         summary: "",
         project: "",
+        priority: null,
         subtype: "jira",
         state: "in review",
         links: [],
@@ -52,7 +55,8 @@
     }),
         runId,
         deleteEnabled = true,
-        aggregated = false
+        aggregated = false,
+        showRunsLink = true,
     }: Props = $props();
 
     let deleting = $state(false);
@@ -95,11 +99,21 @@
                 <div class="ms-2 me-1"><Fa icon={JiraIssueIcon[issue.state] || JiraIssueIcon["new"]} /></div>
                 <div class="me-2">{issue.state}</div>
             </div>
+            {#if issue.priority}
+                <span class="badge rounded-pill {priorityClass(issue.priority)}" title="Priority">{issue.priority}</span>
+            {/if}
             <a
                 target="_blank"
                 class="fw-bold text-nowrap link-body-emphasis link-underline-opacity-0 link-underline-opacity-75-hover"
                 href={issue.permalink}><Fa icon={faJira} /> {issue.key}</a
             >
+            {#if showRunsLink}
+                <a
+                    class="btn btn-sm btn-outline-secondary py-0"
+                    href="/issues/{encodeURIComponent(issue.key)}"
+                    title="Runs linked to {issue.key}"><Fa icon={faList} /> Runs</a
+                >
+            {/if}
             {#each issue.labels as label (label.id)}
                 <button
                     class="align-items-center px-2 label-text border border-dark cursor-pointer"
