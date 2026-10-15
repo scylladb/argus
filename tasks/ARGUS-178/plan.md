@@ -261,16 +261,16 @@ Steps:
   - Otherwise returns `reverseSort ? lhs - rhs : rhs - lhs`.
 
 Steps:
-- [ ] Write the failing tests in `Issues.test.ts`:
+- [x] Write the failing tests in `Issues.test.ts`:
   - Use Jira P2, Jira P0, a GitHub issue and a Jira issue without a priority.
   - "By priority" with "Descending order" on renders P0, P2, then the two
     issues without a priority.
   - With "Descending order" off, it renders P2, P0, then the two issues
     without a priority.
-- [ ] Run `yarn test` and confirm that the new tests fail.
-- [ ] Make the changes.
-- [ ] Run the verify sequence and `yarn build`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run `yarn test` and confirm that the new tests fail.
+- [x] Make the changes.
+- [x] Run the verify sequence and `yarn build`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 7 — Document the priority in the API reference
 
