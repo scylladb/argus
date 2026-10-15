@@ -165,5 +165,3 @@ def cosine(x: np.ndarray, y: np.ndarray) -> float: ...  # 1 - x·y / (‖x‖·�
 - The `onnxruntime` floor is 1.23. `requires-python` is `>=3.10`, and
   1.24 publishes no cp310 wheel, so the 3.10 split resolves to 1.23.2.
   Python 3.11 and newer keep 1.29.0. (build)
-- Komachi pre-approved the intent, the spec and the plan. The code waits
-  for Komachi's review before it is committed. (spec)
