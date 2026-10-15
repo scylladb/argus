@@ -4,9 +4,11 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 
+	"github.com/rs/zerolog"
 	"github.com/scylladb/argus/cli/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -96,4 +98,11 @@ func TestBuildAPIClientRaw_ARGUSAUTHTokenPreferred(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "token preferred-token", req.Header.Get("Authorization"))
+}
+
+func TestNewCache_NoCacheKeepsTheCacheRoot(t *testing.T) {
+	c := newCache(true, "", zerolog.Nop())
+
+	assert.Equal(t, filepath.Join(config.CacheDir(), "cache"), c.Dir())
+	assert.True(t, c.Disabled())
 }

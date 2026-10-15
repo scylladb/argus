@@ -113,11 +113,11 @@ stays in every plan built from a spec.
 - `TestNewCache_NoCacheKeepsTheCacheRoot`: `Dir()` is
   `filepath.Join(config.CacheDir(), "cache")` and `Disabled()` is true.
 
-- [ ] Write the failing test.
-- [ ] Run it and confirm the failure.
-- [ ] Write the smallest change that passes it.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Write the failing test.
+- [x] Run it and confirm the failure.
+- [x] Write the smallest change that passes it.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 3 — Refuse run IDs and archive names that leave their directory
 
