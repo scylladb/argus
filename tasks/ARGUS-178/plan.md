@@ -91,13 +91,13 @@ Steps:
 - The summary logs the counts, and warns to re-run when `failed > 0`.
 
 Steps:
-- [ ] Write the script.
-- [ ] Run `uv run python scripts/migration/migration_2026-10-15_backfill_jira_issue_priority.py --help`
+- [x] Write the script.
+- [x] Run `uv run python scripts/migration/migration_2026-10-15_backfill_jira_issue_priority.py --help`
   and confirm the usage text prints.
-- [ ] The migration scripts carry no unit tests. Task 8 runs this one against
+- [x] The migration scripts carry no unit tests. Task 8 runs this one against
   the dev database and live Jira.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 3 — The priority badge and the runs link on the Jira card
 
