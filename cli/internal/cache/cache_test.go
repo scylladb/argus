@@ -86,7 +86,7 @@ func TestClear_RemovesFilesStoredInTheEntryDir(t *testing.T) {
 }
 
 func TestKeysOutsideTheRootAreRefused(t *testing.T) {
-	for _, key := range []string{"../x", "a/../../x", "/tmp/x"} {
+	for _, key := range []string{"../x", "a/../../x", "/tmp/x", ".", "a/.."} {
 		t.Run(key, func(t *testing.T) {
 			base := t.TempDir()
 			c := New(base)
