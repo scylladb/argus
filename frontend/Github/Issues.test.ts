@@ -232,7 +232,7 @@ const MIXED_ISSUES = [
     jiraIssue("SCT-30", "SCT done without priority", "done", null),
 ];
 
-const ALL_TITLES = /^(GitHub open issue|GitHub closed issue|SCT todo P1|Scylla in progress P0|SCT done without priority|Labelled bug one|Labelled bug two|Labelled perf|Jira P2|Jira P0|GitHub newest|Jira without priority|Jira Release Blocker)$/;
+const ALL_TITLES = /^(GitHub open issue|GitHub closed issue|SCT todo P1|Scylla in progress P0|SCT done without priority|Labelled bug one|Labelled bug two|Labelled perf|Jira P2|Jira P0|GitHub newest|Jira without priority|Jira Release Blocker|Jira constructor|Jira named none)$/;
 
 const shownTitles = () => screen.queryAllByText(ALL_TITLES).map((el) => el.textContent);
 
@@ -257,7 +257,7 @@ describe("Issues.svelte — checkbox filters", () => {
         await renderWith(MIXED_ISSUES);
 
         expect(optionNames("Status")).toEqual(["closed", "done", "in progress", "open", "to do"]);
-        expect(optionNames("Priority")).toEqual(["P0", "P1", "none"]);
+        expect(optionNames("Priority")).toEqual(["P0", "P1", "no priority"]);
         expect(optionNames("Space")).toEqual(["SCT", "SCYLLADB"]);
         expect(shownTitles()).toHaveLength(5);
     });
@@ -279,10 +279,10 @@ describe("Issues.svelte — checkbox filters", () => {
         expect(shownTitles().sort()).toEqual(["GitHub closed issue", "GitHub open issue", "Scylla in progress P0"]);
     });
 
-    it("hides the Jira issues without a priority when none is unchecked", async () => {
+    it("hides the Jira issues without a priority when no priority is unchecked", async () => {
         await renderWith(MIXED_ISSUES);
 
-        await fireEvent.click(within(screen.getByRole("group", { name: "Priority" })).getByLabelText("none"));
+        await fireEvent.click(within(screen.getByRole("group", { name: "Priority" })).getByLabelText("no priority"));
 
         expect(shownTitles()).not.toContain("SCT done without priority");
         expect(shownTitles()).toHaveLength(4);
@@ -297,6 +297,24 @@ describe("Issues.svelte — checkbox filters", () => {
         await fireEvent.click(box);
 
         expect(shownTitles()).toHaveLength(5);
+    });
+
+    it("shows an issue whose priority is named like an object property", async () => {
+        await renderWith([jiraIssue("SCT-14", "Jira constructor", "to do", "constructor")]);
+
+        expect(shownTitles()).toEqual(["Jira constructor"]);
+    });
+
+    it("keeps a Jira priority named none apart from the issues without a priority", async () => {
+        await renderWith([
+            jiraIssue("SCT-15", "Jira named none", "to do", "none"),
+            jiraIssue("SCT-16", "Jira without priority", "to do", null),
+        ]);
+
+        expect(optionNames("Priority")).toEqual(["none", "no priority"]);
+        await fireEvent.click(within(screen.getByRole("group", { name: "Priority" })).getByLabelText("no priority"));
+
+        expect(shownTitles()).toEqual(["Jira named none"]);
     });
 
     it("lists Release Blocker first in the Priority group", async () => {

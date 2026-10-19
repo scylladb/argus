@@ -426,15 +426,15 @@ From the review of PR #1129.
   `no priority`. `optionPriority` goes: `priorityIndex("")` already returns `Infinity`.
 
 Steps:
-- [ ] Write the failing tests in `Issues.test.ts`:
+- [x] Write the failing tests in `Issues.test.ts`:
   - An issue whose priority is `constructor` shows on the first render.
   - A Jira priority named `none` and an issue without a priority get two checkboxes, `none` and
     `no priority`. Unchecking `no priority` hides only the issue without one.
   - The existing tests read `no priority` in place of `none`.
-- [ ] Run `yarn test` and confirm that the new tests fail.
-- [ ] Make the changes.
-- [ ] Run the verify sequence and `yarn build`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run `yarn test` and confirm that the new tests fail.
+- [x] Make the changes.
+- [x] Run the verify sequence and `yarn build`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 13 — Test that a value new after a re-fetch starts checked
 
