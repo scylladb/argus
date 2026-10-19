@@ -444,9 +444,9 @@ From the review of PR #1129.
 - Test: `frontend/Github/Issues.test.ts`
 
 Steps:
-- [ ] Write the test: render open and closed issues, uncheck `closed`, then change
+- [x] Write the test: render open and closed issues, uncheck `closed`, then change
   `productVersion` so the widget re-fetches and also receives an `in progress` issue. The
   `in progress` box is checked and its issue shows, while `closed` stays unchecked and its issue
   stays hidden.
-- [ ] Run it, and confirm that it passes against the current code.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run it, and confirm that it passes against the current code.
+- [x] Commit, with the boxes of this task checked.
