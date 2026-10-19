@@ -232,7 +232,7 @@ const MIXED_ISSUES = [
     jiraIssue("SCT-30", "SCT done without priority", "done", null),
 ];
 
-const ALL_TITLES = /^(GitHub open issue|GitHub closed issue|SCT todo P1|Scylla in progress P0|SCT done without priority|Labelled bug one|Labelled bug two|Labelled perf|Jira P2|Jira P0|GitHub newest|Jira without priority)$/;
+const ALL_TITLES = /^(GitHub open issue|GitHub closed issue|SCT todo P1|Scylla in progress P0|SCT done without priority|Labelled bug one|Labelled bug two|Labelled perf|Jira P2|Jira P0|GitHub newest|Jira without priority|Jira Release Blocker)$/;
 
 const shownTitles = () => screen.queryAllByText(ALL_TITLES).map((el) => el.textContent);
 
@@ -297,6 +297,16 @@ describe("Issues.svelte — checkbox filters", () => {
         await fireEvent.click(box);
 
         expect(shownTitles()).toHaveLength(5);
+    });
+
+    it("lists Release Blocker first in the Priority group", async () => {
+        await renderWith([
+            jiraIssue("SCT-11", "SCT todo P1", "to do", "P1"),
+            jiraIssue("SCT-12", "Jira Release Blocker", "to do", "Release Blocker"),
+            jiraIssue("SCT-13", "Jira P0", "to do", "P0"),
+        ]);
+
+        expect(optionNames("Priority")).toEqual(["Release Blocker", "P0", "P1"]);
     });
 
     it("renders no Priority and no Space group for GitHub issues only", async () => {
@@ -368,22 +378,23 @@ describe("Issues.svelte — sorting by priority", () => {
         jiraIssue("SCT-2", "Jira P0", "to do", "P0", { added_on: "2026-10-02T10:00:00Z" }),
         githubIssue(3, "GitHub newest", "open", { added_on: "2026-10-05T10:00:00Z" }),
         jiraIssue("SCT-4", "Jira without priority", "to do", null, { added_on: "2026-10-03T10:00:00Z" }),
+        jiraIssue("SCT-5", "Jira Release Blocker", "to do", "Release Blocker", { added_on: "2026-09-30T10:00:00Z" }),
     ];
 
-    it("puts P0 first and the issues without a priority last", async () => {
+    it("puts Release Blocker first and the issues without a priority last", async () => {
         await renderWith(PRIORITY_ISSUES);
 
         await fireEvent.change(screen.getByLabelText("Sort issues"), { target: { value: "priority" } });
 
-        expect(shownTitles()).toEqual(["Jira P0", "Jira P2", "GitHub newest", "Jira without priority"]);
+        expect(shownTitles()).toEqual(["Jira Release Blocker", "Jira P0", "Jira P2", "GitHub newest", "Jira without priority"]);
     });
 
-    it("puts P2 before P0 in ascending order and keeps the issues without a priority last", async () => {
+    it("reverses the ranked priorities in ascending order and keeps the issues without a priority last", async () => {
         await renderWith(PRIORITY_ISSUES);
 
         await fireEvent.change(screen.getByLabelText("Sort issues"), { target: { value: "priority" } });
         await fireEvent.click(screen.getByLabelText("Descending order"));
 
-        expect(shownTitles()).toEqual(["Jira P2", "Jira P0", "GitHub newest", "Jira without priority"]);
+        expect(shownTitles()).toEqual(["Jira P2", "Jira P0", "Jira Release Blocker", "GitHub newest", "Jira without priority"]);
     });
 });

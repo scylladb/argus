@@ -377,15 +377,15 @@ From the review of PR #1129. It replaces the `JIRA_PRIORITIES` and the badge map
   `"Release Blocker": "text-bg-danger"`.
 
 Steps:
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - `IssueTypes.test.ts`: `priorityRank` gives 0 for `Release Blocker`, 1 for `P0`, 5 for `P4`
     and 6 for an unknown name. `priorityClass("Release Blocker")` is `text-bg-danger`.
   - `Issues.test.ts`: the Priority group lists `Release Blocker` before `P0`. "By priority" puts
     a Release Blocker issue before the P0 one, and after it with "Descending order" off.
-- [ ] Run `yarn test` and confirm that the new tests fail.
-- [ ] Make the changes.
-- [ ] Run the verify sequence and `yarn build`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run `yarn test` and confirm that the new tests fail.
+- [x] Make the changes.
+- [x] Run the verify sequence and `yarn build`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 11 — Keep a newer priority in the backfill
 
