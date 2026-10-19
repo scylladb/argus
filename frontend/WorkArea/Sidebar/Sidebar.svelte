@@ -265,9 +265,8 @@
         return [];
     };
 
-    onMount(async () => {
-        await sidebar.loadReleases();
-        sidebar.loadEager();
+    onMount(() => {
+        sidebar.loadReleases();
     });
 </script>
 

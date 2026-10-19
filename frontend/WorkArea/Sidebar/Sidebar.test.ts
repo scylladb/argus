@@ -99,15 +99,19 @@ afterEach(() => {
 });
 
 describe("Sidebar", () => {
-    it("lists the releases in server order and fetches stats for the prioritized one", async () => {
+    it("lists the releases in server order and fetches no stats until one is opened", async () => {
         const fetchMock = serve();
+        const statsCalls = () => fetchMock.mock.calls.map(([url]) => url).filter((url) => url.startsWith("/api/v1/release/stats"));
         renderSidebar();
 
         await waitFor(() => expect(rowNames()).toEqual(["scylla-master", "scylla-2025.1"]));
-        await waitFor(() =>
-            expect(fetchMock).toHaveBeenCalledWith("/api/v1/release/stats/summary?release=scylla-master&force=0", undefined)
-        );
-        expect(fetchMock.mock.calls.some(([url]) => url.includes("release=scylla-2025.1"))).toBe(false);
+        await fireEvent.click(screen.getByRole("button", { name: "Pin scylla-2025.1 to the top" }));
+        await new Promise((resolve) => setTimeout(resolve));
+        expect(statsCalls()).toEqual([]);
+
+        await fireEvent.click(row("scylla-master"));
+
+        await waitFor(() => expect(statsCalls()).toEqual(["/api/v1/release/stats/summary?release=scylla-master&force=0"]));
     });
 
     it("lists a pinned release above the others and keeps the pin", async () => {
@@ -312,6 +316,8 @@ describe("Sidebar", () => {
         let failing = true;
         const fetchMock = serve({ stats: () => (failing ? Promise.reject(new Error("down")) : ok(SUMMARY)) });
         renderSidebar();
+        await fireEvent.click(await waitFor(() => row("scylla-master")));
+        await fireEvent.click(screen.getByRole("button", { name: "Releases" }));
         await waitFor(() => expect(row("scylla-master").textContent).toContain("Stats unavailable"));
 
         failing = false;
