@@ -450,6 +450,55 @@ async def test_nemesis_submit_and_finalize(api_client, sct_run_id):
     assert dict(run.nemesis_stats or {}) == stats_after_first
 
 
+def _nemesis_submit_payload(name: str, start_time: int) -> dict:
+    return {
+        "nemesis": {
+            "name": name,
+            "class_name": "SisyphusMonkey",
+            "start_time": start_time,
+            "node_name": "node-1",
+            "node_ip": "10.0.0.1",
+            "node_shards": 8,
+            "description": "parallel nemesis",
+        },
+        "schema_version": "v8",
+    }
+
+
+def _nemesis_finalize_payload(name: str, start_time: int, status: str, message: str) -> dict:
+    return {"nemesis": {"name": name, "start_time": start_time, "status": status, "message": message}}
+
+
+def _nemeses_of(api_client, run_id: str) -> list[dict]:
+    resp = api_client.get(f"{API_PREFIX}/{run_id}/nemesis/get")
+    assert resp.status_code == 200, resp.text
+    return resp.json()["response"]
+
+
+def test_nemesis_submit_keeps_two_nemeses_with_one_start_time(api_client, sct_run_id):
+    start_time = 1779196845
+    for name in ("GrowShrinkClusterNemesis", "ModifyTableMaxIndexIntervalMonkey"):
+        resp = api_client.post(f"{API_PREFIX}/{sct_run_id}/nemesis/submit",
+                               json=_nemesis_submit_payload(name, start_time))
+        assert resp.status_code == 200, resp.text
+
+    assert {(n["name"], n["status"]) for n in _nemeses_of(api_client, sct_run_id)} == {
+        ("GrowShrinkClusterNemesis", "running"),
+        ("ModifyTableMaxIndexIntervalMonkey", "running"),
+    }
+
+    for name, status, message in (("GrowShrinkClusterNemesis", "succeeded", ""),
+                                  ("ModifyTableMaxIndexIntervalMonkey", "failed", "Traceback: boom")):
+        resp = api_client.post(f"{API_PREFIX}/{sct_run_id}/nemesis/finalize",
+                               json=_nemesis_finalize_payload(name, start_time, status, message))
+        assert resp.status_code == 200, resp.text
+
+    assert {(n["name"], n["status"], n["stack_trace"]) for n in _nemeses_of(api_client, sct_run_id)} == {
+        ("GrowShrinkClusterNemesis", "succeeded", ""),
+        ("ModifyTableMaxIndexIntervalMonkey", "failed", "Traceback: boom"),
+    }
+
+
 async def test_stress_commands(api_client, sct_run_id):
     payload = {
         "log_name": "example.log",

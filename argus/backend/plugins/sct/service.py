@@ -435,8 +435,6 @@ class SCTService:
     @staticmethod
     async def submit_nemesis(run_id: UUID, nemesis_details: dict) -> str:
         nem_req = NemesisSubmissionRequest(**nemesis_details)
-        if await SCTNemesis.find(run_id=run_id, start_time=int(nem_req.start_time)).first() is not None:
-            return "created"
         node_desc = NodeDescription(
             name=nem_req.node_name, ip=nem_req.node_ip, shards=nem_req.node_shards)
         nemesis_info = SCTNemesis(
@@ -450,6 +448,10 @@ class SCTService:
             status=NemesisStatus.RUNNING.value,
             target_node=node_desc,
         )
+        duplicate = await SCTNemesis.find(
+            run_id=run_id, start_time=nemesis_info.start_time, name=nemesis_info.name).first()
+        if duplicate is not None:
+            return "created"
         try:
             run: SCTTestRun = await SCTTestRun.get(id=run_id)
             await nemesis_info.save()
@@ -466,29 +468,29 @@ class SCTService:
         nem_req = NemesisFinalizationRequest(**nemesis_details)
         try:
             run: SCTTestRun = await SCTTestRun.get(id=run_id)
-            nemesis = await SCTNemesis.get(
-                run_id=run.id, start_time=int(nem_req.start_time))
-            # Idempotency (e.g. the same replay archive uploaded twice): once a
-            # nemesis is finalized its status leaves RUNNING. Re-finalizing would
-            # re-increment ``nemesis_stats`` and recompute end_time/duration, so
-            # skip when it is already in a terminal state.
-            if nemesis.status != NemesisStatus.RUNNING.value:
-                return "updated"
-            nemesis.status = NemesisStatus(nem_req.status).value
-            nemesis.stack_trace = nem_req.message
-            nemesis.end_time = int(time())
-            nemesis.duration = nemesis.end_time - nemesis.start_time
-            await nemesis.save()
-            run.update_nemesis_stats(NemesisStatus(nem_req.status).value)
-            await run.save()
+        except DocumentNotFound as exception:
+            LOGGER.error("Run %s not found for SCTTestRun", run_id)
+            raise SCTServiceException("Run not found", run_id) from exception
+        try:
+            nemesis = await SCTNemesis.get(run_id=run_id, start_time=int(nem_req.start_time), name=nem_req.name)
         except DocumentNotFound as exception:
             LOGGER.error("Nemesis %s (%s) not found for run %s",
                          nem_req.name, nem_req.start_time, run_id)
             raise SCTServiceException(
                 "Nemesis not found", (nem_req.name, nem_req.start_time)) from exception
-        except DocumentNotFound as exception:
-            LOGGER.error("Run %s not found for SCTTestRun", run_id)
-            raise SCTServiceException("Run not found", run_id) from exception
+        # Idempotency (e.g. the same replay archive uploaded twice): once a
+        # nemesis is finalized its status leaves RUNNING. Re-finalizing would
+        # re-increment ``nemesis_stats`` and recompute end_time/duration, so
+        # skip when it is already in a terminal state.
+        if nemesis.status != NemesisStatus.RUNNING.value:
+            return "updated"
+        nemesis.status = NemesisStatus(nem_req.status).value
+        nemesis.stack_trace = nem_req.message
+        nemesis.end_time = int(time())
+        nemesis.duration = nemesis.end_time - nemesis.start_time
+        await nemesis.save()
+        run.update_nemesis_stats(NemesisStatus(nem_req.status).value)
+        await run.save()
 
         return "updated"
 
