@@ -1,12 +1,14 @@
 """Backfill the ARGUS-178 ``priority`` column of ``jira_issue`` from Jira.
 
 Reads every row without a priority, asks Jira for those keys in batches, and
-writes the ``priority`` column alone.
+writes the ``priority`` column alone, only while it is still empty
+(``IF priority = null``).
 
-A row that already holds a priority is skipped, so re-running is safe. A batch
-that Jira refuses is logged and the scan continues; the summary reports how many
-keys failed, and a second run retries them. A key that Jira does not return, or
-returns without a priority, counts as missing.
+A row that already holds a priority is skipped, so re-running is safe. A key
+whose rows gained a priority between the search and the write counts as skipped.
+A batch that Jira refuses is logged and the scan continues; the summary reports
+how many keys failed, and a second run retries them. A key that Jira does not
+return, or returns without a priority, counts as missing.
 
 Run it after ``sync-models`` has added the column.
 
@@ -42,7 +44,7 @@ async def rows_without_priority(key: str | None = None) -> list[JiraIssue]:
 
 
 async def backfill(key: str | None = None) -> dict[str, int]:
-    counts = {"updated": 0, "missing": 0, "failed": 0}
+    counts = {"updated": 0, "skipped": 0, "missing": 0, "failed": 0}
     rows_by_key: dict[str, list[JiraIssue]] = defaultdict(list)
     for row in await rows_without_priority(key):
         rows_by_key[row.key].append(row)
@@ -65,10 +67,16 @@ async def backfill(key: str | None = None) -> dict[str, int]:
                 LOGGER.info("Jira returned no priority for %s", issue_key)
                 counts["missing"] += 1
                 continue
+            applied = False
             for row in rows_by_key[issue_key]:
-                await row.update(priority=priority)
-            counts["updated"] += 1
-        LOGGER.info("Processed %s keys...", counts["updated"] + counts["missing"] + counts["failed"])
+                result = await row.update(priority=priority, if_conditions={"priority": None})
+                applied = result.applied or applied
+            if applied:
+                counts["updated"] += 1
+            else:
+                LOGGER.info("%s gained a priority since the scan started, skipped", issue_key)
+                counts["skipped"] += 1
+        LOGGER.info("Processed %s keys...", sum(counts.values()))
     return counts
 
 
@@ -78,7 +86,7 @@ def main() -> None:
     args = parser.parse_args()
 
     counts = asyncio.run(backfill(args.key))
-    LOGGER.info("Done. %(updated)s keys updated, %(missing)s missing, %(failed)s failed.", counts)
+    LOGGER.info("Done. %(updated)s keys updated, %(skipped)s skipped, %(missing)s missing, %(failed)s failed.", counts)
     if counts["failed"]:
         LOGGER.warning("Re-run the script to retry the %s failed keys.", counts["failed"])
 
