@@ -499,6 +499,30 @@ def test_nemesis_submit_keeps_two_nemeses_with_one_start_time(api_client, sct_ru
     }
 
 
+async def test_nemesis_submit_concurrent_submissions_keep_every_increment(api_client, sct_run_id, monkeypatch):
+    start_time = 1779196845
+    original_get = SCTTestRun.get
+    interleaved = False
+
+    async def get_then_submit_in_parallel(*args, **kwargs):
+        nonlocal interleaved
+        run = await original_get(*args, **kwargs)
+        if not interleaved:
+            interleaved = True
+            await SCTService.submit_nemesis(
+                UUID(sct_run_id), _nemesis_submit_payload("ModifyTableMaxIndexIntervalMonkey", start_time)["nemesis"])
+        return run
+
+    monkeypatch.setattr(SCTTestRun, "get", get_then_submit_in_parallel)
+    resp = api_client.post(f"{API_PREFIX}/{sct_run_id}/nemesis/submit",
+                           json=_nemesis_submit_payload("GrowShrinkClusterNemesis", start_time))
+    assert resp.status_code == 200, resp.text
+
+    resp = api_client.get(f"/api/v1/run/scylla-cluster-tests/{sct_run_id}")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["response"]["nemesis_stats"] == {"total": 2}
+
+
 async def test_stress_commands(api_client, sct_run_id):
     payload = {
         "log_name": "example.log",

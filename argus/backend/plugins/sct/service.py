@@ -34,7 +34,7 @@ from argus.common.utils import clamp_ts_to_milliseconds
 
 LOGGER = logging.getLogger(__name__)
 MAX_SIMILARS = 20
-PACKAGE_SUBMIT_ATTEMPTS = 5
+CONDITIONAL_WRITE_ATTEMPTS = 5
 
 
 class SCTServiceException(Exception):
@@ -93,7 +93,7 @@ class SCTService:
     @staticmethod
     async def submit_packages(run_id: UUID, packages: list[dict]) -> str:
         submitted = [PackageVersion(**package_dict) for package_dict in packages]
-        for _ in range(PACKAGE_SUBMIT_ATTEMPTS):
+        for _ in range(CONDITIONAL_WRITE_ATTEMPTS):
             try:
                 run: SCTTestRun = await SCTTestRun.get(id=run_id)
             except DocumentNotFound as exception:
@@ -433,6 +433,19 @@ class SCTService:
         return await SCTNemesis.find(run_id=run_id).all()
 
     @staticmethod
+    async def _add_nemesis_stat(run: SCTTestRun, key: str) -> None:
+        for _ in range(CONDITIONAL_WRITE_ATTEMPTS):
+            stored = dict(run.nemesis_stats or {})
+            counted = {**stored, key: stored.get(key, 0) + 1}
+            # An empty map reads back as null, so the condition compares against null.
+            result = await run.update(if_conditions={"nemesis_stats": stored or None}, nemesis_stats=counted)
+            if result.applied:
+                return
+            LOGGER.info("Run %s nemesis stats changed during the update, retrying", run.id)
+            run = await SCTTestRun.get(id=run.id)
+        raise SCTServiceException("Concurrent nemesis updates did not settle", str(run.id))
+
+    @staticmethod
     async def submit_nemesis(run_id: UUID, nemesis_details: dict) -> str:
         nem_req = NemesisSubmissionRequest(**nemesis_details)
         node_desc = NodeDescription(
@@ -455,8 +468,7 @@ class SCTService:
         try:
             run: SCTTestRun = await SCTTestRun.get(id=run_id)
             await nemesis_info.save()
-            run.update_nemesis_stats("total")
-            await run.save()
+            await SCTService._add_nemesis_stat(run, "total")
         except DocumentNotFound as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
@@ -489,8 +501,7 @@ class SCTService:
         nemesis.end_time = int(time())
         nemesis.duration = nemesis.end_time - nemesis.start_time
         await nemesis.save()
-        run.update_nemesis_stats(NemesisStatus(nem_req.status).value)
-        await run.save()
+        await SCTService._add_nemesis_stat(run, NemesisStatus(nem_req.status).value)
 
         return "updated"
 

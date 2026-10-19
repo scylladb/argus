@@ -446,13 +446,6 @@ class SCTTestRun(PluginModelBase):
     def add_screenshot(self, screenshot_link: str):
         self.screenshots.append(screenshot_link)
 
-    def update_nemesis_stats(self, key: str):
-        stats = dict(self.nemesis_stats) if self.nemesis_stats else {}
-        val = stats.get(key, 0)
-        val += 1
-        stats[key] = val
-        self.nemesis_stats = stats
-
     async def sut_timestamp(self, sut_package_name) -> float:
         """converts scylla-server date to timestamp and adds revision in sub-seconds precision to differentiate
         scylla versions from the same day. It's not perfect, but we don't know exact version time."""
