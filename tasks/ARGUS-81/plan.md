@@ -250,15 +250,17 @@ stays in every plan built from a spec.
       `loadTests(group, {force})`. Each records an error state.
     - `ensureStats(release, {force})`. `STATS_TTL = 300_000`. It skips
       dormant releases and dedupes on `promise`.
-  - Prefetch:
-    - `limiter`: a small queue that runs at most 2 tasks at a time.
-    - `prefetch(release)` replaces any pending prefetch with a 150 ms timer
-      for this release. `cancelPrefetch()` drops it, and the list calls it on
-      `pointerleave`. A row never calls back on `blur` or `pointerleave`:
-      Chrome fires `blur` while a clicked row is torn down, and the row's
-      callback props then read as a Svelte sentinel.
-    - `loadEager()` sends every release with `priority > 0` through the
-      limiter.
+  - Prefetch, removed by Task 14 and Task 15: stats now load only when a
+    release opens.
+    - `limiter`: a small queue that ran at most 2 tasks at a time. Task 15
+      removes it.
+    - `prefetch(release)` and `cancelPrefetch()` fetched the release under the
+      pointer after 150 ms. Task 14 removes them.
+    - `loadEager()` fetched every release with `priority > 0`. Task 15
+      removes it.
+    - A row never calls back on `blur` or `pointerleave`: Chrome fires `blur`
+      while a clicked row is torn down, and the row's callback props then read
+      as a Svelte sentinel.
 - **`StatusSummary.svelte`:**
   - Props: `stats` and `compact = false`.
   - Segments follow `StatusSortPriority` order, sized `count / total * 100%`.
@@ -348,8 +350,8 @@ stays in every plan built from a spec.
 - **`SidebarRow.svelte`.**
   - Props: `kind`, `name`, `active`, `pressed`, `subtitle`, `stats`,
     `statsLoading`, `statsError`, `status`, `startTime`, `pinned`, `dormant`,
-    `assignees`, `focusRequest`, `onActivate`, `onKeydown`, `onFocus`,
-    `onHover`.
+    `assignees`, `focusRequest`, `onActivate`, `onKeydown` and `onFocus`.
+    Task 13 adds `hidden` and `onToggleHidden`; Task 14 removes `onHover`.
   - It renders a single `<button>` with `tabindex={active ? 0 : -1}`, and
     `aria-pressed` on test rows.
   - Releases show a `text-bg-secondary` "dormant" badge and a pin toggle, a
@@ -431,8 +433,9 @@ stays in every plan built from a spec.
   within each part.
 - **`SidebarState.pinned`:** a `SvelteSet` read from
   `localStorage["argus-workspace-pinned-releases"]` (`PINS_KEY`).
-  `togglePin(release)` writes it back, inside try/catch, and queues the stats
-  of a newly pinned release. `loadEager` includes pinned releases.
+  `togglePin(release)` writes it back, inside try/catch. Until Task 15 it also
+  queued the stats of a newly pinned release, and `loadEager` included pinned
+  releases.
 - **Sidebar focus:** `pending = {id, move}`. A search pick navigates with
   `move: false`, which marks the row active without a focus request, so the
   search keeps the focus. Rows focus only on a request aimed at them
@@ -664,8 +667,9 @@ The PR body lists these:
 - **`SidebarState.hidden`:** a `SvelteSet` read from
   `localStorage["argus-workspace-hidden-releases"]` (`HIDDEN_KEY`), through
   the same read and write helpers as the pins. `toggleHidden(release)` writes
-  it back, and queues the stats of an unhidden release that is pinned or has a
-  priority. `showHidden` is page state. `loadEager` skips hidden releases.
+  it back. Until Task 15 it also queued the stats of an unhidden release that
+  was pinned or had a priority, and `loadEager` skipped hidden releases.
+  `showHidden` is page state.
 - **`Sidebar`:** the release list filters out hidden releases unless
   `showHidden` is on. A header button at the release list, shown while
   `hiddenCount > 0`, toggles `showHidden` with `aria-pressed`, and turns it off
@@ -693,7 +697,7 @@ The PR body lists these:
 **Internals:**
 - **Prefetch:** `SidebarState.prefetch`, `cancelPrefetch` and `PREFETCH_DELAY`
   go, with the row's `onHover` prop and its pointer and focus handlers.
-  `loadEager`, a pin and an opened release still load stats.
+  `loadEager`, a pin and an opened release still load stats, until Task 15.
 - **`SidebarRow`:** one `detail-line` under the name holds the last run date,
   the status bar, the spinner or the error. Its `min-height` is one line of
   small text, so every row has the height of a row with its stats loaded.
@@ -703,3 +707,26 @@ The PR body lists these:
 - [x] Check in headless Chrome: every release row is 65 px, group rows keep their height while the stats load, and hovering or tabbing through release rows sends no stats request.
 - [x] Run the verify sequence.
 - [x] Committed in 7005108c and 1374ab08 `improvement(workspace)`.
+
+## Task 15 — Stats only for an opened release
+
+**Files:**
+- Modify:
+  - `frontend/WorkArea/Sidebar/sidebarState.svelte.ts`
+  - `frontend/WorkArea/Sidebar/Sidebar.svelte`
+  - `tasks/ARGUS-81/spec.md`, and the earlier tasks of this plan that described the prefetch
+- Test: `frontend/WorkArea/Sidebar/sidebarState.test.ts`, `frontend/WorkArea/Sidebar/Sidebar.test.ts`
+
+**Internals:**
+- **`SidebarState`:** `loadEager`, `Limiter` and `STATS_SLOTS` go.
+  `togglePin` and `toggleHidden` only change their set and write it back.
+  `enterRelease`, `enterGroup` and *Refresh* are the only callers of
+  `ensureStats`.
+- **`Sidebar`:** the mount loads the releases and nothing else.
+
+- [x] Replace the eager tests with one that loads the release list, pins a release, sees no stats request, opens a release, and sees its one request; the retry test opens the release before it goes back to the list.
+- [x] Run the new test against the old code and confirm the failure.
+- [x] Write the smallest change that passes it.
+- [x] Check in headless Chrome: the release list sends no stats request on load or on a pin, opening scylla-master sends one, and back on the list only its row shows a bar; every row stays 65 px.
+- [x] Run the verify sequence.
+- [x] Committed in 13f27c02 `improvement(workspace)`.

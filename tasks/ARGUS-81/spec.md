@@ -12,8 +12,7 @@ parses a richer query, and returns ranked pages.
 Releases gain an admin-set `priority` that orders them on the server, and a
 viewer can pin releases in the browser to list them above everything else, or
 hide them from the list. The sidebar loads a compact stats summary only for
-prioritized, pinned and opened releases, and re-sorts tests whenever stats
-change.
+the release a viewer opens, and re-sorts tests whenever stats change.
 
 Below the `md` breakpoint the sidebar becomes an off-canvas drawer, opened
 from a fixed bottom-left button.
@@ -51,8 +50,8 @@ browser's `localStorage`; when storage is blocked they last for the page.
 
 A hide toggle sits beside the pin. The release list leaves out the releases
 this viewer hid, and a button above the list, shown while any are hidden,
-shows them again, muted. Hidden releases stay in the search results and load
-no stats eagerly. They live in `localStorage` like the pins.
+shows them again, muted. Hidden releases stay in the search results. They live
+in `localStorage` like the pins.
 
 **Search.** `TestLookup` keeps one `SearchIndex` per worker. The index is
 compact: one entry per release, group and test, plus parent refs and a
@@ -89,16 +88,17 @@ Ranking applies these keys in order:
 5. `version_key`.
 6. `id`, so that pages stay stable between requests.
 
-**Stats.** The sidebar keeps one summary per release, with a 5-minute TTL. It
-merges requests that are already in flight. Eager loads share a limiter of 2
-concurrent requests.
+**Stats.** The sidebar fetches the summary of a release when a viewer opens
+it, and never for the release list itself, whatever a release's priority or
+pin. It keeps one summary per release, with a 5-minute TTL, and merges
+requests that are already in flight. The group list shows the status bars
+from that summary. Back on the release list, the row of a release opened
+earlier on the page shows its bar from the same summary.
 
 ```mermaid
 flowchart TD
-    E{Trigger} -->|page load, priority above 0 or pinned, not hidden| Q[limiter, 2 slots]
-    E -->|pinned now, or unhidden with priority or pin| Q
-    E -->|release opened| F
-    Q --> F{dormant?}
+    E{Trigger} -->|release opened| F{dormant?}
+    E -->|Refresh: forced inside a release, failed rows on the release list| F
     F -->|yes| N[no request]
     F -->|no| C{cached and younger than 5 min, not forced?}
     C -->|yes| U[use cache]
@@ -331,7 +331,7 @@ def summarize_release_stats(stats: dict) -> dict: ...
 |---|---|
 | The index holds about 20–30 MB per worker | Store compact slotted entries only. Measure on the dev snapshot (~42k entries). |
 | Workers serve results up to 60 s old, and two pages may come from different workers | Accept it. The TTL bounds the drift. The `api_usage.md` entry states it. |
-| Eager fetches hit cold snapshots, which recompute the stats | Two slots, prioritized and pinned releases only. Measure a cold scylla-master summary. |
+| Opening a release hits a cold snapshot, which recomputes the stats | Fetch on open only, one release at a time. Measure a cold scylla-master summary. |
 | The new ranking reorders results in the planner and the CLI | Exact matches and prioritized releases come first, which helps both. The fields do not change. |
 | The `/test_runs` breakout page loses its search box | The page shows a shared selection. The PR body states the loss. |
 | Nothing moves to the top until an admin sets `priority` | The PR body asks an admin to set scylla-master and scylla-staging after the deploy. |
@@ -339,9 +339,6 @@ def summarize_release_stats(stats: dict) -> dict: ...
 
 ## Decisions
 
-- Release rows load stats eagerly when `priority > 0`, prefetch on hover or
-  focus, and load on open. This avoids a recompute for every row scrolled
-  past. (spec)
 - Within the same priority, text parts sort A→Z and number parts sort newest
   first. The server does the sort, so the `/releases` page matches. (spec)
 - The panel search box goes away. The sidebar search takes over run-UUID
@@ -402,6 +399,7 @@ def summarize_release_stats(stats: dict) -> dict: ...
   place, and the feedback on it preferred the bar. (review)
 - Groups keep the name order. The staging review asked to sort them by the
   number of runs. (review)
-- Hovering or focusing a release row fetches no stats. The staging review
-  asked the release list to fetch stats only for the releases a viewer marks
-  and the one they open. (review)
+- Stats load only when a viewer opens a release. The release list fetches
+  none, on page load, on a pin, or on hover or focus. The staging review found
+  the list's stats slow, and its rows changing height as they arrived, and
+  asked for the status bars only after a release is opened. (review)
