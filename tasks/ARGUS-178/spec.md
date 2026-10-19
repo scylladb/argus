@@ -30,12 +30,18 @@ scope, and every label chip picks the text color with the higher contrast.
   `refresh_stale_issues`, the scan behind `refresh-issues`.
 - **The backfill.** A dated script under `scripts/migration/` lists the rows
   without a priority. It asks Jira for them in batches with one
-  `key in (...)` search per batch, and writes only the `priority` column of
-  each returned row. A re-run skips the rows already filled.
+  `key in (...)` search per batch. It writes only the `priority` column of
+  each returned row, and only while that column is still empty, through a
+  conditional write (`IF priority = null`). A priority that `refresh-issues`
+  stored between the search and the write stays. A re-run skips the rows
+  already filled.
 - **The issue payloads.** They carry `priority` without a serializer change,
   because every one of them dumps the model.
+- **Priority order.** The ranked names follow Jira's own priority order:
+  `Release Blocker`, `P0`, `P1`, `P2`, `P3`, `P4`. Any other name ranks after
+  `P4`, and an issue without a priority ranks last.
 - **The Jira card.** It shows the priority as a Bootstrap badge after the state
-  pill. It links to `/issues/<KEY>` unless the page that mounts it turns the
+  pill. `Release Blocker` and `P0` take the danger color. It links to `/issues/<KEY>` unless the page that mounts it turns the
   link off. The issue page turns it off.
 - **Label colors.** The scope of a label is the text before its first `/` or
   `:`, in lowercase, or the whole name when it has neither.
@@ -49,16 +55,16 @@ scope, and every label chip picks the text color with the higher contrast.
 - **The widget.** It replaces the fixed Open and Closed switches with three
   checkbox groups, plus a priority sort and a filled label panel.
   - **Status** lists every distinct state of the fetched issues.
-  - **Priority** lists every distinct priority of the fetched Jira issues, with
-    `none` for an issue without one.
+  - **Priority** lists every distinct priority of the fetched Jira issues in the
+    priority order, with `no priority` for an issue without one.
   - **Space** lists every distinct project of the fetched Jira issues.
   - The groups record the values the user unchecked. A value that first appears
     after a re-fetch starts checked.
   - The "All Labels" panel lists the distinct label names of the fetched
     issues, in the colors their cards use. Picking one shares the selection
     that a click on a card label makes, and both match a label by its name.
-  - "By priority" orders P0 to P4 when "Descending order" is on, and P4 to P0
-    when it is off. Issues without a priority come last either way.
+  - "By priority" follows the priority order when "Descending order" is on, and
+    reverses it when it is off. Issues without a priority come last either way.
 
 ```mermaid
 sequenceDiagram
@@ -75,7 +81,7 @@ sequenceDiagram
     S->>T: save changed rows with priority
     B->>T: list rows with priority = null
     B->>J: search key in (batch), fields=priority
-    B->>T: update priority only
+    B->>T: update priority only, IF priority = null
 ```
 
 The filter the widget applies to each fetched issue:
@@ -97,10 +103,11 @@ flowchart TD
 
 | Condition | Behavior |
 |---|---|
-| Jira returns no `priority` field, or `priority` is null | Store `None`. The card shows no badge, and the issue counts as `none` in the filter |
+| Jira returns no `priority` field, or `priority` is null | Store `None`. The card shows no badge, and the issue counts as `no priority` in the filter |
 | A backfill batch raises a Jira or network error | Log it, count the batch as failed, continue with the next batch. The summary asks for a re-run |
 | Jira omits a key from a batch result (deleted, moved, not visible) | Leave the row unchanged and count it as missing |
-| A Jira priority outside P0–P4 | Show it with the neutral badge and rank it after P4 |
+| A row gains a priority between the backfill search and its write | The conditional write leaves it, and the key counts as skipped |
+| A Jira priority outside the ranked names | Show it with the neutral badge and rank it after `P4` |
 | The fetched issues carry no labels | Hide the "All Labels" panel |
 | The widget holds no Jira issues | Hide the Priority and Space groups |
 
@@ -168,8 +175,10 @@ class JiraService:
 ```
 
 ```ts
-export const JIRA_PRIORITIES: readonly string[];
-export const priorityRank: (i: Issue) => number;   // index in JIRA_PRIORITIES, then unknown names, then Infinity
+export const JIRA_PRIORITIES: readonly string[];               // "Release Blocker", "P0", … "P4"
+export const priorityIndex: (priority: string | null) => number; // index in JIRA_PRIORITIES, then unknown names, then Infinity
+export const priorityRank: (i: Issue) => number;               // priorityIndex of a Jira issue, Infinity for GitHub
+export const priorityClass: (priority: string) => string;      // the text-bg-* class of the badge
 export const label2color: (label: Label) => string; // "hsl(<hue>, 65%, <36-48>%)"
 export const labelTextColor: (background: string) => "white" | "black";
 ```
@@ -191,11 +200,14 @@ None.
 ## Decisions
 
 - The column stores the priority name that Jira returns, with no fixed set.
-  Jira owns the priority scheme, and today it is `P0` to `P4`. (spec)
+  Jira owns the priority scheme, and today it is `Release Blocker`, then `P0`
+  to `P4`. (spec)
 - Filtering stays in the browser over the fetched issues, as the text and the
   label filters already do. (spec)
-- The backfill writes the `priority` column alone through a partial update, so
-  a concurrent scan keeps its writes. (spec)
+- The backfill writes the `priority` column alone, and only while it is empty.
+  A plain partial update could replace a newer priority that `refresh-issues`
+  stored between the search and the write, and the scan would not revisit the
+  issue. (review)
 - The runs link sits on the Jira card only, because `/issues/<KEY>` resolves
   Jira keys only. (spec)
 - The "All Labels" panel fix and the priority sort join this task. (spec)
@@ -209,3 +221,9 @@ None.
   unrelated scopes still spread around the wheel. (build)
 - A label chip picks its text color by contrast ratio. The brightness rule of
   `isDark()` left about 10% of the new palette below 4.5:1. (build)
+- `Release Blocker` ranks above `P0`, as in Jira's priority order. 13 SCYLLADB
+  issues carry it, and ranked as an unknown name it sorted below `P4`. (review)
+- An issue without a priority files under an empty key in the filter, shown as
+  `no priority`, so no Jira priority name can share its checkbox. The filter
+  keeps the unchecked values in a set, so a name such as `constructor` cannot
+  read as unchecked. (review)
