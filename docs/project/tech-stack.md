@@ -101,7 +101,8 @@ Frontend commands: `yarn build`, `yarn build:dev`, `yarn build:watch`,
 ### Containers
 
 `Dockerfile` and `docker-entrypoint.sh` build the application image. `dev-db/`
-holds a Docker Compose file that starts a single ScyllaDB node for local work.
+holds a Docker Compose file that starts one to three ScyllaDB nodes and the
+vector store for local work, on named volumes, with one `scylla.yaml` template.
 
 ### CI
 

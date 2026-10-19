@@ -1,42 +1,137 @@
+# Local ScyllaDB cluster for Argus: one node by default, two or three with a profile.
+#
+#   docker compose -f dev-db/docker-compose.yaml up -d                      # node1 only
+#   COMPOSE_PROFILES=3-nodes SCYLLA_RF=3 docker compose -f dev-db/docker-compose.yaml up -d
+#   docker compose --profile 3-nodes -f dev-db/docker-compose.yaml up -d     # same, flag form
+#
+# The --profile flag goes before the subcommand and overrides COMPOSE_PROFILES from .env.
+# Each node is its own rack, so SCYLLA_RF must be 1 or the node count (RF-rack-valid, which
+# secondary indexes on a tablets keyspace require).
+# Settings come from the environment or a gitignored dev-db/.env; see docs/dev-setup.md.
+
+x-scylla-node: &scylla-node
+  image: "scylladb/scylla:${SCYLLA_VERSION:-2026.3.3}"
+  stop_grace_period: 2m
+  healthcheck:
+    test: ["CMD-SHELL", "cqlsh -u cassandra -p cassandra -e 'SELECT now() FROM system.local' $$(hostname -i)"]
+    interval: 10s
+    timeout: 10s
+    retries: 60
+    start_period: 30s
+
 services:
-  alpha:
-    image: "scylladb/scylla:2025.4.0"
-    user: "${UID:-1000}:${GID:-1000}"
+  config:
+    image: "scylladb/scylla:${SCYLLA_VERSION:-2026.3.3}"
+    user: "0"
+    network_mode: none
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        for n in 1 2 3; do
+          sed "s|@VECTOR_STORE_URI@|$${VECTOR_STORE_URI}|g" /template/scylla.yaml > /config/node$$n/scylla.yaml
+          printf 'dc=datacenter1\nrack=rack%s\n' "$$n" > /config/node$$n/cassandra-rackdc.properties
+          chown -R scylla:scylla /config/node$$n
+        done
+        printf '%s' cassandra > /var/lib/vector-store/db_password
     environment:
-      - HOME=/tmp
+      VECTOR_STORE_URI: http://172.24.99.10:6080
+    volumes:
+      - ./scylla.yaml.template:/template/scylla.yaml:ro
+      - node1_config:/config/node1
+      - node2_config:/config/node2
+      - node3_config:/config/node3
+      - vector_store:/var/lib/vector-store
+
+  node1:
+    <<: *scylla-node
+    command: --smp ${SCYLLA_SMP:-1} --memory ${SCYLLA_MEMORY:-2G} --overprovisioned 1 --io-setup 0
     networks:
       scylla_bridge:
-        ipv4_address: 172.18.0.2
-        aliases:
-          - argus-alpha
-    command: --smp 1 --overprovisioned 1 --io-setup 0
+        ipv4_address: 172.24.99.1
+    depends_on:
+      config:
+        condition: service_completed_successfully
     volumes:
-      - ./scylla:/var/lib/scylla:rw
-      - ./alpha-config:/etc/scylla:rw
-      - ./alpha-config.d:/etc/scylla.d:rw
+      - node1_data:/var/lib/scylla
+      - node1_config:/etc/scylla
+
+  node2:
+    <<: *scylla-node
+    profiles: ["2-nodes", "3-nodes"]
+    command: --smp ${SCYLLA_SMP:-1} --memory ${SCYLLA_MEMORY:-2G} --overprovisioned 1 --io-setup 0 --seeds 172.24.99.1
+    networks:
+      scylla_bridge:
+        ipv4_address: 172.24.99.2
+    depends_on:
+      node1:
+        condition: service_healthy
+    volumes:
+      - node2_data:/var/lib/scylla
+      - node2_config:/etc/scylla
+
+  node3:
+    <<: *scylla-node
+    profiles: ["3-nodes"]
+    command: --smp ${SCYLLA_SMP:-1} --memory ${SCYLLA_MEMORY:-2G} --overprovisioned 1 --io-setup 0 --seeds 172.24.99.1
+    networks:
+      scylla_bridge:
+        ipv4_address: 172.24.99.3
+    depends_on:
+      node2:
+        condition: service_healthy
+    volumes:
+      - node3_data:/var/lib/scylla
+      - node3_config:/etc/scylla
+
+  keyspaces:
+    image: "scylladb/scylla:${SCYLLA_VERSION:-2026.3.3}"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        for i in $$(seq 1 120); do
+          cqlsh -u cassandra -p cassandra 172.24.99.1 -e "CREATE KEYSPACE IF NOT EXISTS argus_tablets WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': ${SCYLLA_RF:-1}} AND tablets = {'enabled': true};" && exit 0
+          echo "keyspace not created yet (needs ${SCYLLA_RF:-1} live nodes), retrying"
+          sleep 5
+        done
+        exit 1
+    networks:
+      - scylla_bridge
+    depends_on:
+      node1:
+        condition: service_healthy
+
   vector-store:
-    image: "scylladb/vector-store:1.2.0"
+    image: "scylladb/vector-store:${VECTOR_STORE_VERSION:-1.13.0}"
     environment:
-      - VECTOR_STORE_SCYLLADB_URI=172.18.0.2:9042
-      - VECTOR_STORE_URI=172.18.0.3:6080
+      - VECTOR_STORE_SCYLLADB_URI=172.24.99.1:9042
+      - VECTOR_STORE_URI=172.24.99.10:6080
       - VECTOR_STORE_THREADS=1
       - VECTOR_STORE_SCYLLADB_USERNAME=cassandra
       - VECTOR_STORE_SCYLLADB_PASSWORD_FILE=/var/lib/vector-store/db_password
     networks:
       scylla_bridge:
-        ipv4_address: 172.18.0.3
+        ipv4_address: 172.24.99.10
         aliases:
           - vector-store
-    ports:
-      - "6080:6080"
     volumes:
-      - ./vector-store:/var/lib/vector-store:rw
-      - ./vector-store:/etc/vector-store:ro
+      - vector_store:/var/lib/vector-store
+    depends_on:
+      node1:
+        condition: service_healthy
+
+volumes:
+  node1_config: {}
+  node2_config: {}
+  node3_config: {}
+  node1_data: {}
+  node2_data: {}
+  node3_data: {}
+  vector_store: {}
 
 networks:
   scylla_bridge:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.18.0.0/24
-          gateway: 172.18.0.1
+        - subnet: 172.24.99.0/24
+          gateway: 172.24.99.254

@@ -18,7 +18,7 @@ each time you sit down to work:
 ```bash
 # 1. Start the database (wait ~60-90s for ScyllaDB to initialize)
 docker compose -f dev-db/docker-compose.yaml up -d
-docker logs -f dev-db-alpha-1 2>&1 | grep -m1 "initialization completed"
+docker logs -f dev-db-node1-1 2>&1 | grep -m1 "initialization completed"
 
 # 2. Start the backend (in one terminal)
 uv run uvicorn --factory argus_backend:create_app --port 5000 --reload
@@ -32,12 +32,13 @@ yarn build:watch
 When you're done:
 
 ```bash
-# Stop Flask with Ctrl+C, then stop the database
+# Stop the backend with Ctrl+C, then stop the database. The data stays in
+# the Docker volumes.
 docker compose -f dev-db/docker-compose.yaml down
 ```
 
-> The database **must be running** before you start Flask. Flask connects
-> to ScyllaDB at startup and will crash immediately if it can't reach it.
+> The database **must be running** before you start the backend. It connects
+> to ScyllaDB at startup and exits immediately if it can't reach it.
 
 ---
 
@@ -69,10 +70,10 @@ Then replace the contents with this minimal local config:
 ```yaml
 BASE_URL: "http://localhost:5000"
 SCYLLA_CONTACT_POINTS:
-    - 172.18.0.2
+    - 172.24.99.1
 SCYLLA_USERNAME: cassandra
 SCYLLA_PASSWORD: cassandra
-SCYLLA_KEYSPACE_NAME: argus
+SCYLLA_KEYSPACE_NAME: argus_tablets
 
 APP_LOG_LEVEL: INFO
 SECRET_KEY: MUSTBEUNIQUE
@@ -92,6 +93,9 @@ EMAIL_ENABLED: false
 JOB_VALIDITY_PERIOD_DAYS: 30
 ```
 
+The keyspace is `argus_tablets`: the AI embedding models are bound to that
+name, and the local setup keeps every table in one keyspace.
+
 **`GITHUB_ENABLED: false` / `JIRA_ENABLED: false`** disables all remote
 calls to GitHub issue tracking and Jira respectively. In this mode no
 credentials are needed for those integrations and attempting to create a
@@ -109,23 +113,19 @@ keys are required.
 ### 3. Start the database and seed it
 
 ```bash
-# Pre-create data directories so Docker doesn't create them as root
-mkdir -p dev-db/scylla dev-db/alpha-config.d
-
-# Start ScyllaDB + vector store
+# Start ScyllaDB + vector store. Compose also creates the keyspace.
 docker compose -f dev-db/docker-compose.yaml up -d
 
 # Wait for ScyllaDB to be ready (~60-90 seconds)
-docker logs -f dev-db-alpha-1 2>&1 | grep -m1 "initialization completed"
+docker logs -f dev-db-node1-1 2>&1 | grep -m1 "initialization completed"
 
-# Create keyspaces, sync schemas, create admin user, populate test data
-uv run python dev-db/seed_data.py --create-keyspace
+# Sync schemas, create admin user, populate test data
+uv run python dev-db/seed_data.py
 ```
 
-The seed script creates everything you need in one shot: both keyspaces
-(`argus` + `argus_tablets`), all table schemas, an admin user, and
-synthetic test data. See [Seed Script Reference](#seed-script-reference)
-below for details.
+The seed script creates everything you need in one shot: all table
+schemas, an admin user, and synthetic test data. See
+[Seed Script Reference](#seed-script-reference) below for details.
 
 ### 4. Verify it works
 
@@ -144,20 +144,105 @@ groups populated with runs, events, and results.
 
 ---
 
+## Database Layout
+
+`dev-db/docker-compose.yaml` runs these services on the bridge network
+`172.24.99.0/24`:
+
+| Service        | Address              | Role                                                              |
+| -------------- | -------------------- | ----------------------------------------------------------------- |
+| `node1`        | `172.24.99.1`        | ScyllaDB, always on, seed of the cluster                          |
+| `node2`        | `172.24.99.2`        | ScyllaDB, profile `2-nodes` or `3-nodes`                          |
+| `node3`        | `172.24.99.3`        | ScyllaDB, profile `3-nodes`                                       |
+| `vector-store` | `172.24.99.10:6080`  | Vector search, reached by ScyllaDB over the bridge network         |
+| `config`       | —                    | One-shot: renders `dev-db/scylla.yaml.template` into each node's config volume |
+| `keyspaces`    | —                    | One-shot: creates `argus_tablets` with the configured RF          |
+
+Nodes join one at a time; `node2` waits for `node1` to be healthy and
+`node3` for `node2`. The `keyspaces` service retries until the cluster has
+enough nodes for the replication factor, then exits.
+
+Each node is its own rack (`rack1`, `rack2`, `rack3` in `datacenter1`), so
+the keyspace is RF-rack-valid, which ScyllaDB requires before it accepts a
+secondary index on a tablets keyspace. That is why `SCYLLA_RF` must be
+either `1` or the node count.
+
+Each node mounts its own config volume (`dev-db_node1_config` and so on)
+at `/etc/scylla`. The `config` service renders the template into every
+volume on each `up`; restart the nodes to pick up a change. The template
+also defines the `cassandra` / `cassandra` superuser: ScyllaDB 2026.x
+creates none on its own when password authentication is on.
+
+Data lives in named volumes (`dev-db_node1_data` and so on). `down` keeps
+them; wipe everything with:
+
+```bash
+docker compose -f dev-db/docker-compose.yaml down -v
+```
+
+### Settings
+
+Put overrides in `dev-db/.env` (gitignored) or in the shell:
+
+| Variable               | Default    | Meaning                                                   |
+| ---------------------- | ---------- | --------------------------------------------------------- |
+| `COMPOSE_PROFILES`     | unset      | `2-nodes` or `3-nodes` for a multi-node cluster           |
+| `SCYLLA_RF`            | `1`        | Replication factor of `argus_tablets`: `1` or the node count  |
+| `SCYLLA_SMP`           | `1`        | Shards per node                                           |
+| `SCYLLA_MEMORY`        | `2G`       | Memory per node                                           |
+| `SCYLLA_VERSION`       | `2026.3.3` | ScyllaDB image tag                                        |
+| `VECTOR_STORE_VERSION` | `1.13.0`   | Vector store image tag                                    |
+
+A three-node cluster with RF 3:
+
+```bash
+# dev-db/.env
+COMPOSE_PROFILES=3-nodes
+SCYLLA_RF=3
+SCYLLA_SMP=2
+```
+
+The profile can also be given on the command line; the flag goes before
+the subcommand and overrides the `.env` value:
+
+```bash
+docker compose --profile 3-nodes -f dev-db/docker-compose.yaml up -d
+```
+
+The driver only talks to the hosts listed in `SCYLLA_CONTACT_POINTS`, so
+list every node you run:
+
+```yaml
+SCYLLA_CONTACT_POINTS:
+    - 172.24.99.1
+    - 172.24.99.2
+    - 172.24.99.3
+```
+
+### Talking to the database
+
+```bash
+docker exec dev-db-node1-1 cqlsh 172.24.99.1 -u cassandra -p cassandra \
+  -e "DESCRIBE KEYSPACES"
+docker exec dev-db-node1-1 nodetool status
+```
+
+---
+
 ## Seed Script Reference
 
-The seed script (`dev-db/seed_data.py`) runs standalone -- no Flask
+The seed script (`dev-db/seed_data.py`) runs standalone -- no backend
 required. It connects directly to ScyllaDB using the settings from
 `argus_web.yaml`.
 
 ### Usage
 
 ```bash
-# First time: create keyspaces + seed data
-uv run python dev-db/seed_data.py --create-keyspace
+# First time: sync schemas + seed data
+uv run python dev-db/seed_data.py
 
 # Reset: wipe seed data and recreate from scratch
-uv run python dev-db/seed_data.py --force --create-keyspace
+uv run python dev-db/seed_data.py --force
 
 # Custom credentials
 uv run python dev-db/seed_data.py --username dev --password dev123
@@ -165,12 +250,12 @@ uv run python dev-db/seed_data.py --username dev --password dev123
 
 ### Options
 
-| Flag                | Description                                          |
-| ------------------- | ---------------------------------------------------- |
-| `--create-keyspace` | Create `argus` + `argus_tablets` keyspaces if needed |
-| `--force`           | Delete existing seed data before recreating          |
-| `--username NAME`   | Admin username (default: `admin`)                    |
-| `--password PASS`   | Admin password (default: `admin`)                    |
+| Flag                | Description                                                  |
+| ------------------- | ------------------------------------------------------------ |
+| `--create-keyspace` | Create the keyspace if compose has not (uses `SCYLLA_REPLICATION_FACTOR`) |
+| `--force`           | Delete existing seed data before recreating                  |
+| `--username NAME`   | Admin username (default: `admin`)                            |
+| `--password PASS`   | Admin password (default: `admin`)                            |
 
 ### What it creates
 
@@ -197,21 +282,15 @@ entities that already exist. Use `--force` to wipe and recreate.
 
 ### Without the seed script (manual setup)
 
-If you prefer to create the keyspace and sync tables by hand:
+Compose already created the keyspace, so syncing the table schemas is one
+command:
 
 ```bash
-# Create keyspace via CQL
-docker exec dev-db-alpha-1 cqlsh 172.18.0.2 -u cassandra -p cassandra \
-  -e "CREATE KEYSPACE IF NOT EXISTS argus WITH replication = \
-      {'class': 'NetworkTopologyStrategy', 'replication_factor': 1};"
-
-# Sync table schemas via the Argus CLI
 uv run python -m argus.backend.cli sync-models
 ```
 
-Note: this does **not** create the `argus_tablets` keyspace (needed by AI
-embedding models) and does not create any user or test data. You'll need
-to register a user through the UI or another method.
+This does not create any user or test data. You'll need to register a user
+through the UI or another method.
 
 ---
 
@@ -219,23 +298,23 @@ to register a user through the UI or another method.
 
 | Task              | Command                                                                                                        |
 | ----------------- | -------------------------------------------------------------------------------------------------------------- |
-| Pre-create dirs   | `mkdir -p dev-db/scylla dev-db/alpha-config.d` (first time only)                                               |
 | Start DB          | `docker compose -f dev-db/docker-compose.yaml up -d`                                                           |
-| Wait for DB       | `docker logs -f dev-db-alpha-1 2>&1 \| grep -m1 "initialization completed"`                                    |
-| Seed (first time) | `uv run python dev-db/seed_data.py --create-keyspace`                                                          |
-| Seed (reset)      | `uv run python dev-db/seed_data.py --force --create-keyspace`                                                  |
+| Wait for DB       | `docker logs -f dev-db-node1-1 2>&1 \| grep -m1 "initialization completed"`                                    |
+| Seed (first time) | `uv run python dev-db/seed_data.py`                                                                            |
+| Seed (reset)      | `uv run python dev-db/seed_data.py --force`                                                                    |
 | Start backend     | `uv run uvicorn --factory argus_backend:create_app --port 5000 --reload`                                       |
 | Start frontend    | `yarn build:watch`                                                                                             |
 | Run linter        | `uv run ruff check`                                                                                            |
 | Run backend tests | `uv run pytest argus/backend/tests`                                                                            |
 | Run client tests  | `uv run pytest argus/client/tests`                                                                             |
 | Stop DB           | `docker compose -f dev-db/docker-compose.yaml down`                                                            |
+| Wipe DB           | `docker compose -f dev-db/docker-compose.yaml down -v`                                                         |
 
 ---
 
 ## Troubleshooting
 
-### Flask crashes on startup with a connection error
+### The backend exits on startup with a connection error
 
 The database is not running. Start it first:
 
@@ -244,10 +323,10 @@ docker compose -f dev-db/docker-compose.yaml up -d
 ```
 
 Then wait for ScyllaDB to finish initializing (~60-90 seconds) before
-starting Flask. Check readiness with:
+starting the backend. Check readiness with:
 
 ```bash
-docker exec dev-db-alpha-1 cqlsh 172.18.0.2 -u cassandra -p cassandra \
+docker exec dev-db-node1-1 cqlsh 172.24.99.1 -u cassandra -p cassandra \
   -e "DESCRIBE KEYSPACES"
 ```
 
@@ -257,10 +336,11 @@ Your `argus_web.yaml` is missing email keys and `EMAIL_ENABLED` is not
 set to `false`. Either add the `EMAIL_*` values or disable email entirely
 with `EMAIL_ENABLED: false`.
 
-### ScyllaDB won't start -- permission denied
+### The `keyspaces` service keeps retrying
 
-Docker volumes (`dev-db/scylla/`, `dev-db/alpha-config.d/`) may have
-wrong ownership. See the permissions fix in the first-time setup section.
+`SCYLLA_RF` is higher than the number of nodes that are up. Lower it, or
+enable the matching profile, then run `up -d` again. `docker compose -f
+dev-db/docker-compose.yaml logs keyspaces` shows the attempts.
 
 ### `Connection error: AuthenticationFailed`
 
