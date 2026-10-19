@@ -327,6 +327,25 @@ describe("Issues.svelte — checkbox filters", () => {
         expect(optionNames("Priority")).toEqual(["Release Blocker", "P0", "P1"]);
     });
 
+    it("starts a value checked when it first appears after a re-fetch", async () => {
+        const first = [githubIssue(1, "GitHub open issue", "open"), githubIssue(2, "GitHub closed issue", "closed")];
+        const second = [...first, jiraIssue("SCYLLADB-20", "Scylla in progress P0", "in progress", "P0")];
+        vi.stubGlobal("fetch", vi.fn()
+            .mockResolvedValueOnce({ json: () => Promise.resolve({ status: "ok", response: first }) })
+            .mockResolvedValueOnce({ json: () => Promise.resolve({ status: "ok", response: second }) }));
+        const { rerender } = renderIssues({ productVersion: "6.1.0" });
+        await waitFor(() => expect(shownTitles()).toHaveLength(2));
+        await fireEvent.click(within(screen.getByRole("group", { name: "Status" })).getByLabelText("closed"));
+
+        await rerender({ props: { ...BASE_PROPS, productVersion: "6.2.0" } });
+        await waitFor(() => expect(shownTitles()).toContain("Scylla in progress P0"));
+
+        const status = within(screen.getByRole("group", { name: "Status" }));
+        expect((status.getByLabelText("in progress") as HTMLInputElement).checked).toBe(true);
+        expect((status.getByLabelText("closed") as HTMLInputElement).checked).toBe(false);
+        expect(shownTitles().sort()).toEqual(["GitHub open issue", "Scylla in progress P0"]);
+    });
+
     it("renders no Priority and no Space group for GitHub issues only", async () => {
         await renderWith(MIXED_ISSUES.filter((issue) => issue.subtype === "github"));
 
