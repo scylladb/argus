@@ -132,9 +132,9 @@ class SCTUnprocessedEvent(Document):
 
 class SCTNemesis(Document):
     run_id: Annotated[UUID, PrimaryKey()]
-    start_time: Annotated[int, ClusteringKey()]
+    start_time: Annotated[int, ClusteringKey(clustering_key_index=0)]
+    name: Annotated[str, ClusteringKey(clustering_key_index=1)]
     class_name: str
-    name: str
     duration: int
     target_node: NodeDescription
     status: str
@@ -142,7 +142,7 @@ class SCTNemesis(Document):
     stack_trace: str
 
     class Settings:
-        name = "sct_nemesis"
+        name = "sct_nemesis_v2"
 
 
 class SCTResource(Document):
