@@ -282,10 +282,11 @@ it.each(ALL_JIRA_STATES)("JiraIssueIcon has an icon for state '%s'", (state) => 
 
 describe("priorityRank", () => {
     it.each([
-        ["P0", 0],
-        ["P2", 2],
-        ["P4", 4],
-        ["Critical", 5],
+        ["Release Blocker", 0],
+        ["P0", 1],
+        ["P2", 3],
+        ["P4", 5],
+        ["Critical", 6],
     ])("ranks Jira priority %s at %s", (priority, rank) => {
         expect(priorityRank({ ...JIRA_ISSUE, priority })).toBe(rank);
     });
@@ -301,6 +302,7 @@ describe("priorityRank", () => {
 
 describe("priorityClass", () => {
     it.each([
+        ["Release Blocker", "text-bg-danger"],
         ["P0", "text-bg-danger"],
         ["P1", "text-bg-warning"],
         ["P4", "text-bg-light"],

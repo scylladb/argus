@@ -139,9 +139,10 @@ export const JiraIssueIcon: Record<JiraState, IconDefinition> = {
     new: faDotCircle,
 };
 
-export const JIRA_PRIORITIES = ["P0", "P1", "P2", "P3", "P4"];
+export const JIRA_PRIORITIES: readonly string[] = ["Release Blocker", "P0", "P1", "P2", "P3", "P4"];
 
-export const JiraPriorityClass: Record<string, string> = {
+const JiraPriorityClass: Record<string, string> = {
+    "Release Blocker": "text-bg-danger",
     P0: "text-bg-danger",
     P1: "text-bg-warning",
     P2: "text-bg-primary",
