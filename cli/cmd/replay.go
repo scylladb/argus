@@ -341,7 +341,7 @@ func uploadReplay(
 	req, err := client.NewRequest(ctx, "POST", route, nil)
 	if err != nil {
 		_ = pr.Close()
-		<-packErrCh
+		<-packErrCh //nolint:errcheck
 		return nil, err
 	}
 	req.Body = pr
