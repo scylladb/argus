@@ -18,6 +18,9 @@ from itsdangerous import TimestampSigner
 from starlette.testclient import TestClient
 import os
 from pathlib import Path
+import re
+import socket
+import subprocess
 import time
 import uuid
 from types import SimpleNamespace
@@ -50,16 +53,91 @@ logging.getLogger('cassandra.cluster').setLevel(logging.WARNING)
 LOGGER = logging.getLogger(__name__)
 
 
+TEST_PORTS = (9042, 19042, 7000, 7001, 9001, 9180, 10000, 6080)
+CLAIM_PORT = 9099
+
+SUPERVISORD_CONF = """[supervisord]
+nodaemon=true
+logfile=/dev/stdout
+logfile_maxbytes=0
+pidfile=/var/tmp/supervisord.pid
+
+[inet_http_server]
+port = {address}:9001
+
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
+
+[supervisorctl]
+
+[include]
+files = /etc/supervisord.conf.d/scylla-server.conf
+"""
+
+
+def bound_socket(address: str, port: int) -> socket.socket:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        sock.bind((address, port))
+    except OSError as error:
+        sock.close()
+        raise OSError(f"{address}:{port} is busy") from error
+    return sock
+
+
+def claim_loopback_address() -> tuple[str, socket.socket]:
+    """The first 127.0.1.0/24 address with every test port free, and the socket that holds its claim port."""
+    busy = ""
+    for host in range(1, 255):
+        address = f"127.0.1.{host}"
+        sockets = []
+        try:
+            for port in (CLAIM_PORT, *TEST_PORTS):
+                sockets.append(bound_socket(address, port))
+        except OSError as error:
+            busy = str(error)
+            for sock in sockets:
+                sock.close()
+            continue
+        claim, *probes = sockets
+        claim.listen()
+        for sock in probes:
+            sock.close()
+        return address, claim
+    raise RuntimeError(f"No address in 127.0.1.0/24 has the test ports {TEST_PORTS} free; {busy}")
+
+
+def current_ref() -> str:
+    """The checked-out branch, or the short commit id of a detached HEAD."""
+    for args in (("git", "rev-parse", "--abbrev-ref", "HEAD"), ("git", "rev-parse", "--short", "HEAD")):
+        try:
+            ref = subprocess.run(args, capture_output=True, text=True, check=False, cwd=Path(__file__).parent).stdout
+        except OSError:
+            return "detached"
+        if ref.strip() and ref.strip() != "HEAD":
+            return ref.strip()
+    return "detached"
+
+
 @fixture(scope='session')
-def argus_db():
+def argus_db(request, tmp_path_factory):
+    address, claim = claim_loopback_address()
+    request.addfinalizer(claim.close)
+    suffix = re.sub(r"[^A-Za-z0-9_.-]", "_", f"{current_ref()}_{address}")
+    supervisord_conf = tmp_path_factory.mktemp("supervisord") / "supervisord.conf"
+    supervisord_conf.write_text(SUPERVISORD_CONF.format(address=address))
     CONTAINERS = {
         "database": {
             "image": "scylladb/scylla:2026.3.3",
-            "name": "argus_test_scylla",
+            "name": f"argus_test_scylla_{suffix}",
             "detach": True,
             "network_mode": "host",
             "command": [
-                "--listen-address", "127.0.0.1",
+                "--listen-address", address,
+                "--rpc-address", address,
+                "--api-address", address,
+                "--prometheus-address", address,
                 "--smp", "1",
                 "--overprovisioned", "1",
                 "--rf-rack-valid-keyspaces", "1",
@@ -69,16 +147,23 @@ def argus_db():
                 "--auth-superuser-name", "cassandra",
                 "--auth-superuser-salted-password",
                 r"\$6\$argusdev\$QoXJxKv2KybwyGg1hvwCCn00nZdHk7lv9HcpZWgrwdNQEKg70jegeVmMSkUqTngHVD4iNnLIFBkYMED/6/CCT1",
-                "--vector-store-primary-uri", "http://localhost:6080",
-            ]
+                "--vector-store-primary-uri", f"http://{address}:6080",
+            ],
+            "volumes": {
+                str(supervisord_conf): {
+                    "bind": "/etc/supervisord.conf",
+                    "mode": "ro",
+                },
+            },
         },
         "vs": {
             "image": "scylladb/vector-store:1.13.0",
-            "name": "vector-search_test",
+            "name": f"vector-search_test_{suffix}",
             "detach": True,
             "network_mode": "host",
             "environment": {
-                "VECTOR_STORE_SCYLLADB_URI": "localhost:9042",
+                "VECTOR_STORE_URI": f"{address}:6080",
+                "VECTOR_STORE_SCYLLADB_URI": f"{address}:9042",
                 "VECTOR_STORE_THREADS": "4",
                 "VECTOR_STORE_SCYLLADB_USERNAME": "cassandra",
                 "VECTOR_STORE_SCYLLADB_PASSWORD_FILE": "/var/lib/vector-store/db_password",
@@ -105,6 +190,7 @@ def argus_db():
     for name, params in CONTAINERS.items():
         container = docker_client.containers.run(**params)
         containers[name] = container
+        request.addfinalizer(lambda container=container: container.remove(force=True))
     log_wait_timeout = 120
     start_time = time.time()
 
@@ -122,7 +208,7 @@ def argus_db():
                 "ScyllaDB did not log 'init - serving' within the timeout period.")
 
     containers["database"].reload()
-    container_ip = "localhost"
+    container_ip = address
     print(f"Container IP: {container_ip}")
 
     if need_sync_models:
@@ -190,9 +276,6 @@ def argus_db():
 
     yield database
     database.shutdown()
-    for _, container in containers.items():
-        container.remove(force=True)
-        pass
 
 
 @fixture(scope='session')
