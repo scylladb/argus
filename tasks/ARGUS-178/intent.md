@@ -50,7 +50,8 @@ The priority Jira returns for ARGUS-178 itself:
 }
 ```
 
-The priorities in use are `P0`, `P1`, `P2`, `P3` and `P4`.
+The priorities in use, in Jira's order, are `Release Blocker`, `P0`, `P1`,
+`P2`, `P3` and `P4`.
 
 The status filter of the widget, `frontend/Github/Issues.svelte`:
 

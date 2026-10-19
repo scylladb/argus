@@ -360,3 +360,93 @@ Steps:
   shows. A Task leaves the Seen Again Counter untouched, so the check writes
   nothing to Jira.
 - [ ] Run `refresh-issues`, and confirm that it keeps the priorities.
+
+## Task 10 — Rank Release Blocker above P0
+
+From the review of PR #1129. It replaces the `JIRA_PRIORITIES` and the badge map of Task 3.
+
+**Files:**
+- Modify: `frontend/Common/IssueTypes.ts`
+- Test: `frontend/Common/IssueTypes.test.ts`, `frontend/Github/Issues.test.ts`
+
+**Internals:**
+- `export const JIRA_PRIORITIES: readonly string[] = ["Release Blocker", "P0", "P1", "P2", "P3", "P4"]`,
+  Jira's own priority order. No `as const`, because `indexOf(priority: string)` then fails the
+  type check.
+- `JiraPriorityClass` loses its `export`, since only `priorityClass` reads it, and gains
+  `"Release Blocker": "text-bg-danger"`.
+
+Steps:
+- [ ] Write the failing tests:
+  - `IssueTypes.test.ts`: `priorityRank` gives 0 for `Release Blocker`, 1 for `P0`, 5 for `P4`
+    and 6 for an unknown name. `priorityClass("Release Blocker")` is `text-bg-danger`.
+  - `Issues.test.ts`: the Priority group lists `Release Blocker` before `P0`. "By priority" puts
+    a Release Blocker issue before the P0 one, and after it with "Descending order" off.
+- [ ] Run `yarn test` and confirm that the new tests fail.
+- [ ] Make the changes.
+- [ ] Run the verify sequence and `yarn build`.
+- [ ] Commit, with the boxes of this task checked.
+
+## Task 11 — Keep a newer priority in the backfill
+
+From the review of PR #1129.
+
+**Files:**
+- Modify: `scripts/migration/migration_2026-10-15_backfill_jira_issue_priority.py`
+
+**Internals:**
+- Each write becomes `await row.update(priority=priority, if_conditions={"priority": None})`,
+  which coodie sends as `UPDATE … IF priority = null`. Its `LWTResult.applied` says whether the
+  row was still empty.
+- A key counts as `updated` when one of its rows applied, and as `skipped` otherwise, with an
+  INFO line. The summary reports the skipped keys.
+
+Steps:
+- [ ] On the dev database, check that the conditional write fills an empty priority and leaves a
+  set one, reporting the stored value.
+- [ ] Make the change.
+- [ ] Clear the priority of one dev row, run the backfill with `--key` on it, and confirm one
+  update. A re-run finds no row.
+- [ ] Run the verify sequence.
+- [ ] Commit, with the boxes of this task checked.
+
+## Task 12 — Keep the unchecked filter values in sets
+
+From the review of PR #1129.
+
+**Files:**
+- Modify: `frontend/Github/Issues.svelte`
+- Test: `frontend/Github/Issues.test.ts`
+
+**Internals:**
+- `const excluded: Record<FilterGroup, SvelteSet<string>>`, one `SvelteSet` from
+  `svelte/reactivity` per group. `isExcluded` and the checkboxes call `has`, and `toggleFilter`
+  calls `add` or `delete`. An inherited name such as `constructor` no longer reads as unchecked.
+- `NO_PRIORITY = ""`, a key no Jira priority name takes. The checkbox shows it as
+  `no priority`. `optionPriority` goes: `priorityIndex("")` already returns `Infinity`.
+
+Steps:
+- [ ] Write the failing tests in `Issues.test.ts`:
+  - An issue whose priority is `constructor` shows on the first render.
+  - A Jira priority named `none` and an issue without a priority get two checkboxes, `none` and
+    `no priority`. Unchecking `no priority` hides only the issue without one.
+  - The existing tests read `no priority` in place of `none`.
+- [ ] Run `yarn test` and confirm that the new tests fail.
+- [ ] Make the changes.
+- [ ] Run the verify sequence and `yarn build`.
+- [ ] Commit, with the boxes of this task checked.
+
+## Task 13 — Test that a value new after a re-fetch starts checked
+
+From the review of PR #1129.
+
+**Files:**
+- Test: `frontend/Github/Issues.test.ts`
+
+Steps:
+- [ ] Write the test: render open and closed issues, uncheck `closed`, then change
+  `productVersion` so the widget re-fetches and also receives an `in progress` issue. The
+  `in progress` box is checked and its issue shows, while `closed` stays unchecked and its issue
+  stays hidden.
+- [ ] Run it, and confirm that it passes against the current code.
+- [ ] Commit, with the boxes of this task checked.
