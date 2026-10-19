@@ -9,7 +9,7 @@ SCYLLA_CONTACT_POINTS:
 SCYLLA_USERNAME: user
 # Password
 SCYLLA_PASSWORD: password
-# Default keyspace (can be created using 'create-keyspace' command with RF set to the number of contact points)
+# Default keyspace (dev-db/docker-compose.yaml creates it; so does dev-db/seed_data.py --create-keyspace)
 SCYLLA_KEYSPACE_NAME: mykeyspacename
 # Replication factor used - if set, will override contact_points as amount of nodes for replication
 # SCYLLA_REPLICATION_FACTOR: 3

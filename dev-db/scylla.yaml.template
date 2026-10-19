@@ -1,0 +1,20 @@
+# Rendered into the scylla_config volume by the `config` service of docker-compose.yaml.
+# The VECTOR_STORE_URI placeholder is replaced with the compose value.
+cluster_name: argus
+# One rack per node; the config service writes each node's cassandra-rackdc.properties.
+endpoint_snitch: GossipingPropertyFileSnitch
+num_tokens: 256
+authenticator: org.apache.cassandra.auth.PasswordAuthenticator
+authorizer: org.apache.cassandra.auth.CassandraAuthorizer
+# 2026.x creates no superuser unless both are set. Password: cassandra (sha512-crypt).
+auth_superuser_name: cassandra
+auth_superuser_salted_password: "$6$argusdev$QoXJxKv2KybwyGg1hvwCCn00nZdHk7lv9HcpZWgrwdNQEKg70jegeVmMSkUqTngHVD4iNnLIFBkYMED/6/CCT1"
+api_address: 127.0.0.1
+api_doc_dir: /opt/scylladb/api/api-doc/
+api_ui_dir: /opt/scylladb/swagger-ui/dist/
+batch_size_warn_threshold_in_kb: 128
+batch_size_fail_threshold_in_kb: 1024
+commitlog_segment_size_in_mb: 32
+developer_mode: true
+tablets_mode_for_new_keyspaces: enabled
+vector_store_primary_uri: @VECTOR_STORE_URI@
