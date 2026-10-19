@@ -217,7 +217,7 @@ and the `RunConfigParam.run_id` text column.
 | Risk | Response |
 |---|---|
 | A caller outside the routers passes a string to a retyped service method: a test, a migration script, argusAI. | The plan greps every caller, including `scripts/` and `argusAI/`. Tests pass a `UUID`. |
-| A route that used to accept a bad ID now rejects it. | The bad ID failed before with a `ValueError`. The exception name changes, and `arguments` carries the list of validation errors in place of one string. The Go CLI decodes `arguments` as strings, so it cannot read this envelope, as it already cannot for the routes typed before. A follow-up issue fixes the CLI decoder. The clone test that sends `"release-1"` changes to real IDs. |
+| A route that used to accept a bad ID now rejects it. | The bad ID failed before with a `ValueError`. The exception name changes, and `arguments` carries the list of validation errors in place of one string. The Go CLI decodes `arguments` as strings, so it cannot read this envelope, as it already cannot for the routes typed before. ARGUS-258 fixes the CLI decoder. The clone test that sends `"release-1"` changes to real IDs. |
 | `UUID` parsing lowercases an uppercase ID, so a response keyed by `str(id)` no longer echoes the client's spelling. | The frontend sends only IDs it read from the server, which are lowercase. |
 | A dashboard or an alert counts validation errors in the exception metric. | The metric then counted client mistakes as faults. The INFO log keeps the trace ID. |
 
