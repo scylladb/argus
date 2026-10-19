@@ -3,7 +3,6 @@ import { fetchJson } from "../../Common/ApiUtils";
 import { displayName, type NamedEntity, type ReleaseSummary } from "./sidebarSort";
 
 export const STATS_TTL = 300_000;
-export const STATS_SLOTS = 2;
 export const PINS_KEY = "argus-workspace-pinned-releases";
 export const HIDDEN_KEY = "argus-workspace-hidden-releases";
 
@@ -98,31 +97,6 @@ export const searchPage = async (
     };
 };
 
-export class Limiter {
-    #active = 0;
-    #waiting: (() => void)[] = [];
-
-    constructor(readonly slots: number) {}
-
-    async run<T>(task: () => Promise<T>): Promise<T> {
-        if (this.#active < this.slots) {
-            this.#active++;
-        } else {
-            await new Promise<void>((resolve) => this.#waiting.push(resolve));
-        }
-        try {
-            return await task();
-        } finally {
-            const next = this.#waiting.shift();
-            if (next) {
-                next();
-            } else {
-                this.#active--;
-            }
-        }
-    }
-}
-
 export class SidebarState {
     releases: Loadable<Release[]> = $state({ loading: false });
     release: Release | null = $state(null);
@@ -135,7 +109,6 @@ export class SidebarState {
     pinned = new SvelteSet<string>(readIds(PINS_KEY));
     hidden = new SvelteSet<string>(readIds(HIDDEN_KEY));
     showHidden = $state(false);
-    #limiter = new Limiter(STATS_SLOTS);
 
     async loadReleases(): Promise<void> {
         this.releases = { data: this.releases.data, loading: true };
@@ -215,32 +188,13 @@ export class SidebarState {
         return data && !("dormant" in data) ? data : undefined;
     }
 
-    #isEager(release: Release): boolean {
-        return !this.hidden.has(release.id) && (this.pinned.has(release.id) || (release.priority ?? 0) > 0);
-    }
-
-    loadEager(): Promise<unknown> {
-        const eager = (this.releases.data ?? []).filter((release) => this.#isEager(release));
-        return Promise.all(eager.map((release) => this.#limiter.run(() => this.ensureStats(release))));
-    }
-
     togglePin(release: Release): void {
-        if (this.pinned.has(release.id)) {
-            this.pinned.delete(release.id);
-        } else {
-            this.pinned.add(release.id);
-            this.#limiter.run(() => this.ensureStats(release));
-        }
+        if (!this.pinned.delete(release.id)) this.pinned.add(release.id);
         writeIds(PINS_KEY, this.pinned);
     }
 
     toggleHidden(release: Release): void {
-        if (this.hidden.has(release.id)) {
-            this.hidden.delete(release.id);
-            if (this.#isEager(release)) this.#limiter.run(() => this.ensureStats(release));
-        } else {
-            this.hidden.add(release.id);
-        }
+        if (!this.hidden.delete(release.id)) this.hidden.add(release.id);
         writeIds(HIDDEN_KEY, this.hidden);
     }
 

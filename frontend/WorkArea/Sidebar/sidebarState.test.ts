@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { HIDDEN_KEY, Limiter, PINS_KEY, STATS_TTL, SidebarState, type Release } from "./sidebarState.svelte";
+import { HIDDEN_KEY, PINS_KEY, STATS_TTL, SidebarState, type Release } from "./sidebarState.svelte";
 
 const release = (name: string, extra: Partial<Release> = {}): Release => ({
     id: `${name}-id`,
@@ -136,25 +136,6 @@ describe("SidebarState.ensureStats", () => {
     });
 });
 
-describe("SidebarState eager stats", () => {
-    it("fetches eagerly only the releases with a priority", async () => {
-        const fetchMock = vi.fn().mockResolvedValue(ok(SUMMARY));
-        vi.stubGlobal("fetch", fetchMock);
-        const state = new SidebarState();
-        state.releases = {
-            loading: false,
-            data: [release("scylla-master", { priority: 10 }), release("scylla-2025.1"), release("scylla-staging", { priority: 5 })],
-        };
-
-        await state.loadEager();
-
-        expect(statsCalls(fetchMock)).toEqual([
-            "/api/v1/release/stats/summary?release=scylla-master&force=0",
-            "/api/v1/release/stats/summary?release=scylla-staging&force=0",
-        ]);
-    });
-});
-
 describe("SidebarState pins", () => {
     it("keeps the pins in the browser across page loads", () => {
         vi.stubGlobal("fetch", vi.fn().mockResolvedValue(ok(SUMMARY)));
@@ -193,18 +174,6 @@ describe("SidebarState pins", () => {
 
         expect(state.pinned.has(old.id)).toBe(true);
     });
-
-    it("fetches the stats of pinned releases eagerly", async () => {
-        const fetchMock = vi.fn().mockResolvedValue(ok(SUMMARY));
-        vi.stubGlobal("fetch", fetchMock);
-        localStorage.setItem(PINS_KEY, JSON.stringify(["scylla-2025.1-id"]));
-        const state = new SidebarState();
-        state.releases = { loading: false, data: [release("scylla-master"), release("scylla-2025.1")] };
-
-        await state.loadEager();
-
-        expect(statsCalls(fetchMock)).toEqual(["/api/v1/release/stats/summary?release=scylla-2025.1&force=0"]);
-    });
 });
 
 describe("SidebarState hidden releases", () => {
@@ -225,46 +194,6 @@ describe("SidebarState hidden releases", () => {
         state.toggleHidden(old);
 
         expect(state.hidden.has(old.id)).toBe(false);
-    });
-
-    it("fetches no stats eagerly for a hidden release, prioritized or pinned", async () => {
-        const fetchMock = vi.fn().mockResolvedValue(ok(SUMMARY));
-        vi.stubGlobal("fetch", fetchMock);
-        localStorage.setItem(PINS_KEY, JSON.stringify(["scylla-2025.1-id"]));
-        localStorage.setItem(HIDDEN_KEY, JSON.stringify(["scylla-master-id", "scylla-2025.1-id"]));
-        const state = new SidebarState();
-        state.releases = {
-            loading: false,
-            data: [release("scylla-master", { priority: 10 }), release("scylla-2025.1"), release("scylla-staging", { priority: 5 })],
-        };
-
-        await state.loadEager();
-
-        expect(statsCalls(fetchMock)).toEqual(["/api/v1/release/stats/summary?release=scylla-staging&force=0"]);
-    });
-});
-
-describe("Limiter", () => {
-    it("runs at most its slot count at once", async () => {
-        const limiter = new Limiter(2);
-        const gates = [deferred(), deferred(), deferred(), deferred()];
-        let running = 0;
-        let peak = 0;
-        const runs = gates.map((gate) =>
-            limiter.run(async () => {
-                running++;
-                peak = Math.max(peak, running);
-                await gate.promise;
-                running--;
-            })
-        );
-
-        await Promise.resolve();
-        expect(running).toBe(2);
-        gates.forEach((gate) => gate.resolve(null));
-        await Promise.all(runs);
-
-        expect(peak).toBe(2);
     });
 });
 
