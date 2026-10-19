@@ -37,6 +37,7 @@
     import type { Issue, GithubSubtype, JiraSubtype, Label } from "../Common/IssueTypes";
     import { getTitle, getRepo, label2color, labelTextColor, priorityIndex, priorityRank } from "../Common/IssueTypes";
     import { untrack } from "svelte";
+    import { SvelteSet } from "svelte/reactivity";
     interface Props {
         id?: string;
         runId: any;
@@ -94,7 +95,7 @@
 
     type SortCriteria = "name" | "repo" | "date" | "priority";
     type FilterGroup = "state" | "priority" | "project";
-    const NO_PRIORITY = "none";
+    const NO_PRIORITY = "";
     const uid = $props.id();
 
     let sortCriteria: SortCriteria = $state("date");
@@ -103,15 +104,15 @@
     let PAGE_SIZE = $state(10);
     let filterString = $state("");
     let selectedLabels: Label[] = $state([]);
-    const excluded: Record<FilterGroup, Record<string, boolean>> = $state({ state: {}, priority: {}, project: {} });
+    const excluded: Record<FilterGroup, SvelteSet<string>> = { state: new SvelteSet(), priority: new SvelteSet(), project: new SvelteSet() };
 
     const jiraIssues = $derived(issues.filter((issue) => issue.subtype === "jira") as JiraSubtype[]);
     const distinct = (values: string[]) => [...new Set(values)].sort();
-    const optionPriority = (value: string) => priorityIndex(value === NO_PRIORITY ? null : value);
+    const optionLabel = (value: string) => (value === NO_PRIORITY ? "no priority" : value);
     const filterOptions: Record<FilterGroup, string[]> = $derived({
         state: distinct(issues.map((issue) => issue.state)),
         priority: distinct(jiraIssues.map((issue) => issue.priority ?? NO_PRIORITY))
-            .sort((lhs, rhs) => optionPriority(lhs) - optionPriority(rhs) || 0),
+            .sort((lhs, rhs) => priorityIndex(lhs) - priorityIndex(rhs) || 0),
         project: distinct(jiraIssues.map((issue) => issue.project)),
     });
 
@@ -172,7 +173,11 @@
     };
 
     const toggleFilter = function(group: FilterGroup, value: string, checked: boolean) {
-        excluded[group][value] = !checked;
+        if (checked) {
+            excluded[group].delete(value);
+        } else {
+            excluded[group].add(value);
+        }
         currentPage = 0;
     };
 
@@ -231,10 +236,10 @@
     };
 
     const isExcluded = function(issue: Issue) {
-        if (excluded.state[issue.state]) return true;
+        if (excluded.state.has(issue.state)) return true;
         if (issue.subtype !== "jira") return false;
         const jira = issue as JiraSubtype;
-        return !!(excluded.priority[jira.priority ?? NO_PRIORITY] || excluded.project[jira.project]);
+        return excluded.priority.has(jira.priority ?? NO_PRIORITY) || excluded.project.has(jira.project);
     };
 
     const shouldFilterByLabels = function(issue: Issue, selectedLabels: Label[]) {
@@ -276,10 +281,10 @@
                     class="form-check-input"
                     type="checkbox"
                     id="{uid}-{group}-{idx}"
-                    checked={!excluded[group][value]}
+                    checked={!excluded[group].has(value)}
                     onchange={(e) => toggleFilter(group, value, e.currentTarget.checked)}
                 />
-                <label class="form-check-label" for="{uid}-{group}-{idx}">{value}</label>
+                <label class="form-check-label" for="{uid}-{group}-{idx}">{optionLabel(value)}</label>
             </div>
         {/each}
     </div>
