@@ -402,13 +402,13 @@ From the review of PR #1129.
   INFO line. The summary reports the skipped keys.
 
 Steps:
-- [ ] On the dev database, check that the conditional write fills an empty priority and leaves a
+- [x] On the dev database, check that the conditional write fills an empty priority and leaves a
   set one, reporting the stored value.
-- [ ] Make the change.
-- [ ] Clear the priority of one dev row, run the backfill with `--key` on it, and confirm one
+- [x] Make the change.
+- [x] Clear the priority of one dev row, run the backfill with `--key` on it, and confirm one
   update. A re-run finds no row.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 12 — Keep the unchecked filter values in sets
 
