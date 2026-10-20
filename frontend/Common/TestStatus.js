@@ -192,6 +192,7 @@ export const NemesisStatusBg = {
     "failed": "bg-danger",
     "skipped": "bg-dark",
     "succeeded": "bg-success",
+    "terminated": "bg-secondary",
 };
 
 export const NemesisStatusFg = {
@@ -200,6 +201,7 @@ export const NemesisStatusFg = {
     "failed": "text-light",
     "skipped": "text-light",
     "succeeded": "text-light",
+    "terminated": "text-light",
 };
 
 export const ResultCellStatusStyleMap = {
