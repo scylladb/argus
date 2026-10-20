@@ -241,10 +241,14 @@ describe("NemesisList", () => {
         ];
         render(NemesisList, { props: { nemeses, resources } });
 
-        await fireEvent.click(screen.getByRole("button", { name: "Filter by db-node-2" }));
+        const nodeFilter = screen.getByRole("button", { name: "Filter by db-node-2" });
+        expect(nodeFilter.getAttribute("title")).toBe("Show only db-node-2");
+
+        await fireEvent.click(nodeFilter);
         expect(rowNames()).toEqual(["b"]);
         expect(screen.getByText("1 of 3 match")).toBeTruthy();
-        expect(screen.getByRole("button", { name: "Filter by db-node-2" }).getAttribute("aria-pressed")).toBe("true");
+        expect(nodeFilter.getAttribute("aria-pressed")).toBe("true");
+        expect(nodeFilter.getAttribute("title")).toBe("Show every node");
 
         await fireEvent.click(screen.getByRole("button", { name: "Clear the node filter" }));
         expect(rowNames()).toEqual(["c", "b", "a"]);
