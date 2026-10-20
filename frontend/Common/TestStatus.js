@@ -178,14 +178,6 @@ export const NemesisStatuses = {
     SUCCEEDED: "succeeded",
 };
 
-export const NemesisStatusBackgrounds = {
-    "started": "table-info",
-    "running": "table-warning",
-    "failed": "table-danger",
-    "skipped": "table-dark",
-    "succeeded": "table-success",
-};
-
 export const NemesisStatusBg = {
     "started": "bg-info",
     "running": "bg-warning",
