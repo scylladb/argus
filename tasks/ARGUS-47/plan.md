@@ -290,7 +290,38 @@ at an expanded details panel. Pure CSS, no unit test.
       themes.
 - [x] Commit, with the boxes of this task checked.
 
-## Task 11 — Live check
+## Task 11 — The row as a keyboard-operable button, the status filters
+
+**Files:**
+- Create: `frontend/TestRun/Nemesis/rowNavigation.ts`
+- Modify: `frontend/TestRun/Nemesis/NemesisRow.svelte`,
+  `frontend/TestRun/Nemesis/NemesisList.svelte`,
+  `frontend/TestRun/Nemesis/nemesisListing.ts`
+- Test: `frontend/TestRun/Nemesis/NemesisList.test.ts`,
+  `frontend/TestRun/Nemesis/nemesisListing.test.ts`
+
+**Internals:** the summary line is a `role="button"` with `tabindex="0"`,
+`aria-expanded` and `aria-labelledby` the name span; a click outside its
+nested buttons and time cells, or Enter and Space, call `onToggle`; the
+`rowNavigation` action moves the focus with the arrow keys, Home and End
+across the `.nemesis-summary` elements of the list. The time cells keep
+the text cursor. `NemesisFilters.excludedStatuses` replaces the single
+status; `svelte-multiselect` shows every status selected and its add,
+remove, remove-all and select-all events update the set; the status badge
+of a row is a button that leaves only that status selected, or restores
+all when it is already the only one.
+
+- [x] Write the failing tests: Enter and Space toggle, the arrow keys,
+      Home and End move the focus; the badge narrows and restores; the
+      multiselect starts full and deselecting one status hides its rows;
+      the helpers filter by the excluded statuses.
+- [x] Run `yarn test frontend/TestRun/Nemesis` and confirm the failure.
+- [x] Write the change.
+- [x] Run `yarn test`, `yarn build`, ESLint, svelte-check on the
+      components, pre-commit, and a screenshot of the toolbar.
+- [x] Commit, with the boxes of this task checked.
+
+## Task 12 — Live check
 
 **Files:** none.
 

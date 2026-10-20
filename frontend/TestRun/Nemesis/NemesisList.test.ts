@@ -3,6 +3,21 @@ import { render, screen, cleanup, fireEvent, within } from "@testing-library/sve
 
 vi.mock("svelte/transition", () => ({ slide: () => ({ duration: 0 }) }));
 
+vi.hoisted(() => {
+    window.matchMedia = (query: string) =>
+        ({
+            matches: false,
+            media: query,
+            onchange: null,
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            addListener: () => {},
+            removeListener: () => {},
+            dispatchEvent: () => false,
+        }) as unknown as MediaQueryList;
+    Element.prototype.getAnimations = () => [];
+});
+
 import NemesisList from "./NemesisList.svelte";
 import type { NemesisInfo, NemesisResource } from "./types";
 
@@ -32,7 +47,9 @@ const three = () => [
     nemesis({ name: "disrupt_add_node", class_name: "DisruptAddNodeMonkey", description: null, start_time: T0 + 300, end_time: 0 }),
 ];
 
-const rowNames = () => screen.getAllByRole("rowgroup").map((group) => within(group).getAllByRole("button")[0].textContent?.trim());
+const rows = () => screen.getAllByRole("row").filter((row) => row.classList.contains("nemesis-row"));
+
+const rowNames = () => rows().map((row) => row.querySelector(".nemesis-name")?.textContent?.trim());
 
 const filter = async (value: string) => fireEvent.input(screen.getByLabelText("Filter"), { target: { value } });
 
@@ -42,7 +59,7 @@ describe("NemesisList", () => {
     it("renders a row per nemesis with name, node, status and times", () => {
         render(NemesisList, { props: { nemeses: three(), resources } });
 
-        expect(screen.getAllByRole("rowgroup")).toHaveLength(3);
+        expect(rows()).toHaveLength(3);
         expect(screen.getAllByText("db-node-1")).toHaveLength(3);
         expect(screen.getAllByText("Succeeded", { selector: ".badge" })).toHaveLength(2);
         expect(screen.getByText("Failed", { selector: ".badge" })).toBeTruthy();
@@ -66,7 +83,7 @@ describe("NemesisList", () => {
     it("renders no subline when the description is null", () => {
         render(NemesisList, { props: { nemeses: [nemesis({ description: null })], resources } });
 
-        expect(screen.getAllByRole("rowgroup")).toHaveLength(1);
+        expect(rows()).toHaveLength(1);
         expect(screen.queryByText(/Restart/)).toBeNull();
     });
 
@@ -160,6 +177,67 @@ describe("NemesisList", () => {
         expect(screen.getByText("running")).toBeTruthy();
     });
 
+    it("expands from a click anywhere on the row except its buttons and times", async () => {
+        const onSelectNode = vi.fn();
+        render(NemesisList, { props: { nemeses: three(), resources, onSelectNode } });
+        const toggle = screen.getByRole("button", { name: "disrupt_restart_node" });
+        const row = toggle.closest(".nemesis-row") as HTMLElement;
+
+        await fireEvent.click(within(row).getByText("Restart (hard) the target node."));
+        expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+        await fireEvent.click(within(row).getByRole("button", { name: "db-node-1" }));
+        expect(onSelectNode).toHaveBeenCalledWith("db-node-1");
+        expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+        await fireEvent.click(within(row).getByRole("button", { name: "Filter by db-node-1" }));
+        expect(within(row).getByRole("button", { name: "Filter by db-node-1" }).getAttribute("aria-pressed")).toBe("true");
+        expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+        await fireEvent.click(within(row).getByText("2026-10-20 10:00:00"));
+        expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+        await fireEvent.click(toggle);
+        expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    });
+
+    it("toggles and moves between rows with the keyboard", async () => {
+        render(NemesisList, { props: { nemeses: three(), resources } });
+        const [first, second, third] = rows().map((row) => within(row).getAllByRole("button")[0]);
+        expect(first.getAttribute("tabindex")).toBe("0");
+
+        await fireEvent.keyDown(first, { key: "Enter" });
+        expect(first.getAttribute("aria-expanded")).toBe("true");
+        await fireEvent.keyDown(first, { key: " " });
+        expect(first.getAttribute("aria-expanded")).toBe("false");
+
+        first.focus();
+        await fireEvent.keyDown(first, { key: "ArrowDown" });
+        expect(document.activeElement).toBe(second);
+        await fireEvent.keyDown(second, { key: "End" });
+        expect(document.activeElement).toBe(third);
+        await fireEvent.keyDown(third, { key: "ArrowDown" });
+        expect(document.activeElement).toBe(third);
+        await fireEvent.keyDown(third, { key: "ArrowUp" });
+        expect(document.activeElement).toBe(second);
+        await fireEvent.keyDown(second, { key: "Home" });
+        expect(document.activeElement).toBe(first);
+    });
+
+    it("narrows the list to one status from the badge and clears it again", async () => {
+        render(NemesisList, { props: { nemeses: three(), resources } });
+        const failed = screen.getByRole("button", { name: "Filter by status Failed" });
+
+        await fireEvent.click(failed);
+        expect(rowNames()).toEqual(["disrupt_stop_node"]);
+        expect(failed.getAttribute("aria-pressed")).toBe("true");
+        expect(screen.getByText("1 of 3 match")).toBeTruthy();
+
+        await fireEvent.click(failed);
+        expect(rowNames()).toHaveLength(3);
+        expect(failed.getAttribute("aria-pressed")).toBe("false");
+    });
+
     it("keeps the details open when a refreshed collection arrives", async () => {
         const { rerender } = render(NemesisList, { props: { nemeses: three(), resources } });
         await fireEvent.click(screen.getByRole("button", { name: "disrupt_add_node" }));
@@ -182,7 +260,7 @@ describe("NemesisList", () => {
         ];
         render(NemesisList, { props: { nemeses: twins, resources } });
 
-        expect(screen.getAllByRole("rowgroup")).toHaveLength(2);
+        expect(rows()).toHaveLength(2);
         await fireEvent.click(screen.getByRole("button", { name: "ModifyTableMonkey" }));
 
         expect(screen.getByText("ModifyTable")).toBeTruthy();
@@ -224,10 +302,10 @@ describe("NemesisList", () => {
             nemesis({ name: "c", start_time: T0 + 200, target_node: { name: "db-node-1", ip: null, shards: null } }),
         ];
         render(NemesisList, { props: { nemeses, resources } });
-        const highlighted = () => screen.getAllByRole("rowgroup").filter((group) => group.classList.contains("bg-primary-subtle"));
+        const highlighted = () => rows().filter((row) => row.classList.contains("bg-primary-subtle"));
 
         await fireEvent.mouseEnter(screen.getAllByTitle("db-node-1")[0]);
-        expect(highlighted().map((group) => within(group).getAllByRole("button")[0].textContent?.trim())).toEqual(["c", "a"]);
+        expect(highlighted().map((row) => row.querySelector(".nemesis-name")?.textContent?.trim())).toEqual(["c", "a"]);
 
         await fireEvent.mouseLeave(screen.getAllByTitle("db-node-1")[0]);
         expect(highlighted()).toHaveLength(0);
@@ -259,18 +337,25 @@ describe("NemesisList", () => {
         expect(rowNames()).toEqual(["c", "b", "a"]);
     });
 
-    it("filters by status from the dropdown", async () => {
+    it("starts with every status selected and filters by deselecting one", async () => {
         render(NemesisList, { props: { nemeses: three(), resources } });
-        const select = screen.getByLabelText("Status") as HTMLSelectElement;
+        const selected = () => [...document.querySelectorAll("ul.selected li")].map((item) => item.textContent?.trim());
 
-        expect([...select.options].map((option) => option.textContent)).toEqual(["All statuses", "Failed", "Succeeded"]);
+        expect(selected()).toEqual(["Failed", "Succeeded"]);
+        expect(screen.getByText("3 nemeses")).toBeTruthy();
 
-        await fireEvent.change(select, { target: { value: "failed" } });
-        expect(rowNames()).toEqual(["disrupt_stop_node"]);
-        expect(screen.getByText("1 of 3 match")).toBeTruthy();
+        await fireEvent.mouseUp(screen.getByTitle("Remove Failed"));
+        await fireEvent.click(screen.getByTitle("Remove Failed"));
+        expect(rowNames()).toEqual(["disrupt_add_node", "disrupt_restart_node"]);
+        expect(screen.getByText("2 of 3 match")).toBeTruthy();
 
-        await fireEvent.change(select, { target: { value: "" } });
+        const input = screen.getByLabelText("Status");
+        await fireEvent.focus(input);
+        const option = screen.getByText("Failed", { selector: "ul.options *" });
+        await fireEvent.mouseUp(option);
+        await fireEvent.click(option);
         expect(rowNames()).toHaveLength(3);
+        expect(screen.getByText("3 nemeses")).toBeTruthy();
     });
 
     it("labels the filter input", () => {
