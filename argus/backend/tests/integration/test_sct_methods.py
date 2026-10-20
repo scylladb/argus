@@ -100,6 +100,7 @@ def test_nemesis_cycle(submitted_sct_client):
     nemeses = client.get_nemeses()
     nem = next(n for n in nemeses if n["name"] == "ChaosMonkey")
     assert nem["status"] == "running"
+    assert nem["description"] == "Killing nodes randomly"
 
     client.finalize_nemesis(name="ChaosMonkey", start_time=start_time,
                             status="succeeded", message="done")
@@ -109,6 +110,7 @@ def test_nemesis_cycle(submitted_sct_client):
     assert nem["status"] == "succeeded"
     assert nem["stack_trace"] == "done"
     assert nem["end_time"] > 0
+    assert nem["description"] == "Killing nodes randomly"
 
 
 def test_event_submission(submitted_sct_client, api_client):

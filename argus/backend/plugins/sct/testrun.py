@@ -130,6 +130,14 @@ class SCTUnprocessedEvent(Document):
         name = "sct_unprocessed_events"
 
 
+class SCTNemesisDescription(Document):
+    digest: Annotated[str, PrimaryKey(), Ascii()]
+    description: str
+
+    class Settings:
+        name = "sct_nemesis_description"
+
+
 class SCTNemesis(Document):
     run_id: Annotated[UUID, PrimaryKey()]
     start_time: Annotated[int, ClusteringKey(clustering_key_index=0)]
@@ -140,9 +148,19 @@ class SCTNemesis(Document):
     status: str
     end_time: int
     stack_trace: str
+    description_digest: Annotated[Optional[str], Ascii()] = None
 
     class Settings:
         name = "sct_nemesis_v2"
+
+    @classmethod
+    async def with_descriptions(cls, nemeses: list["SCTNemesis"]) -> list[dict]:
+        digests = {nemesis.description_digest for nemesis in nemeses if nemesis.description_digest}
+        chunks = await asyncio.gather(
+            *(SCTNemesisDescription.find(digest__in=batch).all() for batch in chunk(digests)))
+        text_by_digest = {row.digest: row.description for rows in chunks for row in rows}
+        return [{**nemesis.model_dump(), "description": text_by_digest.get(nemesis.description_digest)}
+                for nemesis in nemeses]
 
 
 class SCTResource(Document):
@@ -482,7 +500,7 @@ class SCTTestRun(PluginModelBase):
         if run.cloud_setup and run.cloud_setup.backend == XCLOUD_BACKEND and response.get("cloud_setup"):
             response["cloud_setup"].update(await run.get_xcloud_details())
         response["junit_reports"] = junit_reports
-        response["nemesis_data"] = nemesis_data
+        response["nemesis_data"] = await SCTNemesis.with_descriptions(nemesis_data)
         response["allocated_resources"] = allocated_resources
         return response
 

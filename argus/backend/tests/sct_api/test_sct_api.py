@@ -407,6 +407,7 @@ async def test_nemesis_submit_and_finalize(api_client, sct_run_id):
     nem = next(n for n in nemesis_data if n.name ==
                "ChaosMonkey" and n.start_time == 123456)
     assert nem.status == "running"
+    assert _nemesis_entry(api_client, sct_run_id, "ChaosMonkey", 123456)["description"] == "Killing nodes randomly"
 
     finalize_payload = {
         "nemesis": {
@@ -431,6 +432,7 @@ async def test_nemesis_submit_and_finalize(api_client, sct_run_id):
     assert nem.status == "succeeded"
     assert nem.end_time and nem.end_time > 0
     assert nem.stack_trace == "done"
+    assert _nemesis_entry(api_client, sct_run_id, "ChaosMonkey", 123456)["description"] == "Killing nodes randomly"
     stats_after_first = dict(run.nemesis_stats or {})
     end_time_after_first = nem.end_time
 
@@ -450,7 +452,7 @@ async def test_nemesis_submit_and_finalize(api_client, sct_run_id):
     assert dict(run.nemesis_stats or {}) == stats_after_first
 
 
-def _nemesis_submit_payload(name: str, start_time: int) -> dict:
+def _nemesis_submit_payload(name: str, start_time: int, description: str | None = "parallel nemesis") -> dict:
     return {
         "nemesis": {
             "name": name,
@@ -459,7 +461,7 @@ def _nemesis_submit_payload(name: str, start_time: int) -> dict:
             "node_name": "node-1",
             "node_ip": "10.0.0.1",
             "node_shards": 8,
-            "description": "parallel nemesis",
+            "description": description,
         },
         "schema_version": "v8",
     }
@@ -473,6 +475,16 @@ def _nemeses_of(api_client, run_id: str) -> list[dict]:
     resp = api_client.get(f"{API_PREFIX}/{run_id}/nemesis/get")
     assert resp.status_code == 200, resp.text
     return resp.json()["response"]
+
+
+def _run_nemeses(api_client, run_id: str) -> list[dict]:
+    resp = api_client.get(f"/api/v1/run/scylla-cluster-tests/{run_id}")
+    assert resp.status_code == 200, resp.text
+    return resp.json()["response"]["nemesis_data"]
+
+
+def _nemesis_entry(api_client, run_id: str, name: str, start_time: int) -> dict:
+    return next(n for n in _run_nemeses(api_client, run_id) if n["name"] == name and n["start_time"] == start_time)
 
 
 def test_nemesis_submit_keeps_two_nemeses_with_one_start_time(api_client, sct_run_id):
@@ -497,6 +509,56 @@ def test_nemesis_submit_keeps_two_nemeses_with_one_start_time(api_client, sct_ru
         ("GrowShrinkClusterNemesis", "succeeded", ""),
         ("ModifyTableMaxIndexIntervalMonkey", "failed", "Traceback: boom"),
     }
+    assert {n["description"] for n in _nemeses_of(api_client, sct_run_id)
+            if n["start_time"] == start_time} == {"parallel nemesis"}
+
+
+def test_nemesis_description_is_dedented_and_stripped(api_client, sct_run_id):
+    start_time = 1779200001
+    resp = api_client.post(f"{API_PREFIX}/{sct_run_id}/nemesis/submit",
+                           json=_nemesis_submit_payload("DocstringMonkey", start_time,
+                                                        "\n        Kill a node.\n\n        Then restart it.\n        "))
+    assert resp.status_code == 200, resp.text
+
+    assert _nemesis_entry(api_client, sct_run_id, "DocstringMonkey", start_time)["description"] == \
+        "Kill a node.\n\nThen restart it."
+
+
+def test_nemeses_with_equal_descriptions_share_one_digest(api_client, sct_run_id):
+    for name, start_time in (("TwinMonkeyA", 1779200101), ("TwinMonkeyB", 1779200102)):
+        resp = api_client.post(f"{API_PREFIX}/{sct_run_id}/nemesis/submit",
+                               json=_nemesis_submit_payload(name, start_time, "Restart the target node."))
+        assert resp.status_code == 200, resp.text
+
+    first = _nemesis_entry(api_client, sct_run_id, "TwinMonkeyA", 1779200101)
+    second = _nemesis_entry(api_client, sct_run_id, "TwinMonkeyB", 1779200102)
+    assert first["description"] == second["description"] == "Restart the target node."
+    assert first["description_digest"] == second["description_digest"]
+
+
+def test_nemesis_resubmit_keeps_the_first_description(api_client, sct_run_id):
+    start_time = 1779200201
+    for description in ("first", "second"):
+        resp = api_client.post(f"{API_PREFIX}/{sct_run_id}/nemesis/submit",
+                               json=_nemesis_submit_payload("RepeatMonkey", start_time, description))
+        assert resp.status_code == 200, resp.text
+
+    entry = _nemesis_entry(api_client, sct_run_id, "RepeatMonkey", start_time)
+    assert entry["description"] == "first"
+
+
+@pytest.mark.parametrize("description", [pytest.param(..., id="absent"), None, "  \n   \n"])
+def test_nemesis_without_description_returns_null(api_client, sct_run_id, description):
+    start_time = 1779200301
+    payload = _nemesis_submit_payload("SilentMonkey", start_time, description)
+    if description is ...:
+        del payload["nemesis"]["description"]
+    resp = api_client.post(f"{API_PREFIX}/{sct_run_id}/nemesis/submit", json=payload)
+    assert resp.status_code == 200, resp.text
+
+    entry = _nemesis_entry(api_client, sct_run_id, "SilentMonkey", start_time)
+    assert entry["description"] is None
+    assert entry["description_digest"] is None
 
 
 async def test_nemesis_submit_concurrent_submissions_keep_every_increment(api_client, sct_run_id, monkeypatch):
