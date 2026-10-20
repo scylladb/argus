@@ -217,6 +217,22 @@ describe("NemesisList", () => {
         expect(screen.getAllByText("db-node-1")).toHaveLength(3);
     });
 
+    it("highlights every row of the hovered node", async () => {
+        const nemeses = [
+            nemesis({ name: "a", start_time: T0, target_node: { name: "db-node-1", ip: null, shards: null } }),
+            nemesis({ name: "b", start_time: T0 + 100, target_node: { name: "db-node-2", ip: null, shards: null } }),
+            nemesis({ name: "c", start_time: T0 + 200, target_node: { name: "db-node-1", ip: null, shards: null } }),
+        ];
+        render(NemesisList, { props: { nemeses, resources } });
+        const highlighted = () => screen.getAllByRole("rowgroup").filter((group) => group.classList.contains("bg-primary-subtle"));
+
+        await fireEvent.mouseEnter(screen.getAllByTitle("db-node-1")[0]);
+        expect(highlighted().map((group) => within(group).getAllByRole("button")[0].textContent?.trim())).toEqual(["c", "a"]);
+
+        await fireEvent.mouseLeave(screen.getAllByTitle("db-node-1")[0]);
+        expect(highlighted()).toHaveLength(0);
+    });
+
     it("labels the filter input", () => {
         render(NemesisList, { props: { nemeses: three(), resources } });
 

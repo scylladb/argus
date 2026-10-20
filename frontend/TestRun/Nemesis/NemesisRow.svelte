@@ -11,17 +11,26 @@
         nemesis: NemesisInfo;
         resource?: NemesisResource;
         open?: boolean;
+        highlighted?: boolean;
         onToggle: () => void;
         onSelectNode?: (name: string) => void;
+        onHoverNode?: (name: string | null) => void;
     }
 
-    let { nemesis, resource, open = false, onToggle, onSelectNode }: Props = $props();
+    let { nemesis, resource, open = false, highlighted = false, onToggle, onSelectNode, onHoverNode }: Props = $props();
 
     const summary = $derived(descriptionSummary(nemesis.description));
     const inProgress = $derived(nemesis.end_time === 0);
+    const hoverNode = () => onHoverNode?.(nemesis.target_node.name);
+    const leaveNode = () => onHoverNode?.(null);
 </script>
 
-<div class="nemesis-row bg-white px-2 py-1" role="rowgroup">
+{#snippet nodeChip()}
+    <span class="text-muted flex-shrink-0"><Fa icon={faServer} /></span>
+    <span class="text-truncate">{nemesis.target_node.name}</span>
+{/snippet}
+
+<div class="nemesis-row px-2 py-1" class:bg-white={!highlighted} class:bg-primary-subtle={highlighted} role="rowgroup">
     <div class="row g-2 align-items-center" role="row">
         <div class="col min-w-0" role="cell">
             <button
@@ -46,17 +55,21 @@
                         font-monospace small mw-100"
                     title="Show {nemesis.target_node.name} in Resources"
                     onclick={() => onSelectNode(nemesis.target_node.name)}
+                    onmouseenter={hoverNode}
+                    onmouseleave={leaveNode}
+                    onfocus={hoverNode}
+                    onblur={leaveNode}
                 >
-                    <span class="text-muted flex-shrink-0"><Fa icon={faServer} /></span>
-                    <span class="text-truncate">{nemesis.target_node.name}</span>
+                    {@render nodeChip()}
                 </button>
             {:else}
                 <span
                     class="d-inline-flex align-items-center gap-1 rounded px-2 bg-light-two font-monospace small mw-100"
                     title={nemesis.target_node.name}
+                    onmouseenter={hoverNode}
+                    onmouseleave={leaveNode}
                 >
-                    <span class="text-muted flex-shrink-0"><Fa icon={faServer} /></span>
-                    <span class="text-truncate">{nemesis.target_node.name}</span>
+                    {@render nodeChip()}
                 </span>
             {/if}
         </div>
