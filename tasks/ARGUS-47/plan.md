@@ -351,7 +351,27 @@ since the dark theme recolours `text-dark` to light.
       details in both themes.
 - [x] Commit, with the boxes of this task checked.
 
-## Task 13 — Live check
+## Task 13 — Page the rows on the client
+
+**Files:**
+- Modify: `frontend/TestRun/Nemesis/NemesisList.svelte`
+- Test: `frontend/TestRun/Nemesis/NemesisList.test.ts`
+
+**Internals:** `pageSize` (default 100, a `Show` select of 25 to 500) and
+`extraPages` in `$state`; `shown` is the first `pageSize * (extraPages + 1)`
+of the filtered, sorted rows; a bottom bar inside the scroll area shows
+"Showing N of M" and a "Load K more" button while rows remain; an effect
+resets `extraPages` when the filters, the sort or the page size change.
+
+- [x] Write the failing tests: the first page, loading more to the end,
+      the page size, the restart on a filter change.
+- [x] Run `yarn test frontend/TestRun/Nemesis` and confirm the failure.
+- [x] Write the change.
+- [x] Run `yarn test`, `yarn build`, ESLint, pre-commit, and a screenshot
+      of the bottom bar.
+- [x] Commit, with the boxes of this task checked.
+
+## Task 14 — Live check
 
 **Files:** none.
 

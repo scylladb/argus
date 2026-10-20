@@ -383,6 +383,38 @@ describe("NemesisList", () => {
         expect(rowNames()).toHaveLength(3);
     });
 
+    it("shows the first page and loads more from the bottom", async () => {
+        const many = Array.from({ length: 250 }, (_, index) => nemesis({ name: `nemesis_${index}`, start_time: T0 + index }));
+        render(NemesisList, { props: { nemeses: many, resources } });
+
+        expect(rows()).toHaveLength(100);
+        expect(screen.getByText("Showing 100 of 250")).toBeTruthy();
+        expect(screen.getByText("250 nemeses")).toBeTruthy();
+
+        await fireEvent.click(screen.getByRole("button", { name: "Load 100 more" }));
+        expect(rows()).toHaveLength(200);
+
+        await fireEvent.click(screen.getByRole("button", { name: "Load 50 more" }));
+        expect(rows()).toHaveLength(250);
+        expect(screen.queryByText(/Showing/)).toBeNull();
+    });
+
+    it("changes the page size and starts over when a filter changes", async () => {
+        const many = Array.from({ length: 250 }, (_, index) => nemesis({ name: `nemesis_${index}`, start_time: T0 + index }));
+        render(NemesisList, { props: { nemeses: many, resources } });
+
+        await fireEvent.change(screen.getByLabelText("Show"), { target: { value: "50" } });
+        expect(rows()).toHaveLength(50);
+        expect(screen.getByText("Showing 50 of 250")).toBeTruthy();
+
+        await fireEvent.click(screen.getByRole("button", { name: "Load 50 more" }));
+        expect(rows()).toHaveLength(100);
+
+        await filter("nemesis_1");
+        expect(screen.getByText("Showing 50 of 111")).toBeTruthy();
+        expect(rows()).toHaveLength(50);
+    });
+
     it("labels the filter input", () => {
         render(NemesisList, { props: { nemeses: three(), resources } });
 

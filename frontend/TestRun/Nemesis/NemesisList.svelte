@@ -41,13 +41,19 @@
         { key: "end_time", label: "Ended", classes: "col-auto time-col" },
     ];
 
+    const PAGE_SIZES = [25, 50, 100, 250, 500];
+
     const uid = $props.id();
     let sort: SortState = $state(DEFAULT_SORT);
+    let pageSize = $state(100);
+    let extraPages = $state(0);
     let filters = $state({ text: "", node: null as string | null, excludedStatuses: new SvelteSet<string>() });
     let hoveredNode: string | null = $state(null);
     const expanded = new SvelteSet<string>();
 
     const visible = $derived(sortNemeses(filterNemeses(nemeses, filters), sort));
+    const shown = $derived(visible.slice(0, pageSize * (extraPages + 1)));
+    const remaining = $derived(visible.length - shown.length);
     const resourcesByName = $derived(new Map(resources.map((resource) => [resource.name, resource])));
     const statuses = $derived(nemesisStatuses(nemeses));
     const statusOptions: StatusOption[] = $derived(statuses.map((status) => ({ label: statusLabel(status), value: status })));
@@ -56,6 +62,11 @@
         statuses.length > 1 && selectedStatuses.length === 1 ? selectedStatuses[0].value : null
     );
     const filtering = $derived(isFiltering(filters));
+
+    $effect(() => {
+        void [filters.text, filters.node, filters.excludedStatuses.size, sort.key, sort.direction, pageSize];
+        extraPages = 0;
+    });
 
     const toggleNodeFilter = (name: string) => {
         filters.node = filters.node === name ? null : name;
@@ -132,6 +143,14 @@
                 {/snippet}
             </MultiSelect>
         </div>
+        <div class="input-group input-group-sm page-size">
+            <label class="input-group-text" for="{uid}-page-size">Show</label>
+            <select id="{uid}-page-size" class="form-select" bind:value={pageSize}>
+                {#each PAGE_SIZES as size (size)}
+                    <option value={size}>{size}</option>
+                {/each}
+            </select>
+        </div>
         {#if filters.node}
             <span class="badge rounded-pill text-bg-primary d-inline-flex align-items-center gap-1 font-monospace">
                 <Fa icon={faServer} />
@@ -173,7 +192,7 @@
             {/each}
         </div>
         <div class="nemesis-rows border rounded bg-white" role="rowgroup">
-            {#each visible as nemesis (nemesisKey(nemesis))}
+            {#each shown as nemesis (nemesisKey(nemesis))}
                 <NemesisRow
                     {nemesis}
                     resource={resourcesByName.get(nemesis.target_node.name)}
@@ -190,6 +209,14 @@
             {:else}
                 <p class="text-muted text-center m-0 p-3">No nemesis matches the filter.</p>
             {/each}
+            {#if remaining > 0}
+                <div class="d-flex flex-wrap align-items-center justify-content-center gap-3 p-2 small text-muted border-top">
+                    <span>Showing {shown.length} of {visible.length}</span>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick={() => (extraPages += 1)}>
+                        Load {Math.min(pageSize, remaining)} more
+                    </button>
+                </div>
+            {/if}
         </div>
     </div>
 {/if}
@@ -259,6 +286,10 @@
 
         .status-select {
             max-width: 32rem;
+        }
+
+        .page-size {
+            max-width: 9rem;
         }
 
         .nemesis-list :global(.status-col) {
