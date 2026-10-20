@@ -1,4 +1,6 @@
 <script lang="ts" module>
+    import type { NemesisInfo } from "./Nemesis/types";
+
     interface CloudNodesInfo {
         image_id: string,
         instance_type: string,
@@ -30,21 +32,6 @@
         date: string,
         revision_id: string,
         build_id: string,
-    }
-
-    export interface NemesisInfo {
-        class_name: string,
-        name: string,
-        duration: number,
-        target_node: {
-            name: string,
-            ip: string,
-            shards: number
-        }
-        status: string,
-        start_time: number,
-        end_time: number,
-        stack_trace: string,
     }
 
     interface JUnitReport {

@@ -1,6 +1,7 @@
 <script lang="ts">
     import Fa from "svelte-fa";
-    import type { NemesisInfo, SCTTestRun } from "../TestRun.svelte";
+    import type { SCTTestRun } from "../TestRun.svelte";
+    import type { NemesisInfo } from "../Nemesis/types";
     import { SCTEventSeverity, type EventSeverityFilter, type Options, type SCTEvent, type TimelineEvent } from "./SctEvents.svelte";
     import { faArrowDown, faArrowUp, faCheck, faServer, faSpider, faTimeline, faTimes } from "@fortawesome/free-solid-svg-icons";
     import { NemesisStatusBg, NemesisStatusFg } from "../../Common/TestStatus";
