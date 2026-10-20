@@ -182,6 +182,7 @@ describe("labels", () => {
 
     it("pairs the background and the text colour, with a fallback for an unknown status", () => {
         expect(statusClasses("failed")).toBe("bg-danger text-light");
+        expect(statusClasses("running")).toBe("text-bg-warning");
         expect(statusClasses("terminated")).toBe("bg-secondary text-light");
         expect(statusClasses("mystery")).toBe("bg-secondary text-light");
     });

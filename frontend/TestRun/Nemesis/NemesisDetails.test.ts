@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/svelte";
+
+const value = (label: string) => (screen.getByLabelText(label) as HTMLInputElement).value;
 import NemesisDetails from "./NemesisDetails.svelte";
 import type { NemesisInfo, NemesisResource } from "./types";
 
@@ -32,35 +34,48 @@ afterEach(() => {
 });
 
 describe("NemesisDetails", () => {
-    it("shows the class, name, status and duration", () => {
+    it("shows the class, name, status and duration as labelled fields", () => {
         render(NemesisDetails, { props: { nemesis: nemesis(), resource } });
 
-        expect(screen.getByText("DisruptRestartNodeMonkey")).toBeTruthy();
-        expect(screen.getByText("disrupt_restart_node")).toBeTruthy();
+        expect(value("Class")).toBe("DisruptRestartNodeMonkey");
+        expect((screen.getAllByLabelText("Name")[0] as HTMLInputElement).value).toBe("disrupt_restart_node");
         expect(screen.getByText("Succeeded")).toBeTruthy();
-        expect(screen.getByText("1 minute, 30 seconds")).toBeTruthy();
+        expect(value("Duration")).toBe("1 minute, 30 seconds");
+        expect((screen.getByLabelText("Class") as HTMLInputElement).disabled).toBe(true);
     });
 
     it("hides the duration when it is zero", () => {
         render(NemesisDetails, { props: { nemesis: nemesis({ duration: 0 }), resource } });
 
-        expect(screen.queryByText("Duration")).toBeNull();
+        expect(screen.queryByLabelText("Duration")).toBeNull();
     });
 
     it("shows the target node with its private IP and state from the resources", () => {
         render(NemesisDetails, { props: { nemesis: nemesis(), resource } });
 
-        expect(screen.getByText("db-node-1")).toBeTruthy();
-        expect(screen.getByText("1.2.3.4")).toBeTruthy();
-        expect(screen.getByText("10.0.0.5")).toBeTruthy();
-        expect(screen.getByText("running")).toBeTruthy();
-        expect(screen.getByText("8")).toBeTruthy();
+        expect(screen.getAllByLabelText("Name").map((input) => (input as HTMLInputElement).value))
+            .toEqual(["disrupt_restart_node", "db-node-1"]);
+        expect(value("Public IP")).toBe("1.2.3.4");
+        expect(value("Private IP")).toBe("10.0.0.5");
+        expect(value("State")).toBe("running");
+        expect(value("Shards")).toBe("8");
     });
 
     it("shows not found when the node is missing from the resources", () => {
         render(NemesisDetails, { props: { nemesis: nemesis() } });
 
-        expect(screen.getAllByText("not found")).toHaveLength(2);
+        expect(screen.getAllByPlaceholderText("not found")).toHaveLength(2);
+        expect(value("Private IP")).toBe("");
+        expect(screen.queryByRole("button", { name: "Copy Private IP" })).toBeNull();
+    });
+
+    it("copies a field to the clipboard", async () => {
+        const writeText = withClipboard();
+        render(NemesisDetails, { props: { nemesis: nemesis(), resource } });
+
+        await fireEvent.click(screen.getByRole("button", { name: "Copy Class" }));
+
+        expect(writeText).toHaveBeenCalledWith("DisruptRestartNodeMonkey");
     });
 
     it("renders the description with its line breaks", () => {
@@ -103,14 +118,14 @@ describe("NemesisDetails", () => {
         const writeText = withClipboard();
         render(NemesisDetails, { props: { nemesis: nemesis({ status: "failed", stack_trace: "Traceback: boom" }), resource } });
 
-        await fireEvent.click(screen.getByRole("button", { name: /Copy/ }));
+        await fireEvent.click(screen.getByRole("button", { name: "Copy" }));
 
         expect(writeText).toHaveBeenCalledWith("Traceback: boom");
     });
 
-    it("offers no copy button when the clipboard is unavailable", () => {
+    it("offers no copy buttons when the clipboard is unavailable", () => {
         render(NemesisDetails, { props: { nemesis: nemesis({ status: "failed", stack_trace: "Traceback: boom" }), resource } });
 
-        expect(screen.queryByRole("button", { name: /Copy/ })).toBeNull();
+        expect(screen.queryAllByRole("button", { name: /Copy/ })).toHaveLength(0);
     });
 });

@@ -321,7 +321,37 @@ all when it is already the only one.
       components, pre-commit, and a screenshot of the toolbar.
 - [x] Commit, with the boxes of this task checked.
 
-## Task 12 — Live check
+## Task 12 — Status badges in the multiselect, fields in the details
+
+**Files:**
+- Modify: `frontend/TestRun/Nemesis/NemesisList.svelte`,
+  `frontend/TestRun/Nemesis/NemesisDetails.svelte`,
+  `frontend/TestRun/Nemesis/nemesisListing.ts`,
+  `frontend/Common/TestStatus.js`
+- Test: `frontend/TestRun/Nemesis/NemesisList.test.ts`,
+  `frontend/TestRun/Nemesis/NemesisDetails.test.ts`,
+  `frontend/TestRun/Nemesis/nemesisListing.test.ts`
+
+**Internals:** the multiselect renders its pills and options through the
+`children` snippet as status badges, sits at the small input-group height
+with the pills centred, and resets to every status when the last pill is
+removed or the remove-all button is pressed (the exclusions are filled
+first and cleared on the next tick, so the parent passes a new selection).
+The details panel renders each fact as an input group: a fixed-width
+`<label>`, a disabled text input, and a copy button that appears on hover
+or focus. `running` and `started` use `text-bg-warning` and `text-bg-info`,
+since the dark theme recolours `text-dark` to light.
+
+- [x] Write the failing tests: fields by label, the field copy button, the
+      reset on the last pill and on remove-all, the running badge classes.
+- [x] Run `yarn test frontend/TestRun/Nemesis` and confirm the failure.
+- [x] Write the change.
+- [x] Run `yarn test`, `yarn build`, ESLint, svelte-check on the
+      components, pre-commit, and screenshots of the toolbar and the
+      details in both themes.
+- [x] Commit, with the boxes of this task checked.
+
+## Task 13 — Live check
 
 **Files:** none.
 

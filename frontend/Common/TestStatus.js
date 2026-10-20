@@ -179,8 +179,8 @@ export const NemesisStatuses = {
 };
 
 export const NemesisStatusBg = {
-    "started": "bg-info",
-    "running": "bg-warning",
+    "started": "text-bg-info",
+    "running": "text-bg-warning",
     "failed": "bg-danger",
     "skipped": "bg-dark",
     "succeeded": "bg-success",
@@ -188,8 +188,8 @@ export const NemesisStatusBg = {
 };
 
 export const NemesisStatusFg = {
-    "started": "text-dark",
-    "running": "text-dark",
+    "started": "",
+    "running": "",
     "failed": "text-light",
     "skipped": "text-light",
     "succeeded": "text-light",
