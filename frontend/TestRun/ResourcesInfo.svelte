@@ -8,7 +8,13 @@
     } from "@fortawesome/free-solid-svg-icons";
     import { sendMessage } from "../Stores/AlertStore";
     import { buildCleanResourcesCommand } from "../Common/RunUtils";
-    let { resources = $bindable(), backend, run_id, regions = [] } = $props();
+    let { resources = $bindable(), backend, run_id, regions = [], focusResource = null } = $props();
+    let rows: Record<string, HTMLTableRowElement> = $state({});
+
+    $effect(() => {
+        const row = focusResource ? rows[focusResource] : undefined;
+        row?.scrollIntoView({ block: "center" });
+    });
     let sortHeaders = {
         creationTime: ["instance_info", "creation_time"],
         terminationTime: ["instance_info", "termination_time"],
@@ -368,7 +374,11 @@
     </thead>
     <tbody>
         {#each sortResourcesByKey(resources, sortHeader, sortAscending) as resource (resource.name)}
-            <tr class:d-none={filterResource(resource)}>
+            <tr
+                class:d-none={filterResource(resource)}
+                class:table-primary={resource.name === focusResource}
+                bind:this={rows[resource.name]}
+            >
                 <td>{resource.instance_info.provider}</td>
                 <td>{resource.instance_info.instance_type || "N/A"}</td>
                 <td>{resource.name}</td>

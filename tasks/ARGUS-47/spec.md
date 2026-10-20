@@ -84,6 +84,8 @@ The run-page list:
 | Behavior | Rule |
 |---|---|
 | Columns | Nemesis (name, description line under it), Target node, Status, Started, Ended |
+| Rows | One rounded block of flush rows that scrolls inside the tab; the header stays above the scroll area, and the tab panel itself does not scroll |
+| Target node | A button that opens the Resources tab and highlights the row of the node |
 | Default order | Start time, newest first; a running nemesis sorts as the latest end time |
 | Sort click | The same column flips the direction; a new column takes its own default, ascending for name, node and status, descending for the times |
 | Filter | One labelled text input; a valid regular expression matches case-insensitively against name, class, node, status, start, end and description; an invalid pattern matches as plain text |
@@ -196,3 +198,7 @@ interface Props { nemeses?: NemesisInfo[]; resources?: NemesisResource[] }
   breakpoint and up. (spec)
 - The filter falls back to a plain text match on an invalid pattern
   instead of hiding every row. (spec)
+- The rows scroll inside the list, with the header above the scroll area,
+  so a run with hundreds of nemeses does not grow the page. (build)
+- The target node chip opens the Resources tab and highlights the node,
+  so the node details are one click away. (build)

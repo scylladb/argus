@@ -201,6 +201,22 @@ describe("NemesisList", () => {
         expect(screen.queryByText("DisruptRestartNodeMonkey")).toBeNull();
     });
 
+    it("offers the target node as a link into the resources", async () => {
+        const onSelectNode = vi.fn();
+        render(NemesisList, { props: { nemeses: three(), resources, onSelectNode } });
+
+        await fireEvent.click(screen.getAllByRole("button", { name: "db-node-1" })[0]);
+
+        expect(onSelectNode).toHaveBeenCalledWith("db-node-1");
+    });
+
+    it("renders the target node as plain text without a handler", () => {
+        render(NemesisList, { props: { nemeses: three(), resources } });
+
+        expect(screen.queryAllByRole("button", { name: "db-node-1" })).toHaveLength(0);
+        expect(screen.getAllByText("db-node-1")).toHaveLength(3);
+    });
+
     it("labels the filter input", () => {
         render(NemesisList, { props: { nemeses: three(), resources } });
 

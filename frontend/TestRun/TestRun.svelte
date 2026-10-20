@@ -110,7 +110,7 @@
 </script>
 
 <script lang="ts">
-    import { onMount, createEventDispatcher } from "svelte";
+    import { onMount, createEventDispatcher, tick } from "svelte";
     import Fa from "svelte-fa";
     import {
         faBox,
@@ -239,6 +239,15 @@
                 history.replaceState({}, "", newUrl);
             }
         }
+    };
+
+    let focusedResource: string | null = $state(null);
+
+    const showResource = async (name: string) => {
+        focusedResource = null;
+        await tick();
+        focusedResource = name;
+        setActiveTab("resources");
     };
 
     onMount(() => {
@@ -436,6 +445,7 @@
                             backend={testRun.cloud_setup?.backend}
                             run_id={testRun.id}
                             regions={testRun.region_name ?? []}
+                            focusResource={focusedResource}
                         />
                     </div>
                 </div>
@@ -459,8 +469,8 @@
                         <SctEvents {testRun} nemeses={testRun.nemesis_data} issueAttach={(url) => submitIssue(url, runId, testInfo.test.id)}/>
                     {/if}
                 </div>
-                <div class="overflow-scroll" role="tabpanel" style:display={activeTab === "nemesis" ? "block" : "none"}>
-                    <NemesisList nemeses={testRun.nemesis_data} resources={testRun.allocated_resources} />
+                <div role="tabpanel" style:display={activeTab === "nemesis" ? "block" : "none"}>
+                    <NemesisList nemeses={testRun.nemesis_data} resources={testRun.allocated_resources} onSelectNode={showResource} />
                 </div>
                 <div class="overflow-scroll" role="tabpanel" style:display={activeTab === "logs" ? "block" : "none"}>
                     {#if visitedTabs["logs"]}
