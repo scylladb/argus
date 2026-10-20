@@ -54,7 +54,7 @@ LOGGER = logging.getLogger(__name__)
 def argus_db():
     CONTAINERS = {
         "database": {
-            "image": "scylladb/scylla:2025.4.0",
+            "image": "scylladb/scylla:2026.3.3",
             "name": "argus_test_scylla",
             "detach": True,
             "network_mode": "host",
@@ -66,11 +66,14 @@ def argus_db():
                 "--skip-wait-for-gossip-to-settle", "0",
                 "--endpoint-snitch=SimpleSnitch",
                 "--authenticator", "PasswordAuthenticator",
+                "--auth-superuser-name", "cassandra",
+                "--auth-superuser-salted-password",
+                r"\$6\$argusdev\$QoXJxKv2KybwyGg1hvwCCn00nZdHk7lv9HcpZWgrwdNQEKg70jegeVmMSkUqTngHVD4iNnLIFBkYMED/6/CCT1",
                 "--vector-store-primary-uri", "http://localhost:6080",
             ]
         },
         "vs": {
-            "image": "scylladb/vector-store:1.2.0",
+            "image": "scylladb/vector-store:1.13.0",
             "name": "vector-search_test",
             "detach": True,
             "network_mode": "host",
