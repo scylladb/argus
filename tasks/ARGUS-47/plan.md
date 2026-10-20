@@ -94,14 +94,14 @@ stays in every plan built from a spec.
   passed to the six `NewNemesisResponse` calls; the flag registered in
   `init()`; one line in `Long`.
 
-- [ ] Write the failing tests: `TestNemesisRunInfoDecodeDescription`,
+- [x] Write the failing tests: `TestNemesisRunInfoDecodeDescription`,
       `TestNemesisResponseRowsWithoutDescriptionFlag`,
       `TestNemesisResponseRowsWithDescriptionFlag`,
       `TestNemesisResponseMarshalJSONCarriesDescription`.
-- [ ] Run `cd cli && go test -race ./internal/models/` and confirm the failure.
-- [ ] Write the smallest change that passes it, then `make fmt`.
-- [ ] Run `cd cli && make lint && go test -race ./...`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run `cd cli && go test -race ./internal/models/` and confirm the failure.
+- [x] Write the smallest change that passes it, then `make fmt`.
+- [x] Run `cd cli && make lint && go test -race ./...`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 3 — Move the nemesis types to their own module
 

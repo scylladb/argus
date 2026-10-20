@@ -358,6 +358,9 @@ Time filtering with --before and --after accepts:
 
 The filter is applied to the nemesis start_time field.
 
+--with-description adds the description column to the table output; the
+JSON output always carries the description field.
+
 Only SCT runs have nemesis records; this command returns an empty list
 for other run types.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
@@ -371,6 +374,7 @@ for other run types.`,
 		runID, _ := cmd.Flags().GetString("run-id")
 		beforeRaw, _ := cmd.Flags().GetString("before")
 		afterRaw, _ := cmd.Flags().GetString("after")
+		withDescription, _ := cmd.Flags().GetBool("with-description")
 
 		log.Debug().Str("run_id", runID).Str("before", beforeRaw).Str("after", afterRaw).Msg("fetching nemeses")
 
@@ -399,11 +403,11 @@ for other run types.`,
 		if full, _, err := cache.Get[[]models.NemesisRunInfo](c, fullKey); isCacheable(err) {
 			if !isFiltered {
 				log.Debug().Str("run_id", runID).Int("count", len(full)).Msg("nemeses served from full cache")
-				return out.Write(models.NewNemesisResponse(runID, full))
+				return out.Write(models.NewNemesisResponse(runID, full, withDescription))
 			}
 			filtered := filterNemeses(full, beforeInt, afterInt)
 			log.Debug().Str("run_id", runID).Int("total", len(full)).Int("filtered", len(filtered)).Msg("nemeses filtered from full cache")
-			return out.Write(models.NewNemesisResponse(runID, filtered))
+			return out.Write(models.NewNemesisResponse(runID, filtered, withDescription))
 		}
 
 		// Step 2: exact filtered cache (only when filters are active).
@@ -411,7 +415,7 @@ for other run types.`,
 			filteredKey := cache.NemesesFilteredKey(runID, beforeTS, afterTS)
 			if filtered, _, err := cache.Get[[]models.NemesisRunInfo](c, filteredKey); isCacheable(err) {
 				log.Debug().Str("run_id", runID).Int("count", len(filtered)).Msg("nemeses served from filtered cache")
-				return out.Write(models.NewNemesisResponse(runID, filtered))
+				return out.Write(models.NewNemesisResponse(runID, filtered, withDescription))
 			}
 		}
 
@@ -426,7 +430,7 @@ for other run types.`,
 		if runType != "scylla-cluster-tests" {
 			// Other run types have no nemesis data.
 			log.Info().Str("run_id", runID).Str("run_type", runType).Msg("run type has no nemesis data; returning empty list")
-			return out.Write(models.NewNemesisResponse(runID, nil))
+			return out.Write(models.NewNemesisResponse(runID, nil, withDescription))
 		}
 
 		route := fmt.Sprintf(api.TestRunGet, runType, runID)
@@ -457,11 +461,11 @@ for other run types.`,
 				log.Warn().Err(cacheErr).Str("run_id", runID).Msg("failed to cache filtered nemeses")
 			}
 			log.Info().Str("run_id", runID).Int("total", len(nemeses)).Int("filtered", len(filtered)).Msg("nemeses fetched and filtered successfully")
-			return out.Write(models.NewNemesisResponse(runID, filtered))
+			return out.Write(models.NewNemesisResponse(runID, filtered, withDescription))
 		}
 
 		log.Info().Str("run_id", runID).Int("count", len(nemeses)).Msg("nemeses fetched successfully")
-		return out.Write(models.NewNemesisResponse(runID, nemeses))
+		return out.Write(models.NewNemesisResponse(runID, nemeses, withDescription))
 	},
 }
 
@@ -477,6 +481,7 @@ func init() {
 	runNemesesCmd.Flags().String("run-id", "", "Run UUID (required)")
 	runNemesesCmd.Flags().String("before", "", "Only nemeses with start_time before this time (Unix timestamp, RFC3339, or YYYY-MM-DD)")
 	runNemesesCmd.Flags().String("after", "", "Only nemeses with start_time after this time (Unix timestamp, RFC3339, or YYYY-MM-DD)")
+	runNemesesCmd.Flags().Bool("with-description", false, "Add the nemesis description column to the table output")
 	_ = runNemesesCmd.MarkFlagRequired("run-id")
 
 	runCmd.AddCommand(runEventsCmd, runNemesesCmd)

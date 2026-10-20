@@ -122,14 +122,15 @@ type NodeDescription struct {
 
 // NemesisRunInfo corresponds to the NemesisRunInfo Cassandra UDT.
 type NemesisRunInfo struct {
-	ClassName  string           `json:"class_name"`
-	Name       string           `json:"name"`
-	Duration   int              `json:"duration"`
-	TargetNode *NodeDescription `json:"target_node"`
-	Status     string           `json:"status"`
-	StartTime  int64            `json:"start_time"`
-	EndTime    int64            `json:"end_time"`
-	StackTrace string           `json:"stack_trace"`
+	ClassName   string           `json:"class_name"`
+	Name        string           `json:"name"`
+	Duration    int              `json:"duration"`
+	TargetNode  *NodeDescription `json:"target_node"`
+	Status      string           `json:"status"`
+	StartTime   int64            `json:"start_time"`
+	EndTime     int64            `json:"end_time"`
+	StackTrace  string           `json:"stack_trace"`
+	Description string           `json:"description"`
 }
 
 // PerformanceHDRHistogram corresponds to the PerformanceHDRHistogram Cassandra UDT.
@@ -837,21 +838,27 @@ func (r SCTEventsResponse) MarshalJSON() ([]byte, error) {
 // NemesisResponse wraps the nemesis list from an SCTTestRun so it can be
 // rendered as a table without re-fetching the full run.
 type NemesisResponse struct {
-	RunID   string           `json:"run_id"`
-	Nemeses []NemesisRunInfo `json:"nemeses"`
+	RunID           string           `json:"run_id"`
+	Nemeses         []NemesisRunInfo `json:"nemeses"`
+	WithDescription bool             `json:"-"`
 }
 
 // NewNemesisResponse constructs a NemesisResponse for the given run and nemesis list.
-func NewNemesisResponse(runID string, nemeses []NemesisRunInfo) NemesisResponse {
+// withDescription adds the description column to the table output.
+func NewNemesisResponse(runID string, nemeses []NemesisRunInfo, withDescription bool) NemesisResponse {
 	if nemeses == nil {
 		nemeses = []NemesisRunInfo{}
 	}
-	return NemesisResponse{RunID: runID, Nemeses: nemeses}
+	return NemesisResponse{RunID: runID, Nemeses: nemeses, WithDescription: withDescription}
 }
 
 // Headers implements output.Tabular for NemesisResponse.
-func (NemesisResponse) Headers() []string {
-	return []string{"Class", "Name", "Status", "Duration(s)", "Start Time", "End Time", "Target Node", "Stack Trace"}
+func (n NemesisResponse) Headers() []string {
+	headers := []string{"Class", "Name", "Status", "Duration(s)", "Start Time", "End Time", "Target Node", "Stack Trace"}
+	if n.WithDescription {
+		headers = append(headers, "Description")
+	}
+	return headers
 }
 
 // Rows implements output.Tabular for NemesisResponse.
@@ -877,7 +884,7 @@ func (n NemesisResponse) Rows() [][]string {
 		if len(stackTrace) > 120 {
 			stackTrace = stackTrace[:120] + "..."
 		}
-		rows = append(rows, []string{
+		row := []string{
 			nem.ClassName,
 			nem.Name,
 			nem.Status,
@@ -886,7 +893,11 @@ func (n NemesisResponse) Rows() [][]string {
 			endStr,
 			targetNode,
 			stackTrace,
-		})
+		}
+		if n.WithDescription {
+			row = append(row, nem.Description)
+		}
+		rows = append(rows, row)
 	}
 	return rows
 }
