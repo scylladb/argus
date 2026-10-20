@@ -134,11 +134,11 @@ and `filterNemeses` (regex with a substring fallback), `nemesisKey`,
 `statusLabel`, `statusClasses`, `formatNemesisTime`, `endTimeLabel`,
 `descriptionSummary`, `reasonLabel`.
 
-- [ ] Write the failing tests, one `describe` per helper.
-- [ ] Run `yarn test frontend/TestRun/Nemesis` and confirm the failure.
-- [ ] Write the helpers.
-- [ ] Run `yarn test`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Write the failing tests, one `describe` per helper.
+- [x] Run `yarn test frontend/TestRun/Nemesis` and confirm the failure.
+- [x] Write the helpers.
+- [x] Run `yarn test`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 5 — The details panel
 
