@@ -271,3 +271,22 @@ func TestUploadReplay_SendsTheTestName(t *testing.T) {
 	assert.Equal(t, "my-feature", sent.Query().Get("test_name"))
 	assert.Equal(t, "true", sent.Query().Get("local_runs"))
 }
+
+func TestCollectFiles_FindsPythonClientNamesByRunID(t *testing.T) {
+	dir := t.TempDir()
+	want := filepath.Join(dir,
+		"argus_replay_log_cc54896b-d95b-4f60-b6d8-42c65b13ca48_1791278702821085000_70948_98b1e2bebc1e4d379c9ed1553f050c47.jsonl")
+	other := filepath.Join(dir,
+		"argus_replay_log_91c226dc-a057-4ad4-a0b8-bf8bc73031b9_1791281071111486000_16748_a5ef5489ee31459495bec948cb779d06.jsonl")
+	for _, p := range []string{want, other} {
+		require.NoError(t, os.WriteFile(p, []byte(`{"ts":1}`+"\n"), 0o644))
+	}
+
+	all, err := collectFiles(dir, "", nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{other, want}, all)
+
+	one, err := collectFiles(dir, "cc54896b-d95b-4f60-b6d8-42c65b13ca48", nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{want}, one)
+}

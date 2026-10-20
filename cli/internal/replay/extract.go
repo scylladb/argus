@@ -15,9 +15,11 @@ import (
 
 // ReplayFileNamePattern matches an argus replay log filename, with or without
 // a trailing .zst[d] suffix. Group "run" is the run UUID; group "ts" is the
-// init-timestamp in unix-ms.
+// init-timestamp. The Python client writes
+// argus_replay_log_<run>_<ts>_<pid>_<uuid4 hex>.jsonl, so the pid and the hex
+// suffix are optional parts of the name.
 var ReplayFileNamePattern = regexp.MustCompile(
-	`^argus_replay_log_(?P<run>[^/]+?)_(?P<ts>\d+)\.jsonl(?:\.zstd?)?$`,
+	`^argus_replay_log_(?P<run>[^/]+?)_(?P<ts>\d+)(?:_\d+_[0-9a-f]{32})?\.jsonl(?:\.zstd?)?$`,
 )
 
 // ErrUnsupportedInput is returned when the user passes a path whose extension

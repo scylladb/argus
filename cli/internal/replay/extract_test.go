@@ -218,3 +218,41 @@ func TestEnsureCloseable(t *testing.T) {
 	// Sanity check that io.Discard works as we expect in other tests.
 	_, _ = io.Copy(io.Discard, bytes.NewReader(nil))
 }
+
+func TestReplayFileNamePatternMatchesPythonClientNames(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		run  string
+		ts   string
+	}{
+		{"argus_replay_log_R_1.jsonl", "R", "1"},
+		{"argus_replay_log_R_1.jsonl.zst", "R", "1"},
+		{
+			"argus_replay_log_cc54896b-d95b-4f60-b6d8-42c65b13ca48_1791278702821085000_70948_98b1e2bebc1e4d379c9ed1553f050c47.jsonl",
+			"cc54896b-d95b-4f60-b6d8-42c65b13ca48", "1791278702821085000",
+		},
+		{
+			"argus_replay_log_cc54896b-d95b-4f60-b6d8-42c65b13ca48_1791278702821085000_70948_98b1e2bebc1e4d379c9ed1553f050c47.jsonl.zstd",
+			"cc54896b-d95b-4f60-b6d8-42c65b13ca48", "1791278702821085000",
+		},
+	}
+	for _, tc := range cases {
+		m := ReplayFileNamePattern.FindStringSubmatch(tc.name)
+		if m == nil {
+			t.Errorf("%s: no match", tc.name)
+			continue
+		}
+		if got := m[ReplayFileNamePattern.SubexpIndex("run")]; got != tc.run {
+			t.Errorf("%s: run got %q, want %q", tc.name, got, tc.run)
+		}
+		if got := m[ReplayFileNamePattern.SubexpIndex("ts")]; got != tc.ts {
+			t.Errorf("%s: ts got %q, want %q", tc.name, got, tc.ts)
+		}
+	}
+	for _, name := range []string{"argus_replay_log_R_1.jsonl.partial", "argus_replay_log_R.jsonl", "other_R_1.jsonl"} {
+		if ReplayFileNamePattern.MatchString(name) {
+			t.Errorf("%s: unexpected match", name)
+		}
+	}
+}

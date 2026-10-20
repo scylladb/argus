@@ -29,7 +29,7 @@ var ErrInvalidJSONL = errors.New("replay: invalid JSONL line")
 // Pack reads each path in files, validates every line as a JSON object, and
 // streams a tar.zst archive containing one entry per file to w. Each tar entry
 // uses the source filename's basename as its name so the server can recover the
-// `argus_replay_log_{run_id}_{unix_ms}.jsonl` convention.
+// `argus_replay_log_{run_id}_{ts}[_{pid}_{hex}].jsonl` convention.
 //
 // Validation is line-by-line: a single malformed line aborts the pack with
 // ErrInvalidJSONL wrapped around the file path and line number. No partial
