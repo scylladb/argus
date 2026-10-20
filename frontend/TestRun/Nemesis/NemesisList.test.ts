@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, within } from "@testing-library/svelte";
+import { tick } from "svelte";
 
 vi.mock("svelte/transition", () => ({ slide: () => ({ duration: 0 }) }));
 
@@ -61,8 +62,8 @@ describe("NemesisList", () => {
 
         expect(rows()).toHaveLength(3);
         expect(screen.getAllByText("db-node-1")).toHaveLength(3);
-        expect(screen.getAllByText("Succeeded", { selector: ".badge" })).toHaveLength(2);
-        expect(screen.getByText("Failed", { selector: ".badge" })).toBeTruthy();
+        expect(screen.getAllByText("Succeeded", { selector: ".nemesis-row .badge" })).toHaveLength(2);
+        expect(screen.getByText("Failed", { selector: ".nemesis-row .badge" })).toBeTruthy();
         expect(screen.getByText("2026-10-20 10:00:00")).toBeTruthy();
         expect(screen.getByText("2026-10-20 10:01:30")).toBeTruthy();
     });
@@ -172,9 +173,9 @@ describe("NemesisList", () => {
         await fireEvent.click(toggle);
 
         expect(toggle.getAttribute("aria-expanded")).toBe("true");
-        expect(screen.getByText("DisruptRestartNodeMonkey")).toBeTruthy();
-        expect(screen.getByText("10.0.0.5")).toBeTruthy();
-        expect(screen.getByText("running")).toBeTruthy();
+        expect(screen.getByDisplayValue("DisruptRestartNodeMonkey")).toBeTruthy();
+        expect(screen.getByDisplayValue("10.0.0.5")).toBeTruthy();
+        expect(screen.getByDisplayValue("running")).toBeTruthy();
     });
 
     it("expands from a click anywhere on the row except its buttons and times", async () => {
@@ -263,8 +264,8 @@ describe("NemesisList", () => {
         expect(rows()).toHaveLength(2);
         await fireEvent.click(screen.getByRole("button", { name: "ModifyTableMonkey" }));
 
-        expect(screen.getByText("ModifyTable")).toBeTruthy();
-        expect(screen.queryByText("GrowShrink")).toBeNull();
+        expect(screen.getByDisplayValue("ModifyTable")).toBeTruthy();
+        expect(screen.queryByDisplayValue("GrowShrink")).toBeNull();
         expect(screen.getByRole("button", { name: "GrowShrinkClusterNemesis" }).getAttribute("aria-expanded")).toBe("false");
     });
 
@@ -276,7 +277,7 @@ describe("NemesisList", () => {
         await fireEvent.click(toggle);
 
         expect(toggle.getAttribute("aria-expanded")).toBe("false");
-        expect(screen.queryByText("DisruptRestartNodeMonkey")).toBeNull();
+        expect(screen.queryByDisplayValue("DisruptRestartNodeMonkey")).toBeNull();
     });
 
     it("offers the target node as a link into the resources", async () => {
@@ -356,6 +357,30 @@ describe("NemesisList", () => {
         await fireEvent.click(option);
         expect(rowNames()).toHaveLength(3);
         expect(screen.getByText("3 nemeses")).toBeTruthy();
+    });
+
+    it("resets to every status when the last one is deselected or all are removed", async () => {
+        render(NemesisList, { props: { nemeses: three(), resources } });
+        const selected = () => [...document.querySelectorAll("ul.selected li")].map((item) => item.textContent?.trim());
+        const remove = async (label: string) => {
+            await fireEvent.mouseUp(screen.getByTitle(`Remove ${label}`));
+            await fireEvent.click(screen.getByTitle(`Remove ${label}`));
+            await tick();
+            await tick();
+        };
+
+        await remove("Failed");
+        await remove("Succeeded");
+        expect(selected()).toEqual(["Failed", "Succeeded"]);
+        expect(rowNames()).toHaveLength(3);
+        expect(screen.getByText("3 nemeses")).toBeTruthy();
+
+        await fireEvent.mouseUp(screen.getByTitle("Reset to every status"));
+        await fireEvent.click(screen.getByTitle("Reset to every status"));
+        await tick();
+        await tick();
+        expect(selected()).toEqual(["Failed", "Succeeded"]);
+        expect(rowNames()).toHaveLength(3);
     });
 
     it("labels the filter input", () => {

@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { tick } from "svelte";
     import { SvelteSet } from "svelte/reactivity";
     import Fa from "svelte-fa";
     import MultiSelect, { type ObjectOption } from "svelte-multiselect";
@@ -12,6 +13,7 @@
         nemesisStatuses,
         nextSort,
         sortNemeses,
+        statusClasses,
         statusLabel,
         type SortKey,
         type SortState,
@@ -69,9 +71,17 @@
         }
     };
 
+    const resetStatuses = async () => {
+        await tick();
+        filters.excludedStatuses.clear();
+    };
+
     const excludeStatuses = (options: StatusOption[]) => {
         for (const option of options) {
             filters.excludedStatuses.add(option.value);
+        }
+        if (filters.excludedStatuses.size === statuses.length) {
+            resetStatuses();
         }
     };
 
@@ -110,13 +120,17 @@
                 options={statusOptions}
                 selected={selectedStatuses}
                 key={(option) => option.value}
-                placeholder="No status selected"
-                removeAllTitle="Deselect every status"
+                placeholder="Every status"
+                removeAllTitle="Reset to every status"
                 onadd={({ option }) => filters.excludedStatuses.delete(option.value)}
-                onremove={({ option }) => filters.excludedStatuses.add(option.value)}
+                onremove={({ option }) => excludeStatuses([option])}
                 onremoveAll={({ options }) => excludeStatuses(options)}
                 onselectAll={() => filters.excludedStatuses.clear()}
-            />
+            >
+                {#snippet children({ option })}
+                    <span class="badge rounded-pill {statusClasses(option.value)}">{option.label}</span>
+                {/snippet}
+            </MultiSelect>
         </div>
         {#if filters.node}
             <span class="badge rounded-pill text-bg-primary d-inline-flex align-items-center gap-1 font-monospace">
@@ -210,9 +224,10 @@
         --sms-focus-border: var(--bs-border-width) solid var(--bs-primary);
         --sms-border-radius: 0 var(--bs-border-radius-sm) var(--bs-border-radius-sm) 0;
         --sms-active-color: var(--bs-primary-bg-subtle);
-        --sms-selected-bg: var(--bs-secondary-bg);
+        --sms-selected-bg: transparent;
+        --sms-selected-li-padding: 0;
         --sms-min-height: calc(1.5em + 0.5rem + 2px);
-        --sms-padding: 0 0.5rem;
+        --sms-padding: 0 0.25rem;
         --sms-font-size: 0.875rem;
         --sms-options-z-index: 1060;
         font-size: 0.875rem;
@@ -221,6 +236,20 @@
     .status-select label {
         border-right: 0;
         border-radius: var(--bs-border-radius-sm) 0 0 var(--bs-border-radius-sm);
+    }
+
+    .status-select :global(div.multiselect > ul.selected) {
+        align-items: center;
+        gap: 0.125rem;
+        margin: 0;
+    }
+
+    .status-select :global(div.multiselect > ul.selected > li) {
+        margin: 0;
+    }
+
+    .status-select :global(div.multiselect > ul.options > li) {
+        padding: 0.25rem 0.5rem;
     }
 
     @media (min-width: 992px) {

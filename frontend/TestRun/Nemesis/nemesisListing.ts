@@ -37,7 +37,7 @@ export const nemesisKey = (nemesis: NemesisInfo): string => `${nemesis.start_tim
 export const statusLabel = (status: string): string => (status ? titleCase(status) : "Unknown");
 
 export const statusClasses = (status: string): string =>
-    `${STATUS_BACKGROUNDS[status] ?? "bg-secondary"} ${STATUS_FOREGROUNDS[status] ?? "text-light"}`;
+    [STATUS_BACKGROUNDS[status] ?? "bg-secondary", STATUS_FOREGROUNDS[status] ?? "text-light"].filter(Boolean).join(" ");
 
 export const formatNemesisTime = (seconds: number): string => timestampToISODate(seconds * 1000, true);
 
