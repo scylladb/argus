@@ -17,9 +17,10 @@
     interface Props {
         nemeses?: NemesisInfo[];
         resources?: NemesisResource[];
+        onSelectNode?: (name: string) => void;
     }
 
-    let { nemeses = [], resources = [] }: Props = $props();
+    let { nemeses = [], resources = [], onSelectNode }: Props = $props();
 
     const COLUMNS: { key: SortKey; label: string; classes: string }[] = [
         { key: "name", label: "Nemesis", classes: "col" },
@@ -76,8 +77,8 @@
             {/if}
         </span>
     </div>
-    <div class="nemesis-list p-2 border rounded bg-light-three d-flex flex-column gap-2" role="table" aria-label="Nemeses">
-        <div class="row g-2 px-2 small text-muted text-uppercase d-none d-lg-flex" role="row">
+    <div class="nemesis-list p-2 border rounded bg-light-three" role="table" aria-label="Nemeses">
+        <div class="nemesis-header row g-2 px-2 pb-2 small text-muted text-uppercase d-none d-lg-flex" role="row">
             {#each COLUMNS as column (column.key)}
                 <div class={column.classes} role="columnheader" aria-sort={ariaSort(column.key)}>
                     <button
@@ -94,22 +95,40 @@
                 </div>
             {/each}
         </div>
-        {#each visible as nemesis (nemesisKey(nemesis))}
-            <NemesisRow
-                {nemesis}
-                resource={resourcesByName.get(nemesis.target_node.name)}
-                open={expanded.has(nemesisKey(nemesis))}
-                onToggle={() => toggle(nemesisKey(nemesis))}
-            />
-        {:else}
-            <p class="text-muted text-center m-0 p-3">No nemesis matches the filter.</p>
-        {/each}
+        <div class="nemesis-rows border rounded bg-white">
+            {#each visible as nemesis (nemesisKey(nemesis))}
+                <NemesisRow
+                    {nemesis}
+                    resource={resourcesByName.get(nemesis.target_node.name)}
+                    open={expanded.has(nemesisKey(nemesis))}
+                    onToggle={() => toggle(nemesisKey(nemesis))}
+                    {onSelectNode}
+                />
+            {:else}
+                <p class="text-muted text-center m-0 p-3">No nemesis matches the filter.</p>
+            {/each}
+        </div>
     </div>
 {/if}
 
 <style>
     .nemesis-list {
         box-shadow: var(--bs-box-shadow-inset);
+    }
+
+    .nemesis-header {
+        overflow-y: hidden;
+        scrollbar-gutter: stable;
+    }
+
+    .nemesis-rows {
+        max-height: 70vh;
+        overflow-y: auto;
+        scrollbar-gutter: stable;
+    }
+
+    .nemesis-rows :global(.nemesis-row + .nemesis-row) {
+        border-top: 1px solid var(--bs-border-color);
     }
 
     @media (min-width: 992px) {

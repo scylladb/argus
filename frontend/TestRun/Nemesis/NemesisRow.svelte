@@ -12,15 +12,16 @@
         resource?: NemesisResource;
         open?: boolean;
         onToggle: () => void;
+        onSelectNode?: (name: string) => void;
     }
 
-    let { nemesis, resource, open = false, onToggle }: Props = $props();
+    let { nemesis, resource, open = false, onToggle, onSelectNode }: Props = $props();
 
     const summary = $derived(descriptionSummary(nemesis.description));
     const inProgress = $derived(nemesis.end_time === 0);
 </script>
 
-<div class="rounded border bg-white shadow-sm px-2 py-1" role="rowgroup">
+<div class="nemesis-row bg-white px-2 py-1" role="rowgroup">
     <div class="row g-2 align-items-center" role="row">
         <div class="col min-w-0" role="cell">
             <button
@@ -38,13 +39,26 @@
         </div>
         <div class="w-100 d-lg-none" role="presentation"></div>
         <div class="col-auto col-lg-3 min-w-0" role="cell">
-            <span
-                class="d-inline-flex align-items-center gap-1 rounded px-2 bg-light-two font-monospace small mw-100"
-                title={nemesis.target_node.name}
-            >
-                <span class="text-muted flex-shrink-0"><Fa icon={faServer} /></span>
-                <span class="text-truncate">{nemesis.target_node.name}</span>
-            </span>
+            {#if onSelectNode}
+                <button
+                    type="button"
+                    class="node-link d-inline-flex align-items-center gap-1 rounded px-2 border-0 text-reset bg-light-two
+                        font-monospace small mw-100"
+                    title="Show {nemesis.target_node.name} in Resources"
+                    onclick={() => onSelectNode(nemesis.target_node.name)}
+                >
+                    <span class="text-muted flex-shrink-0"><Fa icon={faServer} /></span>
+                    <span class="text-truncate">{nemesis.target_node.name}</span>
+                </button>
+            {:else}
+                <span
+                    class="d-inline-flex align-items-center gap-1 rounded px-2 bg-light-two font-monospace small mw-100"
+                    title={nemesis.target_node.name}
+                >
+                    <span class="text-muted flex-shrink-0"><Fa icon={faServer} /></span>
+                    <span class="text-truncate">{nemesis.target_node.name}</span>
+                </span>
+            {/if}
         </div>
         <div class="col-auto status-col" role="cell">
             <span class="badge rounded-pill {statusClasses(nemesis.status)}">{statusLabel(nemesis.status)}</span>
@@ -64,5 +78,10 @@
 <style>
     .min-w-0 {
         min-width: 0;
+    }
+
+    .node-link:hover,
+    .node-link:focus-visible {
+        text-decoration: underline;
     }
 </style>

@@ -199,7 +199,37 @@ description with `white-space: pre-line`, the reason `pre` with
       `npx svelte-check`, and the verify sequence.
 - [x] Commit, with the boxes of this task checked.
 
-## Task 7 — Live check
+## Task 7 — Rows in one scrolling block, and the node link
+
+**Files:**
+- Modify: `frontend/TestRun/Nemesis/NemesisList.svelte`,
+  `frontend/TestRun/Nemesis/NemesisRow.svelte`
+- Modify: `frontend/TestRun/TestRun.svelte` (the nemesis tab panel, the
+  `focusedResource` state, the Resources tab prop)
+- Modify: `frontend/TestRun/ResourcesInfo.svelte` (`focusResource` prop)
+- Test: `frontend/TestRun/Nemesis/NemesisList.test.ts`,
+  `frontend/TestRun/ResourcesInfo.test.ts`
+
+**Internals:** the header row sits above a `.nemesis-rows` block
+(`border rounded`, `max-height: 70vh`, `overflow-y: auto`,
+`scrollbar-gutter: stable` on both so the columns line up); rows lose
+their own border and radius and get a top divider between them. The
+nemesis tab panel drops `overflow-scroll`. `NemesisList` and `NemesisRow`
+take `onSelectNode?: (name) => void`; with it the node chip is a button.
+`TestRun.showResource(name)` sets `focusedResource` and switches to the
+Resources tab; `ResourcesInfo` takes `focusResource`, binds each row by
+name, marks the match `table-primary` and scrolls it into view.
+
+- [x] Write the failing tests: the node chip calls `onSelectNode`; the
+      chip is plain text without a handler; the focused resource row is
+      highlighted and scrolled into view; nothing is highlighted without one.
+- [x] Run `yarn test frontend/TestRun` and confirm the failure.
+- [x] Write the change.
+- [x] Run `yarn test`, `yarn build`, ESLint, pre-commit, and the
+      screenshots at both widths.
+- [x] Commit, with the boxes of this task checked.
+
+## Task 8 — Live check
 
 **Files:** none.
 
