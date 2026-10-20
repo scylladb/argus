@@ -203,10 +203,10 @@ description with `white-space: pre-line`, the reason `pre` with
 
 **Files:** none.
 
-- [ ] `uv run python -m argus.backend.cli sync-models` on the dev cluster;
+- [x] `uv run python -m argus.backend.cli sync-models` on the dev cluster;
       `sct_nemesis_description` exists and `sct_nemesis_v2` has
       `description_digest`.
-- [ ] Submit a run and a nemesis with the client and a real class
+- [x] Submit a run and a nemesis with the client and a real class
       docstring; the run page shows the description at a desktop and a
       narrow width, in both themes; `argus run nemeses --with-description`
       shows the column and `--output json` the field.
