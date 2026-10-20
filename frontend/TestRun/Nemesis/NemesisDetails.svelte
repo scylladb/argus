@@ -19,21 +19,23 @@
 </script>
 
 {#snippet field(id: string, label: string, value: string | null, mono = false, placeholder = "")}
-    <div class="input-group input-group-sm detail-group">
-        <label class="input-group-text detail-label" for="{uid}-{id}">{label}</label>
-        <input
-            id="{uid}-{id}"
-            class="form-control"
-            class:font-monospace={mono}
-            type="text"
-            value={value ?? ""}
-            {placeholder}
-            disabled
-        />
+    <div class="detail-group position-relative">
+        <div class="input-group input-group-sm">
+            <label class="input-group-text detail-label" for="{uid}-{id}">{label}</label>
+            <input
+                id="{uid}-{id}"
+                class="form-control"
+                class:font-monospace={mono}
+                type="text"
+                value={value ?? ""}
+                {placeholder}
+                disabled
+            />
+        </div>
         {#if canCopy && value}
             <button
                 type="button"
-                class="btn btn-outline-secondary copy-button"
+                class="btn btn-sm btn-outline-secondary rounded-start-0 copy-button"
                 title="Copy the {label.toLowerCase()}"
                 aria-label="Copy {label}"
                 onclick={() => copy(value)}
@@ -50,7 +52,7 @@
             <div class="fw-semibold">Nemesis</div>
             {@render field("class", "Class", nemesis.class_name, true)}
             {@render field("name", "Name", nemesis.name)}
-            <div class="input-group input-group-sm detail-group">
+            <div class="input-group input-group-sm">
                 <span class="input-group-text detail-label">Status</span>
                 <span class="form-control d-flex align-items-center bg-body-secondary">
                     <span class="badge rounded-pill {statusClasses(nemesis.status)}">{statusLabel(nemesis.status)}</span>
@@ -100,11 +102,15 @@
         width: 6.5rem;
     }
 
-    .detail-group .form-control:disabled {
+    .form-control:disabled {
         color: var(--bs-body-color);
     }
 
     .copy-button {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
         opacity: 0;
     }
 
@@ -112,6 +118,11 @@
     .detail-group:focus-within .copy-button,
     .copy-button:focus-visible {
         opacity: 1;
+    }
+
+    .detail-group:hover .form-control,
+    .detail-group:focus-within .form-control {
+        padding-right: 2.5rem;
     }
 
     .description {
