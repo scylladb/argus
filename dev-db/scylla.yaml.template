@@ -1,4 +1,4 @@
-# Rendered into the scylla_config volume by the `config` service of docker-compose.yaml.
+# Rendered into each node's config volume by the `config` service of docker-compose.yaml.
 # The VECTOR_STORE_URI placeholder is replaced with the compose value.
 cluster_name: argus
 # One rack per node; the config service writes each node's cassandra-rackdc.properties.

@@ -16,9 +16,9 @@ If you've already done the first-time setup below, this is all you need
 each time you sit down to work:
 
 ```bash
-# 1. Start the database (wait ~60-90s for ScyllaDB to initialize)
+# 1. Start the database and wait until the keyspace exists (~60-90s per node)
 docker compose -f dev-db/docker-compose.yaml up -d
-docker logs -f dev-db-node1-1 2>&1 | grep -m1 "initialization completed"
+docker compose -f dev-db/docker-compose.yaml wait keyspaces
 
 # 2. Start the backend (in one terminal)
 uv run uvicorn --factory argus_backend:create_app --port 5000 --reload
@@ -116,8 +116,8 @@ keys are required.
 # Start ScyllaDB + vector store. Compose also creates the keyspace.
 docker compose -f dev-db/docker-compose.yaml up -d
 
-# Wait for ScyllaDB to be ready (~60-90 seconds)
-docker logs -f dev-db-node1-1 2>&1 | grep -m1 "initialization completed"
+# Wait until the keyspaces service has created it (~60-90 seconds per node)
+docker compose -f dev-db/docker-compose.yaml wait keyspaces
 
 # Sync schemas, create admin user, populate test data
 uv run python dev-db/seed_data.py
@@ -159,8 +159,10 @@ groups populated with runs, events, and results.
 | `keyspaces`    | —                    | One-shot: creates `argus_tablets` with the configured RF          |
 
 Nodes join one at a time; `node2` waits for `node1` to be healthy and
-`node3` for `node2`. The `keyspaces` service retries until the cluster has
-enough nodes for the replication factor, then exits.
+`node3` for `node2`. The `keyspaces` service waits until `SCYLLA_RF` nodes
+are up and normal, creates the keyspace, then exits; `docker compose ...
+wait keyspaces` blocks until that happens. Nodes keep their fixed
+addresses; the one-shot services get dynamic ones from `172.24.99.128/25`.
 
 Each node is its own rack (`rack1`, `rack2`, `rack3` in `datacenter1`), so
 the keyspace is RF-rack-valid, which ScyllaDB requires before it accepts a
@@ -179,6 +181,12 @@ them; wipe everything with:
 ```bash
 docker compose -f dev-db/docker-compose.yaml down -v
 ```
+
+The previous layout kept its data in `dev-db/scylla/`; the volumes do not
+pick that up, so seed again and delete the directory when you no longer
+need it. `SCYLLA_RF` applies when the keyspace is created: to change it on
+an existing cluster, `ALTER KEYSPACE argus_tablets WITH replication = {...}`
+or wipe and start over.
 
 ### Settings
 
@@ -299,7 +307,7 @@ through the UI or another method.
 | Task              | Command                                                                                                        |
 | ----------------- | -------------------------------------------------------------------------------------------------------------- |
 | Start DB          | `docker compose -f dev-db/docker-compose.yaml up -d`                                                           |
-| Wait for DB       | `docker logs -f dev-db-node1-1 2>&1 \| grep -m1 "initialization completed"`                                    |
+| Wait for DB       | `docker compose -f dev-db/docker-compose.yaml wait keyspaces`                                                  |
 | Seed (first time) | `uv run python dev-db/seed_data.py`                                                                            |
 | Seed (reset)      | `uv run python dev-db/seed_data.py --force`                                                                    |
 | Start backend     | `uv run uvicorn --factory argus_backend:create_app --port 5000 --reload`                                       |
@@ -322,8 +330,8 @@ The database is not running. Start it first:
 docker compose -f dev-db/docker-compose.yaml up -d
 ```
 
-Then wait for ScyllaDB to finish initializing (~60-90 seconds) before
-starting the backend. Check readiness with:
+Then wait for the keyspace (`docker compose -f dev-db/docker-compose.yaml
+wait keyspaces`) before starting the backend. Check readiness with:
 
 ```bash
 docker exec dev-db-node1-1 cqlsh 172.24.99.1 -u cassandra -p cassandra \
@@ -336,10 +344,10 @@ Your `argus_web.yaml` is missing email keys and `EMAIL_ENABLED` is not
 set to `false`. Either add the `EMAIL_*` values or disable email entirely
 with `EMAIL_ENABLED: false`.
 
-### The `keyspaces` service keeps retrying
+### `wait keyspaces` never returns
 
-`SCYLLA_RF` is higher than the number of nodes that are up. Lower it, or
-enable the matching profile, then run `up -d` again. `docker compose -f
+`SCYLLA_RF` is higher than the number of nodes that will come up. Lower it,
+or enable the matching profile, then run `up -d` again. `docker compose -f
 dev-db/docker-compose.yaml logs keyspaces` shows the attempts.
 
 ### `Connection error: AuthenticationFailed`
