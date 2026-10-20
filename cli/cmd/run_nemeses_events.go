@@ -374,7 +374,11 @@ for other run types.`,
 		runID, _ := cmd.Flags().GetString("run-id")
 		beforeRaw, _ := cmd.Flags().GetString("before")
 		afterRaw, _ := cmd.Flags().GetString("after")
-		withDescription, _ := cmd.Flags().GetBool("with-description")
+		withDescription, err := cmd.Flags().GetBool("with-description")
+		if err != nil {
+			log.Error().Err(err).Msg("invalid --with-description flag")
+			return fmt.Errorf("--with-description: %w", err)
+		}
 
 		log.Debug().Str("run_id", runID).Str("before", beforeRaw).Str("after", afterRaw).Msg("fetching nemeses")
 
