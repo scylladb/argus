@@ -229,7 +229,27 @@ name, marks the match `table-primary` and scrolls it into view.
       screenshots at both widths.
 - [x] Commit, with the boxes of this task checked.
 
-## Task 8 — Live check
+## Task 8 — Highlight the rows of the hovered node
+
+**Files:**
+- Modify: `frontend/TestRun/Nemesis/NemesisList.svelte`,
+  `frontend/TestRun/Nemesis/NemesisRow.svelte`
+- Test: `frontend/TestRun/Nemesis/NemesisList.test.ts`
+
+**Internals:** `NemesisList` keeps `hoveredNode` in `$state` and passes
+`highlighted` and `onHoverNode` to each row; the chip reports the node on
+mouse enter and focus and `null` on leave and blur; a highlighted row
+swaps `bg-white` for `bg-primary-subtle`.
+
+- [x] Write the failing test: hovering a chip highlights the rows of that
+      node and leaving clears them.
+- [x] Run `yarn test frontend/TestRun/Nemesis` and confirm the failure.
+- [x] Write the change.
+- [x] Run `yarn test`, `yarn build`, ESLint, pre-commit, and a hover
+      screenshot in both themes.
+- [x] Commit, with the boxes of this task checked.
+
+## Task 9 — Live check
 
 **Files:** none.
 

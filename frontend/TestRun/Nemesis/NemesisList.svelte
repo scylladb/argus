@@ -33,6 +33,7 @@
     const uid = $props.id();
     let sort: SortState = $state(DEFAULT_SORT);
     let filterText = $state("");
+    let hoveredNode: string | null = $state(null);
     const expanded = new SvelteSet<string>();
 
     const visible = $derived(sortNemeses(filterNemeses(nemeses, filterText), sort));
@@ -101,8 +102,10 @@
                     {nemesis}
                     resource={resourcesByName.get(nemesis.target_node.name)}
                     open={expanded.has(nemesisKey(nemesis))}
+                    highlighted={hoveredNode !== null && nemesis.target_node.name === hoveredNode}
                     onToggle={() => toggle(nemesisKey(nemesis))}
                     {onSelectNode}
+                    onHoverNode={(name) => (hoveredNode = name)}
                 />
             {:else}
                 <p class="text-muted text-center m-0 p-3">No nemesis matches the filter.</p>
