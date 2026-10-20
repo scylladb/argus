@@ -34,7 +34,7 @@ const three = () => [
 
 const rowNames = () => screen.getAllByRole("rowgroup").map((group) => within(group).getAllByRole("button")[0].textContent?.trim());
 
-const filter = async (value: string) => fireEvent.input(screen.getByLabelText(/Filter/), { target: { value } });
+const filter = async (value: string) => fireEvent.input(screen.getByLabelText("Filter"), { target: { value } });
 
 afterEach(() => cleanup());
 
@@ -44,8 +44,8 @@ describe("NemesisList", () => {
 
         expect(screen.getAllByRole("rowgroup")).toHaveLength(3);
         expect(screen.getAllByText("db-node-1")).toHaveLength(3);
-        expect(screen.getAllByText("Succeeded")).toHaveLength(2);
-        expect(screen.getByText("Failed")).toBeTruthy();
+        expect(screen.getAllByText("Succeeded", { selector: ".badge" })).toHaveLength(2);
+        expect(screen.getByText("Failed", { selector: ".badge" })).toBeTruthy();
         expect(screen.getByText("2026-10-20 10:00:00")).toBeTruthy();
         expect(screen.getByText("2026-10-20 10:01:30")).toBeTruthy();
     });
@@ -233,9 +233,45 @@ describe("NemesisList", () => {
         expect(highlighted()).toHaveLength(0);
     });
 
+    it("narrows the list to one node from the row button and clears it again", async () => {
+        const nemeses = [
+            nemesis({ name: "a", start_time: T0, target_node: { name: "db-node-1", ip: null, shards: null } }),
+            nemesis({ name: "b", start_time: T0 + 100, target_node: { name: "db-node-2", ip: null, shards: null } }),
+            nemesis({ name: "c", start_time: T0 + 200, target_node: { name: "db-node-1", ip: null, shards: null } }),
+        ];
+        render(NemesisList, { props: { nemeses, resources } });
+
+        await fireEvent.click(screen.getByRole("button", { name: "Filter by db-node-2" }));
+        expect(rowNames()).toEqual(["b"]);
+        expect(screen.getByText("1 of 3 match")).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Filter by db-node-2" }).getAttribute("aria-pressed")).toBe("true");
+
+        await fireEvent.click(screen.getByRole("button", { name: "Clear the node filter" }));
+        expect(rowNames()).toEqual(["c", "b", "a"]);
+
+        await fireEvent.click(screen.getAllByRole("button", { name: "Filter by db-node-1" })[0]);
+        expect(rowNames()).toEqual(["c", "a"]);
+        await fireEvent.click(screen.getAllByRole("button", { name: "Filter by db-node-1" })[0]);
+        expect(rowNames()).toEqual(["c", "b", "a"]);
+    });
+
+    it("filters by status from the dropdown", async () => {
+        render(NemesisList, { props: { nemeses: three(), resources } });
+        const select = screen.getByLabelText("Status") as HTMLSelectElement;
+
+        expect([...select.options].map((option) => option.textContent)).toEqual(["All statuses", "Failed", "Succeeded"]);
+
+        await fireEvent.change(select, { target: { value: "failed" } });
+        expect(rowNames()).toEqual(["disrupt_stop_node"]);
+        expect(screen.getByText("1 of 3 match")).toBeTruthy();
+
+        await fireEvent.change(select, { target: { value: "" } });
+        expect(rowNames()).toHaveLength(3);
+    });
+
     it("labels the filter input", () => {
         render(NemesisList, { props: { nemeses: three(), resources } });
 
-        expect(screen.getByLabelText(/Filter/).tagName).toBe("INPUT");
+        expect(screen.getByLabelText("Filter").tagName).toBe("INPUT");
     });
 });

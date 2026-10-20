@@ -1,11 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
     DEFAULT_SORT,
+    EMPTY_FILTERS,
     descriptionSummary,
     endTimeLabel,
     filterNemeses,
+    isFiltering,
     nemesisKey,
     nemesisMatches,
+    nemesisStatuses,
     nextSort,
     reasonLabel,
     sortNemeses,
@@ -123,10 +126,35 @@ describe("nemesisMatches", () => {
         expect(nemesisMatches(nemesis(), "(soft")).toBe(false);
     });
 
-    it("filters a list", () => {
+    it("filters a list by text", () => {
         const items = [nemesis({ name: "disrupt_restart_node" }), nemesis({ name: "disrupt_stop_node" })];
 
-        expect(filterNemeses(items, "stop").map((n) => n.name)).toEqual(["disrupt_stop_node"]);
+        expect(filterNemeses(items, { ...EMPTY_FILTERS, text: "stop" }).map((n) => n.name)).toEqual(["disrupt_stop_node"]);
+    });
+
+    it("filters a list by node and by status, combined with the text", () => {
+        const items = [
+            nemesis({ name: "a", status: "failed", target_node: { name: "db-node-1", ip: null, shards: null } }),
+            nemesis({ name: "b", status: "succeeded", target_node: { name: "db-node-1", ip: null, shards: null } }),
+            nemesis({ name: "c", status: "failed", target_node: { name: "db-node-2", ip: null, shards: null } }),
+        ];
+
+        expect(filterNemeses(items, { ...EMPTY_FILTERS, node: "db-node-1" }).map((n) => n.name)).toEqual(["a", "b"]);
+        expect(filterNemeses(items, { ...EMPTY_FILTERS, status: "failed" }).map((n) => n.name)).toEqual(["a", "c"]);
+        expect(filterNemeses(items, { text: "^a|^c", node: "db-node-1", status: "failed" }).map((n) => n.name)).toEqual(["a"]);
+    });
+
+    it("tells whether any filter is active", () => {
+        expect(isFiltering(EMPTY_FILTERS)).toBe(false);
+        expect(isFiltering({ ...EMPTY_FILTERS, text: "  " })).toBe(false);
+        expect(isFiltering({ ...EMPTY_FILTERS, node: "db-node-1" })).toBe(true);
+        expect(isFiltering({ ...EMPTY_FILTERS, status: "failed" })).toBe(true);
+    });
+
+    it("lists the statuses present, sorted", () => {
+        const items = [nemesis({ status: "succeeded" }), nemesis({ status: "failed" }), nemesis({ status: "succeeded" })];
+
+        expect(nemesisStatuses(items)).toEqual(["failed", "succeeded"]);
     });
 });
 

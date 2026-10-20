@@ -1,14 +1,19 @@
 <script lang="ts">
     import { SvelteSet } from "svelte/reactivity";
     import Fa from "svelte-fa";
-    import { faFilter, faSortDown, faSortUp } from "@fortawesome/free-solid-svg-icons";
+    import { faFilter, faServer, faSortDown, faSortUp } from "@fortawesome/free-solid-svg-icons";
     import NemesisRow from "./NemesisRow.svelte";
     import {
         DEFAULT_SORT,
+        EMPTY_FILTERS,
         filterNemeses,
+        isFiltering,
         nemesisKey,
+        nemesisStatuses,
         nextSort,
         sortNemeses,
+        statusLabel,
+        type NemesisFilters,
         type SortKey,
         type SortState,
     } from "./nemesisListing";
@@ -32,13 +37,18 @@
 
     const uid = $props.id();
     let sort: SortState = $state(DEFAULT_SORT);
-    let filterText = $state("");
+    let filters: NemesisFilters = $state({ ...EMPTY_FILTERS });
     let hoveredNode: string | null = $state(null);
     const expanded = new SvelteSet<string>();
 
-    const visible = $derived(sortNemeses(filterNemeses(nemeses, filterText), sort));
+    const visible = $derived(sortNemeses(filterNemeses(nemeses, filters), sort));
     const resourcesByName = $derived(new Map(resources.map((resource) => [resource.name, resource])));
-    const filtering = $derived(filterText.trim().length > 0);
+    const statuses = $derived(nemesisStatuses(nemeses));
+    const filtering = $derived(isFiltering(filters));
+
+    const toggleNodeFilter = (name: string) => {
+        filters.node = filters.node === name ? null : name;
+    };
 
     const toggle = (key: string) => {
         if (!expanded.delete(key)) {
@@ -65,9 +75,30 @@
                 class="form-control"
                 type="search"
                 placeholder="name, node, status, time, description"
-                bind:value={filterText}
+                bind:value={filters.text}
             />
         </div>
+        <div class="input-group input-group-sm status-group">
+            <label class="input-group-text" for="{uid}-status">Status</label>
+            <select id="{uid}-status" class="form-select" bind:value={filters.status}>
+                <option value="">All statuses</option>
+                {#each statuses as status (status)}
+                    <option value={status}>{statusLabel(status)}</option>
+                {/each}
+            </select>
+        </div>
+        {#if filters.node}
+            <span class="badge rounded-pill text-bg-primary d-inline-flex align-items-center gap-1 font-monospace">
+                <Fa icon={faServer} />
+                {filters.node}
+                <button
+                    type="button"
+                    class="btn-close btn-close-white"
+                    aria-label="Clear the node filter"
+                    onclick={() => (filters.node = null)}
+                ></button>
+            </span>
+        {/if}
         <span class="small text-muted ms-auto">
             {#if filtering}
                 {visible.length} of {nemeses.length} match
@@ -103,9 +134,11 @@
                     resource={resourcesByName.get(nemesis.target_node.name)}
                     open={expanded.has(nemesisKey(nemesis))}
                     highlighted={hoveredNode !== null && nemesis.target_node.name === hoveredNode}
+                    filtered={filters.node === nemesis.target_node.name}
                     onToggle={() => toggle(nemesisKey(nemesis))}
                     {onSelectNode}
                     onHoverNode={(name) => (hoveredNode = name)}
+                    onFilterNode={toggleNodeFilter}
                 />
             {:else}
                 <p class="text-muted text-center m-0 p-3">No nemesis matches the filter.</p>
@@ -137,6 +170,10 @@
     @media (min-width: 992px) {
         .filter-group {
             max-width: 28rem;
+        }
+
+        .status-group {
+            max-width: 14rem;
         }
 
         .nemesis-list :global(.status-col) {

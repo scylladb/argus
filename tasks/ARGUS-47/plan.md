@@ -249,7 +249,32 @@ swaps `bg-white` for `bg-primary-subtle`.
       screenshot in both themes.
 - [x] Commit, with the boxes of this task checked.
 
-## Task 9 — Live check
+## Task 9 — Filter by node from the row, and by status
+
+**Files:**
+- Modify: `frontend/TestRun/Nemesis/nemesisListing.ts`,
+  `frontend/TestRun/Nemesis/NemesisList.svelte`,
+  `frontend/TestRun/Nemesis/NemesisRow.svelte`
+- Test: `frontend/TestRun/Nemesis/nemesisListing.test.ts`,
+  `frontend/TestRun/Nemesis/NemesisList.test.ts`
+
+**Internals:** `NemesisFilters { text, node, status }` with
+`EMPTY_FILTERS`, `isFiltering`, `filterNemeses(nemeses, filters)` and
+`nemesisStatuses`. The list keeps `filters` in `$state`, binds the text
+input and a status `<select>` to it, shows the node filter as a badge with
+a clear button, and passes `filtered` and `onFilterNode` to each row; the
+row's filter button toggles the node filter and carries `aria-pressed`.
+
+- [x] Write the failing tests: the helpers filter by node and status and
+      list the statuses; the row button narrows the list and clears it;
+      the dropdown filters by status.
+- [x] Run `yarn test frontend/TestRun/Nemesis` and confirm the failure.
+- [x] Write the change.
+- [x] Run `yarn test`, `yarn build`, ESLint, pre-commit, and a screenshot
+      with the filters active.
+- [x] Commit, with the boxes of this task checked.
+
+## Task 10 — Live check
 
 **Files:** none.
 

@@ -2,7 +2,7 @@
     import { slide } from "svelte/transition";
     import { cubicInOut } from "svelte/easing";
     import Fa from "svelte-fa";
-    import { faChevronDown, faChevronRight, faServer } from "@fortawesome/free-solid-svg-icons";
+    import { faChevronDown, faChevronRight, faFilter, faServer } from "@fortawesome/free-solid-svg-icons";
     import NemesisDetails from "./NemesisDetails.svelte";
     import { descriptionSummary, endTimeLabel, formatNemesisTime, statusClasses, statusLabel } from "./nemesisListing";
     import type { NemesisInfo, NemesisResource } from "./types";
@@ -12,12 +12,24 @@
         resource?: NemesisResource;
         open?: boolean;
         highlighted?: boolean;
+        filtered?: boolean;
         onToggle: () => void;
         onSelectNode?: (name: string) => void;
         onHoverNode?: (name: string | null) => void;
+        onFilterNode?: (name: string) => void;
     }
 
-    let { nemesis, resource, open = false, highlighted = false, onToggle, onSelectNode, onHoverNode }: Props = $props();
+    let {
+        nemesis,
+        resource,
+        open = false,
+        highlighted = false,
+        filtered = false,
+        onToggle,
+        onSelectNode,
+        onHoverNode,
+        onFilterNode,
+    }: Props = $props();
 
     const summary = $derived(descriptionSummary(nemesis.description));
     const inProgress = $derived(nemesis.end_time === 0);
@@ -47,12 +59,12 @@
             {/if}
         </div>
         <div class="w-100 d-lg-none" role="presentation"></div>
-        <div class="col-auto col-lg-3 min-w-0" role="cell">
+        <div class="col-auto col-lg-3 min-w-0 d-flex align-items-center gap-1" role="cell">
             {#if onSelectNode}
                 <button
                     type="button"
                     class="node-link d-inline-flex align-items-center gap-1 rounded px-2 border-0 text-reset bg-light-two
-                        font-monospace small mw-100"
+                        font-monospace small min-w-0"
                     title="Show {nemesis.target_node.name} in Resources"
                     onclick={() => onSelectNode(nemesis.target_node.name)}
                     onmouseenter={hoverNode}
@@ -64,13 +76,26 @@
                 </button>
             {:else}
                 <span
-                    class="d-inline-flex align-items-center gap-1 rounded px-2 bg-light-two font-monospace small mw-100"
+                    class="d-inline-flex align-items-center gap-1 rounded px-2 bg-light-two font-monospace small min-w-0"
                     title={nemesis.target_node.name}
                     onmouseenter={hoverNode}
                     onmouseleave={leaveNode}
                 >
                     {@render nodeChip()}
                 </span>
+            {/if}
+            {#if onFilterNode}
+                <button
+                    type="button"
+                    class="btn btn-sm btn-link p-0 border-0 flex-shrink-0"
+                    class:text-muted={!filtered}
+                    title={filtered ? "Show every node" : "Show only {nemesis.target_node.name}"}
+                    aria-label="Filter by {nemesis.target_node.name}"
+                    aria-pressed={filtered}
+                    onclick={() => onFilterNode(nemesis.target_node.name)}
+                >
+                    <Fa icon={faFilter} />
+                </button>
             {/if}
         </div>
         <div class="col-auto status-col" role="cell">
