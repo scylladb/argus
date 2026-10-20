@@ -151,14 +151,14 @@ Two `col-12 col-lg-6` definition lists (nemesis facts, target node), the
 description with `white-space: pre-line`, the reason `pre` with
 `white-space: pre-wrap`, a copy button behind `{#if navigator.clipboard}`.
 
-- [ ] Write the failing tests: facts and duration; no duration at zero;
+- [x] Write the failing tests: facts and duration; no duration at zero;
       private IP and state from the resource; "not found" without one;
       description line breaks; no description block on null; reason label
       per status; copy calls `writeText`; no copy button without clipboard.
-- [ ] Run `yarn test frontend/TestRun/Nemesis` and confirm the failure.
-- [ ] Write the component.
-- [ ] Run `yarn test`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run `yarn test frontend/TestRun/Nemesis` and confirm the failure.
+- [x] Write the component.
+- [x] Run `yarn test`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 6 — The list and the row, wired into the run page
 
