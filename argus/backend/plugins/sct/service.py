@@ -1,6 +1,8 @@
 import asyncio
 import base64
 from dataclasses import dataclass
+import hashlib
+import inspect
 import itertools
 from datetime import UTC, datetime
 import logging
@@ -18,7 +20,18 @@ from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
 from argus.backend.models.web import ArgusEventTypes, CriticalEventEmbeddings, ErrorEventEmbeddings, User
 from argus.backend.models.argus_ai import SCTErrorEventEmbedding, SCTCriticalEventEmbedding
-from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTJunitReports, SCTResource, SCTNemesis, SCTTestRun, SubtestType, SCTUnprocessedEvent, StressCommand
+from argus.backend.plugins.sct.testrun import (
+    SCTEvent,
+    SCTEventSeverity,
+    SCTJunitReports,
+    SCTNemesis,
+    SCTNemesisDescription,
+    SCTResource,
+    SCTTestRun,
+    SCTUnprocessedEvent,
+    StressCommand,
+    SubtestType,
+)
 from argus.common.sct_types import GeminiResultsRequest, PerformanceResultsRequest, RawEventPayload, ResourceUpdateRequest
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
@@ -429,8 +442,19 @@ class SCTService:
         return "terminated"
 
     @staticmethod
-    async def get_nemesis(run_id: UUID) -> list:
-        return await SCTNemesis.find(run_id=run_id).all()
+    async def get_nemesis(run_id: UUID) -> list[dict]:
+        return await SCTNemesis.with_descriptions(await SCTNemesis.find(run_id=run_id).all())
+
+    @staticmethod
+    async def store_nemesis_description(raw: str | None) -> str | None:
+        if not raw:
+            return None
+        text = inspect.cleandoc(raw).strip()
+        if not text:
+            return None
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        await SCTNemesisDescription(digest=digest, description=text).save()
+        return digest
 
     @staticmethod
     async def _add_nemesis_stat(run: SCTTestRun, key: str) -> None:
@@ -467,6 +491,7 @@ class SCTService:
             return "created"
         try:
             run: SCTTestRun = await SCTTestRun.get(id=run_id)
+            nemesis_info.description_digest = await SCTService.store_nemesis_description(nem_req.description)
             await nemesis_info.save()
             await SCTService._add_nemesis_stat(run, "total")
         except DocumentNotFound as exception:

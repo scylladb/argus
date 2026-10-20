@@ -1,6 +1,15 @@
 from fastapi import APIRouter
 
-from argus.backend.plugins.sct.testrun import SCTEvent, SCTJunitReports, SCTResource, SCTNemesis, SCTTestRun, SCTUnprocessedEvent, StressCommand
+from argus.backend.plugins.sct.testrun import (
+    SCTEvent,
+    SCTJunitReports,
+    SCTNemesis,
+    SCTNemesisDescription,
+    SCTResource,
+    SCTTestRun,
+    SCTUnprocessedEvent,
+    StressCommand,
+)
 from argus.backend.plugins.sct.controller import router as sct_router
 from argus.backend.plugins.core import PluginInfoBase, PluginModelBase
 from argus.backend.plugins.sct.udt import (
@@ -21,6 +30,7 @@ class PluginInfo(PluginInfoBase):
         SCTTestRun,
         SCTJunitReports,
         SCTNemesis,
+        SCTNemesisDescription,
         SCTEvent,
         SCTUnprocessedEvent,
         StressCommand,

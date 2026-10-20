@@ -58,7 +58,7 @@ stays in every plan built from a spec.
 - Tests: `_nemesis_submit_payload(name, start_time, description="parallel nemesis")`,
   a new `_run_nemeses(api_client, run_id)` on `GET /api/v1/run/scylla-cluster-tests/{id}`.
 
-- [ ] Write the failing tests: `test_nemesis_submit_and_finalize` asserts
+- [x] Write the failing tests: `test_nemesis_submit_and_finalize` asserts
       `description == "Killing nodes randomly"` from `_nemeses_of` after
       submit and after finalize;
       `test_nemesis_submit_keeps_two_nemeses_with_one_start_time` asserts
@@ -69,11 +69,11 @@ stays in every plan built from a spec.
       `test_nemesis_without_description_returns_null` parametrized over
       `{}`, `{"description": None}`, `{"description": "  \n  "}`;
       `test_nemesis_cycle` asserts `nem["description"]` twice.
-- [ ] Run `uv run pytest argus/backend/tests/sct_api/test_sct_api.py argus/backend/tests/integration/test_sct_methods.py -k nemesis`
+- [x] Run `uv run pytest argus/backend/tests/sct_api/test_sct_api.py argus/backend/tests/integration/test_sct_methods.py -k nemesis`
       and confirm the failure.
-- [ ] Write the smallest change that passes it.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Write the smallest change that passes it.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 2 — `argus run nemeses --with-description`
 
