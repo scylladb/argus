@@ -382,35 +382,36 @@ describe("NemesisList", () => {
     });
 
     it("shows the first page and loads more from the bottom", async () => {
-        const many = Array.from({ length: 250 }, (_, index) => nemesis({ name: `nemesis_${index}`, start_time: T0 + index }));
+        const many = Array.from({ length: 60 }, (_, index) => nemesis({ name: `nemesis_${index}`, start_time: T0 + index }));
         render(NemesisList, { props: { nemeses: many, resources } });
+        const pageSize = screen.getByLabelText("Show") as HTMLSelectElement;
+        expect(pageSize.value).toBe("100");
+        expect(screen.queryByText(/Showing/)).toBeNull();
 
-        expect(rows()).toHaveLength(100);
-        expect(screen.getByText("Showing 100 of 250")).toBeTruthy();
-        expect(screen.getByText("250 nemeses")).toBeTruthy();
+        await fireEvent.change(pageSize, { target: { value: "25" } });
+        expect(rows()).toHaveLength(25);
+        expect(screen.getByText("Showing 25 of 60")).toBeTruthy();
+        expect(screen.getByText("60 nemeses")).toBeTruthy();
 
-        await fireEvent.click(screen.getByRole("button", { name: "Load 100 more" }));
-        expect(rows()).toHaveLength(200);
+        await fireEvent.click(screen.getByRole("button", { name: "Load 25 more" }));
+        expect(rows()).toHaveLength(50);
 
-        await fireEvent.click(screen.getByRole("button", { name: "Load 50 more" }));
-        expect(rows()).toHaveLength(250);
+        await fireEvent.click(screen.getByRole("button", { name: "Load 10 more" }));
+        expect(rows()).toHaveLength(60);
         expect(screen.queryByText(/Showing/)).toBeNull();
     });
 
-    it("changes the page size and starts over when a filter changes", async () => {
-        const many = Array.from({ length: 250 }, (_, index) => nemesis({ name: `nemesis_${index}`, start_time: T0 + index }));
+    it("starts over from the first page when a filter changes", async () => {
+        const many = Array.from({ length: 60 }, (_, index) => nemesis({ name: `nemesis_${index}`, start_time: T0 + index }));
         render(NemesisList, { props: { nemeses: many, resources } });
 
-        await fireEvent.change(screen.getByLabelText("Show"), { target: { value: "50" } });
+        await fireEvent.change(screen.getByLabelText("Show"), { target: { value: "25" } });
+        await fireEvent.click(screen.getByRole("button", { name: "Load 25 more" }));
         expect(rows()).toHaveLength(50);
-        expect(screen.getByText("Showing 50 of 250")).toBeTruthy();
 
-        await fireEvent.click(screen.getByRole("button", { name: "Load 50 more" }));
-        expect(rows()).toHaveLength(100);
-
-        await filter("nemesis_1");
-        expect(screen.getByText("Showing 50 of 111")).toBeTruthy();
-        expect(rows()).toHaveLength(50);
+        await filter("nemesis_[0-4]");
+        expect(screen.getByText("Showing 25 of 45")).toBeTruthy();
+        expect(rows()).toHaveLength(25);
     });
 
     it("keeps a status selection when an excluded status disappears on a refresh", async () => {
