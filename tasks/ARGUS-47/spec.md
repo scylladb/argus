@@ -88,9 +88,9 @@ The run-page list:
 | Target node | A button that opens the Resources tab and highlights the row of the node; hovering it highlights every row of that node in the list |
 | Default order | Start time, newest first; a running nemesis sorts as the latest end time |
 | Sort click | The same column flips the direction; a new column takes its own default, ascending for name, node and status, descending for the times |
-| Filter | One labelled text input; a valid regular expression matches case-insensitively against name, class, node, status, start, end and description; an invalid pattern matches as plain text. A status multiselect lists the statuses present as badges, all selected by default; deselecting one hides its rows, and deselecting the last one or removing all resets to every status. A button next to the node chip narrows the list to that node, shown as a badge with a clear button in the toolbar. The status badge of a row narrows the list to that status, and a second click restores every status |
+| Filter | One labelled text input; a valid regular expression matches case-insensitively against name, class, node, status, start, end and description; an invalid pattern matches as plain text. A status multiselect lists the statuses present as badges, all selected by default; deselecting one hides its rows, and deselecting the last remaining one or removing all resets to every status. A button next to the node chip narrows the list to that node, shown as a badge with a clear button in the toolbar. The status badge of a row narrows the list to that status, and a second click restores every status |
 | Status | A `NemesisStatusBg` and `NemesisStatusFg` pair, with `terminated` added to both maps and a secondary fallback for an unknown value; `running` and `started` use the `text-bg-*` pair, which keeps dark text in the dark theme |
-| Expand | The summary line is a focusable `button` named after the nemesis with `aria-expanded`; a click anywhere on it outside its nested buttons and its time cells toggles the row, as do Enter and Space; the arrow keys, Home and End move the focus between rows; the time cells keep the text cursor so they can be selected; the expanded set is keyed by `start_time` and `name` and survives the periodic refresh and the filter |
+| Expand | The summary line is a `row` of `cell`s; the name is the row's real `button` with `aria-expanded`, and a click anywhere on the rest of the line outside its buttons and its time cells toggles the row too; the arrow keys, Home and End move the focus between the name buttons; the time cells keep the text cursor so they can be selected; the expanded set is keyed by `start_time` and `name` and survives the periodic refresh and the filter |
 | Details | Nemesis facts and the target node as labelled read-only fields that line up, each with a copy button on hover; the private IP and the state from the run resources; the full description with its line breaks; the failure or skip reason with a copy button |
 | Narrow width | The header row is hidden, each row wraps the name line above the data line; the details stack in one column |
 | Paging | The list shows the first page of the filtered, sorted rows, 100 by default with a page size of 25 to 500 in the toolbar; a "Load more" bar at the bottom of the scroll area reveals the next page; a change of a filter, the sort or the page size starts from the first page |
@@ -158,7 +158,10 @@ class SCTService:
 
 ```ts
 // frontend/TestRun/Nemesis/NemesisList.svelte
-interface Props { nemeses?: NemesisInfo[]; resources?: NemesisResource[] }
+interface Props { nemeses?: NemesisInfo[]; resources?: NemesisResource[]; onSelectNode?: (name: string) => void }
+
+// frontend/TestRun/ResourcesInfo.svelte gains
+focusResource?: string | null   // the resource name to highlight and scroll into view
 ```
 
 ## Risks
@@ -209,8 +212,9 @@ interface Props { nemeses?: NemesisInfo[]; resources?: NemesisResource[] }
   narrow the list without a typed pattern; the filters combine, and the
   status filter is kept as the set of deselected statuses so a status that
   appears on a refresh is selected. (build)
-- The summary line is the row's button, so the whole row is one keyboard
-  stop and the arrow keys walk the list. (build)
+- The name is the row's real button and the summary line stays a row of
+  cells, so a screen reader keeps the columns and the nested node and
+  status buttons; a click on the rest of the line toggles too. (review)
 - The rows page on the client with a "Load more" bar, 100 at a time by
   default, so a run with hundreds of nemeses renders quickly and the
   filters still see every row. (build)

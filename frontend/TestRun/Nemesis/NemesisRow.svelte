@@ -36,7 +36,6 @@
         onFilterStatus,
     }: Props = $props();
 
-    const uid = $props.id();
     const summary = $derived(descriptionSummary(nemesis.description));
     const inProgress = $derived(nemesis.end_time === 0);
     const status = $derived(statusLabel(nemesis.status));
@@ -64,28 +63,32 @@
     <span class="text-truncate">{nemesis.target_node.name}</span>
 {/snippet}
 
-<div class="nemesis-row px-2 py-1" class:bg-white={!highlighted} class:bg-primary-subtle={highlighted} role="row">
+<div class="nemesis-row px-2 py-1" class:bg-white={!highlighted} class:bg-primary-subtle={highlighted} role="rowgroup">
     <div
-        class="nemesis-summary row g-2 align-items-center rounded"
-        role="button"
-        tabindex="0"
-        aria-expanded={open}
-        aria-labelledby="{uid}-name"
+        class="nemesis-summary row g-2 align-items-center"
+        role="row"
+        tabindex="-1"
         onclick={toggleFromRow}
         onkeydown={toggleFromKey}
-        use:rowNavigation
     >
-        <div class="col min-w-0">
-            <div class="d-flex align-items-center gap-2 mw-100">
+        <div class="col min-w-0" role="cell">
+            <button
+                type="button"
+                class="nemesis-toggle btn btn-link p-0 border-0 text-reset text-decoration-none text-start d-flex align-items-center
+                    gap-2 mw-100"
+                aria-expanded={open}
+                onclick={onToggle}
+                use:rowNavigation
+            >
                 <span class="text-muted flex-shrink-0"><Fa icon={open ? faChevronDown : faChevronRight} /></span>
-                <span id="{uid}-name" class="nemesis-name fw-bold text-truncate" title={nemesis.name}>{nemesis.name}</span>
-            </div>
+                <span class="nemesis-name fw-bold text-truncate" title={nemesis.name}>{nemesis.name}</span>
+            </button>
             {#if summary}
                 <div class="small text-muted text-truncate ps-4" title={nemesis.description}>{summary}</div>
             {/if}
         </div>
-        <div class="w-100 d-lg-none"></div>
-        <div class="col-auto col-lg-3 min-w-0 d-flex align-items-center gap-1">
+        <div class="w-100 d-lg-none" role="presentation"></div>
+        <div class="col-auto col-lg-3 min-w-0 d-flex align-items-center gap-1" role="cell">
             {#if onSelectNode}
                 <button
                     type="button"
@@ -125,7 +128,7 @@
                 </button>
             {/if}
         </div>
-        <div class="col-auto status-col">
+        <div class="col-auto status-col" role="cell">
             {#if onFilterStatus}
                 <button
                     type="button"
@@ -141,14 +144,14 @@
                 <span class="badge rounded-pill {statusClasses(nemesis.status)}">{status}</span>
             {/if}
         </div>
-        <div class="col-auto time-col small text-nowrap">{formatNemesisTime(nemesis.start_time)}</div>
-        <div class="col-auto time-col small text-nowrap" class:text-muted={inProgress} class:fst-italic={inProgress}>
+        <div class="col-auto time-col small text-nowrap" role="cell">{formatNemesisTime(nemesis.start_time)}</div>
+        <div class="col-auto time-col small text-nowrap" class:text-muted={inProgress} class:fst-italic={inProgress} role="cell">
             {endTimeLabel(nemesis)}
         </div>
     </div>
     {#if open}
-        <div class="mt-2" transition:slide={{ duration: 200, easing: cubicInOut }}>
-            <NemesisDetails {nemesis} {resource} />
+        <div class="mt-2" role="row" transition:slide={{ duration: 200, easing: cubicInOut }}>
+            <div role="cell"><NemesisDetails {nemesis} {resource} /></div>
         </div>
     {/if}
 </div>
@@ -167,9 +170,8 @@
         cursor: pointer;
     }
 
-    .nemesis-summary:focus-visible {
-        outline: 2px solid var(--bs-primary);
-        outline-offset: -2px;
+    .nemesis-summary:focus {
+        outline: none;
     }
 
     .nemesis-summary .time-col {

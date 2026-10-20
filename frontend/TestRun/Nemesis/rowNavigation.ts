@@ -5,13 +5,13 @@ export const rowNavigation = (node: HTMLElement) => {
         if (event.target !== node || !KEYS.has(event.key)) {
             return;
         }
-        const rows = [...(node.closest(".nemesis-rows")?.querySelectorAll<HTMLElement>(".nemesis-summary") ?? [])];
-        const index = rows.indexOf(node);
+        const toggles = [...(node.closest(".nemesis-rows")?.querySelectorAll<HTMLElement>(".nemesis-toggle") ?? [])];
+        const index = toggles.indexOf(node);
         const target = {
-            ArrowDown: rows[index + 1],
-            ArrowUp: rows[index - 1],
-            Home: rows[0],
-            End: rows[rows.length - 1],
+            ArrowDown: toggles[index + 1],
+            ArrowUp: toggles[index - 1],
+            Home: toggles[0],
+            End: toggles[toggles.length - 1],
         }[event.key];
         if (target) {
             event.preventDefault();

@@ -371,7 +371,32 @@ resets `extraPages` when the filters, the sort or the page size change.
       of the bottom bar.
 - [x] Commit, with the boxes of this task checked.
 
-## Task 14 — Live check
+## Task 14 — Apply the review
+
+**Files:**
+- Modify: `frontend/TestRun/Nemesis/NemesisRow.svelte`,
+  `frontend/TestRun/Nemesis/NemesisList.svelte`,
+  `frontend/TestRun/Nemesis/rowNavigation.ts`,
+  `frontend/TestRun/Nemesis/types.ts`, `cli/cmd/run_nemeses_events.go`
+- Test: `frontend/TestRun/Nemesis/*.test.ts`
+
+**Internals:** the summary line is a `row` of five `cell`s and the name
+is a real `<button>` with `aria-expanded` that carries the arrow-key
+navigation; the row keeps the click toggle. `description_digest` and
+`description` are required nullable fields of `NemesisInfo`. The status
+reset fires only when every status present is excluded, so an excluded
+status that disappears on a refresh cannot trigger it. The CLI returns
+the error of the `--with-description` flag read.
+
+- [x] Write the failing tests: five cells per row and a button toggle;
+      the selection survives a refresh that drops an excluded status.
+- [x] Run `yarn test frontend/TestRun/Nemesis` and confirm the failure.
+- [x] Write the change.
+- [x] Run `yarn test`, `yarn build`, ESLint, svelte-check, `cd cli && make
+      lint && go test -race ./...`, pre-commit.
+- [x] Commit, with the boxes of this task checked.
+
+## Task 15 — Live check
 
 **Files:** none.
 

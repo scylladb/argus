@@ -91,7 +91,7 @@
         for (const option of options) {
             filters.excludedStatuses.add(option.value);
         }
-        if (filters.excludedStatuses.size === statuses.length) {
+        if (statuses.every((status) => filters.excludedStatuses.has(status))) {
             resetStatuses();
         }
     };
@@ -191,7 +191,7 @@
                 </div>
             {/each}
         </div>
-        <div class="nemesis-rows border rounded bg-white" role="rowgroup">
+        <div class="nemesis-rows border rounded bg-white">
             {#each shown as nemesis (nemesisKey(nemesis))}
                 <NemesisRow
                     {nemesis}
@@ -207,10 +207,13 @@
                     onFilterStatus={toggleStatusFilter}
                 />
             {:else}
-                <p class="text-muted text-center m-0 p-3">No nemesis matches the filter.</p>
+                <p class="text-muted text-center m-0 p-3" role="presentation">No nemesis matches the filter.</p>
             {/each}
             {#if remaining > 0}
-                <div class="d-flex flex-wrap align-items-center justify-content-center gap-3 p-2 small text-muted border-top">
+                <div
+                    class="d-flex flex-wrap align-items-center justify-content-center gap-3 p-2 small text-muted border-top"
+                    role="presentation"
+                >
                     <span>Showing {shown.length} of {visible.length}</span>
                     <button type="button" class="btn btn-sm btn-outline-primary" onclick={() => (extraPages += 1)}>
                         Load {Math.min(pageSize, remaining)} more
