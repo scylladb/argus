@@ -89,7 +89,7 @@
                     type="button"
                     class="btn btn-sm btn-link p-0 border-0 flex-shrink-0"
                     class:text-muted={!filtered}
-                    title={filtered ? "Show every node" : "Show only {nemesis.target_node.name}"}
+                    title={filtered ? "Show every node" : `Show only ${nemesis.target_node.name}`}
                     aria-label="Filter by {nemesis.target_node.name}"
                     aria-pressed={filtered}
                     onclick={() => onFilterNode(nemesis.target_node.name)}
