@@ -1,17 +1,17 @@
 # BASE URL FOR ARGUS APPLICATION
 BASE_URL: "https://argus.scylladb.com"
-# Main DB Cluster contact points
+# Main DB Cluster contact points: node1 of dev-db/docker-compose.yaml; add 172.24.99.2
+# and 172.24.99.3 when you run the 2-nodes or 3-nodes profile
 SCYLLA_CONTACT_POINTS:
-    - 1.1.1.1
-    - 2.2.2.2
-    - 3.3.3.3
+    - 172.24.99.1
 # Username
-SCYLLA_USERNAME: user
+SCYLLA_USERNAME: cassandra
 # Password
-SCYLLA_PASSWORD: password
-# Default keyspace (dev-db/docker-compose.yaml creates it; so does dev-db/seed_data.py --create-keyspace)
-SCYLLA_KEYSPACE_NAME: mykeyspacename
-# Replication factor used - if set, will override contact_points as amount of nodes for replication
+SCYLLA_PASSWORD: cassandra
+# Default keyspace. dev-db/docker-compose.yaml creates argus_tablets; any other name needs
+# dev-db/seed_data.py --create-keyspace or a CREATE KEYSPACE of your own.
+SCYLLA_KEYSPACE_NAME: argus_tablets
+# Replication factor that dev-db/seed_data.py --create-keyspace uses (default 1)
 # SCYLLA_REPLICATION_FACTOR: 3
 
 # Which login methods to enable

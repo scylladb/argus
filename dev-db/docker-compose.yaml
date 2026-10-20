@@ -89,8 +89,11 @@ services:
     command:
       - |
         for i in $$(seq 1 120); do
-          cqlsh -u cassandra -p cassandra 172.24.99.1 -e "CREATE KEYSPACE IF NOT EXISTS argus_tablets WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': ${SCYLLA_RF:-1}} AND tablets = {'enabled': true};" && exit 0
-          echo "keyspace not created yet (needs ${SCYLLA_RF:-1} live nodes), retrying"
+          live=$$(cqlsh -u cassandra -p cassandra 172.24.99.1 -e "SELECT up, status FROM system.cluster_status" | grep -cE 'True +\| +NORMAL')
+          if [ "$$live" -ge ${SCYLLA_RF:-1} ]; then
+            cqlsh -u cassandra -p cassandra 172.24.99.1 -e "CREATE KEYSPACE IF NOT EXISTS argus_tablets WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': ${SCYLLA_RF:-1}} AND tablets = {'enabled': true};" && exit 0
+          fi
+          echo "$$live of ${SCYLLA_RF:-1} nodes are up, retrying"
           sleep 5
         done
         exit 1
@@ -134,4 +137,5 @@ networks:
     ipam:
       config:
         - subnet: 172.24.99.0/24
+          ip_range: 172.24.99.128/25
           gateway: 172.24.99.254
