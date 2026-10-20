@@ -43,7 +43,7 @@
 {/snippet}
 
 <div class="nemesis-row px-2 py-1" class:bg-white={!highlighted} class:bg-primary-subtle={highlighted} role="rowgroup">
-    <div class="row g-2 align-items-center" role="row">
+    <div class="nemesis-summary row g-2 align-items-center" role="row">
         <div class="col min-w-0" role="cell">
             <button
                 type="button"
@@ -121,5 +121,12 @@
     .node-link:hover,
     .node-link:focus-visible {
         text-decoration: underline;
+    }
+
+    .nemesis-row:has(> .nemesis-summary:hover) {
+        background-image: linear-gradient(
+            rgba(var(--bs-emphasis-color-rgb), 0.075),
+            rgba(var(--bs-emphasis-color-rgb), 0.075)
+        );
     }
 </style>

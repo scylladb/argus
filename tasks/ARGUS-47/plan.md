@@ -274,7 +274,23 @@ row's filter button toggles the node filter and carries `aria-pressed`.
       with the filters active.
 - [x] Commit, with the boxes of this task checked.
 
-## Task 10 — Live check
+## Task 10 — Tint the hovered row
+
+**Files:**
+- Modify: `frontend/TestRun/Nemesis/NemesisRow.svelte`
+
+**Internals:** the summary line gets the class `nemesis-summary`; a scoped
+rule tints the row wrapper while the summary is hovered, through a
+translucent `background-image` overlay of the theme's emphasis colour, so
+it sits on top of the white and the node-highlight backgrounds and stops
+at an expanded details panel. Pure CSS, no unit test.
+
+- [x] Write the rule.
+- [x] Run `yarn build`, ESLint, pre-commit, and a hover screenshot in both
+      themes.
+- [x] Commit, with the boxes of this task checked.
+
+## Task 11 — Live check
 
 **Files:** none.
 
