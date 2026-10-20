@@ -140,15 +140,17 @@ describe("nemesisMatches", () => {
         ];
 
         expect(filterNemeses(items, { ...EMPTY_FILTERS, node: "db-node-1" }).map((n) => n.name)).toEqual(["a", "b"]);
-        expect(filterNemeses(items, { ...EMPTY_FILTERS, status: "failed" }).map((n) => n.name)).toEqual(["a", "c"]);
-        expect(filterNemeses(items, { text: "^a|^c", node: "db-node-1", status: "failed" }).map((n) => n.name)).toEqual(["a"]);
+        expect(filterNemeses(items, { ...EMPTY_FILTERS, excludedStatuses: new Set(["succeeded"]) }).map((n) => n.name))
+            .toEqual(["a", "c"]);
+        expect(filterNemeses(items, { text: "^a|^c", node: "db-node-1", excludedStatuses: new Set(["succeeded"]) })
+            .map((n) => n.name)).toEqual(["a"]);
     });
 
     it("tells whether any filter is active", () => {
         expect(isFiltering(EMPTY_FILTERS)).toBe(false);
         expect(isFiltering({ ...EMPTY_FILTERS, text: "  " })).toBe(false);
         expect(isFiltering({ ...EMPTY_FILTERS, node: "db-node-1" })).toBe(true);
-        expect(isFiltering({ ...EMPTY_FILTERS, status: "failed" })).toBe(true);
+        expect(isFiltering({ ...EMPTY_FILTERS, excludedStatuses: new Set(["failed"]) })).toBe(true);
     });
 
     it("lists the statuses present, sorted", () => {

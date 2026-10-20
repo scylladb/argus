@@ -1,11 +1,11 @@
 <script lang="ts">
     import { SvelteSet } from "svelte/reactivity";
     import Fa from "svelte-fa";
+    import MultiSelect, { type ObjectOption } from "svelte-multiselect";
     import { faFilter, faServer, faSortDown, faSortUp } from "@fortawesome/free-solid-svg-icons";
     import NemesisRow from "./NemesisRow.svelte";
     import {
         DEFAULT_SORT,
-        EMPTY_FILTERS,
         filterNemeses,
         isFiltering,
         nemesisKey,
@@ -13,7 +13,6 @@
         nextSort,
         sortNemeses,
         statusLabel,
-        type NemesisFilters,
         type SortKey,
         type SortState,
     } from "./nemesisListing";
@@ -23,6 +22,11 @@
         nemeses?: NemesisInfo[];
         resources?: NemesisResource[];
         onSelectNode?: (name: string) => void;
+    }
+
+    interface StatusOption extends ObjectOption {
+        label: string;
+        value: string;
     }
 
     let { nemeses = [], resources = [], onSelectNode }: Props = $props();
@@ -37,17 +41,38 @@
 
     const uid = $props.id();
     let sort: SortState = $state(DEFAULT_SORT);
-    let filters: NemesisFilters = $state({ ...EMPTY_FILTERS });
+    let filters = $state({ text: "", node: null as string | null, excludedStatuses: new SvelteSet<string>() });
     let hoveredNode: string | null = $state(null);
     const expanded = new SvelteSet<string>();
 
     const visible = $derived(sortNemeses(filterNemeses(nemeses, filters), sort));
     const resourcesByName = $derived(new Map(resources.map((resource) => [resource.name, resource])));
     const statuses = $derived(nemesisStatuses(nemeses));
+    const statusOptions: StatusOption[] = $derived(statuses.map((status) => ({ label: statusLabel(status), value: status })));
+    const selectedStatuses = $derived(statusOptions.filter((option) => !filters.excludedStatuses.has(option.value)));
+    const soleStatus = $derived(
+        statuses.length > 1 && selectedStatuses.length === 1 ? selectedStatuses[0].value : null
+    );
     const filtering = $derived(isFiltering(filters));
 
     const toggleNodeFilter = (name: string) => {
         filters.node = filters.node === name ? null : name;
+    };
+
+    const toggleStatusFilter = (status: string) => {
+        const wasSole = soleStatus === status;
+        filters.excludedStatuses.clear();
+        if (!wasSole) {
+            for (const other of statuses.filter((candidate) => candidate !== status)) {
+                filters.excludedStatuses.add(other);
+            }
+        }
+    };
+
+    const excludeStatuses = (options: StatusOption[]) => {
+        for (const option of options) {
+            filters.excludedStatuses.add(option.value);
+        }
     };
 
     const toggle = (key: string) => {
@@ -78,14 +103,20 @@
                 bind:value={filters.text}
             />
         </div>
-        <div class="input-group input-group-sm status-group">
-            <label class="input-group-text" for="{uid}-status">Status</label>
-            <select id="{uid}-status" class="form-select" bind:value={filters.status}>
-                <option value="">All statuses</option>
-                {#each statuses as status (status)}
-                    <option value={status}>{statusLabel(status)}</option>
-                {/each}
-            </select>
+        <div class="status-select d-flex align-items-stretch">
+            <label class="input-group-text small py-0" for="{uid}-status">Status</label>
+            <MultiSelect
+                id="{uid}-status"
+                options={statusOptions}
+                selected={selectedStatuses}
+                key={(option) => option.value}
+                placeholder="No status selected"
+                removeAllTitle="Deselect every status"
+                onadd={({ option }) => filters.excludedStatuses.delete(option.value)}
+                onremove={({ option }) => filters.excludedStatuses.add(option.value)}
+                onremoveAll={({ options }) => excludeStatuses(options)}
+                onselectAll={() => filters.excludedStatuses.clear()}
+            />
         </div>
         {#if filters.node}
             <span class="badge rounded-pill text-bg-primary d-inline-flex align-items-center gap-1 font-monospace">
@@ -127,7 +158,7 @@
                 </div>
             {/each}
         </div>
-        <div class="nemesis-rows border rounded bg-white">
+        <div class="nemesis-rows border rounded bg-white" role="rowgroup">
             {#each visible as nemesis (nemesisKey(nemesis))}
                 <NemesisRow
                     {nemesis}
@@ -135,10 +166,12 @@
                     open={expanded.has(nemesisKey(nemesis))}
                     highlighted={hoveredNode !== null && nemesis.target_node.name === hoveredNode}
                     filtered={filters.node === nemesis.target_node.name}
+                    statusOnly={soleStatus === nemesis.status}
                     onToggle={() => toggle(nemesisKey(nemesis))}
                     {onSelectNode}
                     onHoverNode={(name) => (hoveredNode = name)}
                     onFilterNode={toggleNodeFilter}
+                    onFilterStatus={toggleStatusFilter}
                 />
             {:else}
                 <p class="text-muted text-center m-0 p-3">No nemesis matches the filter.</p>
@@ -167,13 +200,36 @@
         border-top: 1px solid var(--bs-border-color);
     }
 
+    .status-select {
+        --sms-bg: var(--bs-body-bg);
+        --sms-options-bg: var(--bs-body-bg);
+        --sms-text-color: var(--bs-body-color);
+        --sms-placeholder-color: var(--bs-secondary-color);
+        --sms-placeholder-opacity: 1;
+        --sms-border: var(--bs-border-width) solid var(--bs-border-color);
+        --sms-focus-border: var(--bs-border-width) solid var(--bs-primary);
+        --sms-border-radius: 0 var(--bs-border-radius-sm) var(--bs-border-radius-sm) 0;
+        --sms-active-color: var(--bs-primary-bg-subtle);
+        --sms-selected-bg: var(--bs-secondary-bg);
+        --sms-min-height: calc(1.5em + 0.5rem + 2px);
+        --sms-padding: 0 0.5rem;
+        --sms-font-size: 0.875rem;
+        --sms-options-z-index: 1060;
+        font-size: 0.875rem;
+    }
+
+    .status-select label {
+        border-right: 0;
+        border-radius: var(--bs-border-radius-sm) 0 0 var(--bs-border-radius-sm);
+    }
+
     @media (min-width: 992px) {
         .filter-group {
             max-width: 28rem;
         }
 
-        .status-group {
-            max-width: 14rem;
+        .status-select {
+            max-width: 32rem;
         }
 
         .nemesis-list :global(.status-col) {

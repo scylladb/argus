@@ -88,9 +88,9 @@ The run-page list:
 | Target node | A button that opens the Resources tab and highlights the row of the node; hovering it highlights every row of that node in the list |
 | Default order | Start time, newest first; a running nemesis sorts as the latest end time |
 | Sort click | The same column flips the direction; a new column takes its own default, ascending for name, node and status, descending for the times |
-| Filter | One labelled text input; a valid regular expression matches case-insensitively against name, class, node, status, start, end and description; an invalid pattern matches as plain text. A status dropdown lists the statuses present. A button next to the node chip narrows the list to that node, shown as a badge with a clear button in the toolbar |
+| Filter | One labelled text input; a valid regular expression matches case-insensitively against name, class, node, status, start, end and description; an invalid pattern matches as plain text. A status multiselect lists the statuses present, all selected by default; deselecting one hides its rows. A button next to the node chip narrows the list to that node, shown as a badge with a clear button in the toolbar. The status badge of a row narrows the list to that status, and a second click restores every status |
 | Status | A `NemesisStatusBg` and `NemesisStatusFg` pair, with `terminated` added to both maps and a secondary fallback for an unknown value |
-| Expand | The name is a button with `aria-expanded`; the expanded set is keyed by `start_time` and `name` and survives the periodic refresh and the filter |
+| Expand | The summary line is a focusable `button` named after the nemesis with `aria-expanded`; a click anywhere on it outside its nested buttons and its time cells toggles the row, as do Enter and Space; the arrow keys, Home and End move the focus between rows; the time cells keep the text cursor so they can be selected; the expanded set is keyed by `start_time` and `name` and survives the periodic refresh and the filter |
 | Details | Nemesis facts, target node with private IP and state from the run resources, the full description with its line breaks, the failure or skip reason with a copy button |
 | Narrow width | The header row is hidden, each row wraps the name line above the data line; the details stack in one column |
 | Empty | "No nemeses were reported for this run." or "No nemesis matches the filter." |
@@ -204,5 +204,9 @@ interface Props { nemeses?: NemesisInfo[]; resources?: NemesisResource[] }
   so the node details are one click away. (build)
 - Hovering a node chip highlights every row of that node, so the nemeses
   that hit one node stand out without a filter. (build)
-- A status dropdown and a per-row node filter narrow the list without a
-  typed pattern; the three filters combine. (build)
+- A status multiselect, a per-row node filter and a per-row status badge
+  narrow the list without a typed pattern; the filters combine, and the
+  status filter is kept as the set of deselected statuses so a status that
+  appears on a refresh is selected. (build)
+- The summary line is the row's button, so the whole row is one keyboard
+  stop and the arrow keys walk the list. (build)

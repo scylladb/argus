@@ -24,10 +24,10 @@ export const DEFAULT_SORT: SortState = { key: "start_time", direction: "desc" };
 export interface NemesisFilters {
     text: string;
     node: string | null;
-    status: string;
+    excludedStatuses: ReadonlySet<string>;
 }
 
-export const EMPTY_FILTERS: NemesisFilters = { text: "", node: null, status: "" };
+export const EMPTY_FILTERS: NemesisFilters = { text: "", node: null, excludedStatuses: new Set() };
 
 const STATUS_BACKGROUNDS = NemesisStatusBg as Record<string, string>;
 const STATUS_FOREGROUNDS = NemesisStatusFg as Record<string, string>;
@@ -117,14 +117,14 @@ export const nemesisMatches = (nemesis: NemesisInfo, filter: string): boolean =>
 };
 
 export const isFiltering = (filters: NemesisFilters): boolean =>
-    Boolean(filters.text.trim() || filters.node || filters.status);
+    Boolean(filters.text.trim() || filters.node || filters.excludedStatuses.size);
 
 export const filterNemeses = (nemeses: readonly NemesisInfo[], filters: NemesisFilters): NemesisInfo[] =>
     nemeses.filter(
         (nemesis) =>
             nemesisMatches(nemesis, filters.text) &&
             (!filters.node || nemesis.target_node.name === filters.node) &&
-            (!filters.status || nemesis.status === filters.status)
+            !filters.excludedStatuses.has(nemesis.status)
     );
 
 export const nemesisStatuses = (nemeses: readonly NemesisInfo[]): string[] =>
