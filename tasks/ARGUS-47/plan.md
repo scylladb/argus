@@ -186,18 +186,18 @@ description with `white-space: pre-line`, the reason `pre` with
 - `TestRun.svelte`: `import NemesisList from "./Nemesis/NemesisList.svelte"`,
   `<NemesisList nemeses={testRun.nemesis_data} resources={testRun.allocated_resources} />`.
 
-- [ ] Write the failing tests: a row per nemesis; "In progress"; the
+- [x] Write the failing tests: a row per nemesis; "In progress"; the
       description subline with the full text as `title`; no subline on
       null; default order; sort and reverse with `aria-sort`; no direction
       inheritance; regex, description and invalid-pattern filters; the
       match count; both empty states; expand shows the details; the
       details stay open across `rerender`; two nemeses with one start time
       expand independently; collapse; the labelled input.
-- [ ] Run `yarn test frontend/TestRun/Nemesis` and confirm the failure.
-- [ ] Write the two components, wire `TestRun.svelte`, delete the old files.
-- [ ] Run `yarn test`, `yarn build`, `npx eslint frontend/TestRun/Nemesis`,
+- [x] Run `yarn test frontend/TestRun/Nemesis` and confirm the failure.
+- [x] Write the two components, wire `TestRun.svelte`, delete the old files.
+- [x] Run `yarn test`, `yarn build`, `npx eslint frontend/TestRun/Nemesis`,
       `npx svelte-check`, and the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 7 — Live check
 

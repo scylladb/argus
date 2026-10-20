@@ -133,7 +133,7 @@
     } from "@fortawesome/free-solid-svg-icons";
     import TestMetadata from "../Common/TestMetadata.svelte";
     import ResourcesInfo from "./ResourcesInfo.svelte";
-    import NemesisTable from "./NemesisTable.svelte";
+    import NemesisList from "./Nemesis/NemesisList.svelte";
     import ActivityTab from "./ActivityTab.svelte";
     import CostsTab from "./CostsTab.svelte";
     import TestRunInfo from "./TestRunInfo.svelte";
@@ -460,7 +460,7 @@
                     {/if}
                 </div>
                 <div class="overflow-scroll" role="tabpanel" style:display={activeTab === "nemesis" ? "block" : "none"}>
-                    <NemesisTable nemesisCollection={testRun.nemesis_data} resources={testRun.allocated_resources} />
+                    <NemesisList nemeses={testRun.nemesis_data} resources={testRun.allocated_resources} />
                 </div>
                 <div class="overflow-scroll" role="tabpanel" style:display={activeTab === "logs" ? "block" : "none"}>
                     {#if visitedTabs["logs"]}
