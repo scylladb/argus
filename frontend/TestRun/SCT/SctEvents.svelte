@@ -70,7 +70,8 @@
     import { onMount, onDestroy } from "svelte";
 
     import { sendMessage } from "../../Stores/AlertStore";
-    import type { APIError, NemesisInfo, SCTTestRun } from "../TestRun.svelte";
+    import type { APIError, SCTTestRun } from "../TestRun.svelte";
+    import type { NemesisInfo } from "../Nemesis/types";
     import SctEvent from "./SctEvent.svelte";
     import { faCheck, faTimes } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";

@@ -115,9 +115,9 @@ stays in every plan built from a spec.
 **Internals:** `NemesisTargetNode { name; ip: string | null; shards: number | null }`,
 `NemesisInfo` (the fields of the spec contract), `NemesisResource { name; state; instance_info: { private_ip: string } }`.
 
-- [ ] Write the types and switch the three importers.
-- [ ] Run `yarn build` and `yarn test`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Write the types and switch the three importers.
+- [x] Run `yarn build` and `yarn test`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 4 — The sort, filter and label helpers
 
