@@ -73,7 +73,7 @@
         {#if nemesis.description}
             <div class="col-12">
                 <div class="fw-semibold mb-1">Description</div>
-                <p class="description small mb-0">{nemesis.description}</p>
+                <p class="description small p-2 rounded bg-light-two mb-0">{nemesis.description}</p>
             </div>
         {/if}
         {#if nemesis.stack_trace}
@@ -127,6 +127,7 @@
 
     .description {
         white-space: pre-line;
+        box-shadow: var(--bs-box-shadow-inset);
     }
 
     .reason {
