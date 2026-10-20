@@ -13,8 +13,8 @@ export interface NemesisInfo {
     start_time: number;
     end_time: number;
     stack_trace: string;
-    description_digest?: string | null;
-    description?: string | null;
+    description_digest: string | null;
+    description: string | null;
 }
 
 export interface NemesisResource {

@@ -27,6 +27,7 @@ const T0 = Date.UTC(2026, 9, 20, 10, 0, 0) / 1000;
 const nemesis = (overrides: Partial<NemesisInfo> = {}): NemesisInfo => ({
     class_name: "DisruptRestartNodeMonkey",
     name: "disrupt_restart_node",
+    description_digest: "digest-1",
     description: "Restart (hard) the target node.\n\nWaits for the node to rejoin.",
     duration: 90,
     target_node: { name: "db-node-1", ip: "1.2.3.4", shards: 8 },
@@ -48,7 +49,7 @@ const three = () => [
     nemesis({ name: "disrupt_add_node", class_name: "DisruptAddNodeMonkey", description: null, start_time: T0 + 300, end_time: 0 }),
 ];
 
-const rows = () => screen.getAllByRole("row").filter((row) => row.classList.contains("nemesis-row"));
+const rows = () => screen.getAllByRole("rowgroup").filter((row) => row.classList.contains("nemesis-row"));
 
 const rowNames = () => rows().map((row) => row.querySelector(".nemesis-name")?.textContent?.trim());
 
@@ -202,15 +203,12 @@ describe("NemesisList", () => {
         expect(toggle.getAttribute("aria-expanded")).toBe("false");
     });
 
-    it("toggles and moves between rows with the keyboard", async () => {
+    it("toggles with a real button and moves between rows with the keyboard", async () => {
         render(NemesisList, { props: { nemeses: three(), resources } });
         const [first, second, third] = rows().map((row) => within(row).getAllByRole("button")[0]);
-        expect(first.getAttribute("tabindex")).toBe("0");
-
-        await fireEvent.keyDown(first, { key: "Enter" });
-        expect(first.getAttribute("aria-expanded")).toBe("true");
-        await fireEvent.keyDown(first, { key: " " });
+        expect(first.tagName).toBe("BUTTON");
         expect(first.getAttribute("aria-expanded")).toBe("false");
+        expect(within(rows()[0]).getAllByRole("cell")).toHaveLength(5);
 
         first.focus();
         await fireEvent.keyDown(first, { key: "ArrowDown" });
@@ -413,6 +411,25 @@ describe("NemesisList", () => {
         await filter("nemesis_1");
         expect(screen.getByText("Showing 50 of 111")).toBeTruthy();
         expect(rows()).toHaveLength(50);
+    });
+
+    it("keeps a status selection when an excluded status disappears on a refresh", async () => {
+        const { rerender } = render(NemesisList, { props: { nemeses: three(), resources } });
+        await fireEvent.mouseUp(screen.getByTitle("Remove Failed"));
+        await fireEvent.click(screen.getByTitle("Remove Failed"));
+        await tick();
+
+        const [restart, , add] = three();
+        await rerender({ nemeses: [restart, { ...add, status: "running", end_time: 0 }], resources });
+        await tick();
+        expect(rowNames()).toEqual(["disrupt_add_node", "disrupt_restart_node"]);
+
+        await fireEvent.mouseUp(screen.getByTitle("Remove Running"));
+        await fireEvent.click(screen.getByTitle("Remove Running"));
+        await tick();
+        await tick();
+        expect(rowNames()).toEqual(["disrupt_restart_node"]);
+        expect(screen.getByText("1 of 2 match")).toBeTruthy();
     });
 
     it("labels the filter input", () => {

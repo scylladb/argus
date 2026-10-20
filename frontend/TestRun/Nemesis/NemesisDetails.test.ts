@@ -10,6 +10,7 @@ const T0 = Date.UTC(2026, 9, 20, 10, 0, 0) / 1000;
 const nemesis = (overrides: Partial<NemesisInfo> = {}): NemesisInfo => ({
     class_name: "DisruptRestartNodeMonkey",
     name: "disrupt_restart_node",
+    description_digest: "digest-1",
     description: "Restart (hard) the target node.\n\nWaits for the node to rejoin.",
     duration: 90,
     target_node: { name: "db-node-1", ip: "1.2.3.4", shards: 8 },
