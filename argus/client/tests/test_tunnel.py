@@ -1070,6 +1070,7 @@ def test_argus_client_warns_and_falls_back_when_tunnel_setup_fails(requests_mock
             endpoint=ArgusClient.Routes.GET,
             location_params={"type": "test-type", "id": "test-id"},
         )
+        assert client.session._first_attempt_done.wait(5)
 
     assert response.status_code == 200
     assert isinstance(client.session, TunneledSession)
