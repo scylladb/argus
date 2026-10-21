@@ -24,12 +24,12 @@
             <label class="input-group-text detail-label" for="{uid}-{id}">{label}</label>
             <input
                 id="{uid}-{id}"
-                class="form-control"
+                class="form-control bg-body-secondary"
                 class:font-monospace={mono}
                 type="text"
                 value={value ?? ""}
                 {placeholder}
-                disabled
+                readonly
             />
         </div>
         {#if canCopy && value}
@@ -102,10 +102,6 @@
         width: 6.5rem;
     }
 
-    .form-control:disabled {
-        color: var(--bs-body-color);
-    }
-
     .copy-button {
         position: absolute;
         top: 0;
@@ -126,7 +122,7 @@
     }
 
     .description {
-        white-space: pre-line;
+        white-space: pre-wrap;
         box-shadow: var(--bs-box-shadow-inset);
     }
 

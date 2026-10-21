@@ -42,7 +42,7 @@ describe("NemesisDetails", () => {
         expect((screen.getAllByLabelText("Name")[0] as HTMLInputElement).value).toBe("disrupt_restart_node");
         expect(screen.getByText("Succeeded")).toBeTruthy();
         expect(value("Duration")).toBe("1 minute, 30 seconds");
-        expect((screen.getByLabelText("Class") as HTMLInputElement).disabled).toBe(true);
+        expect((screen.getByLabelText("Class") as HTMLInputElement).readOnly).toBe(true);
     });
 
     it("hides the duration when it is zero", () => {
