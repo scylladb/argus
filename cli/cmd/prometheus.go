@@ -711,9 +711,10 @@ func promDockerRunArgs(containerName, dataDir, configPath string, uid, gid int) 
 	if uid != -1 {
 		args = append(args, "--user", fmt.Sprintf("%d:%d", uid, gid))
 	}
+	// z relabels the mounts so an SELinux-enforcing host lets the container read them.
 	return append(args,
-		"-v", dataDir+":/prometheus",
-		"-v", configPath+":/etc/prometheus/prometheus.yml:ro",
+		"-v", dataDir+":/prometheus:z",
+		"-v", configPath+":/etc/prometheus/prometheus.yml:ro,z",
 		"-p", "0:9090",
 		promImage,
 		"--config.file=/etc/prometheus/prometheus.yml",
