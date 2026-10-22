@@ -102,6 +102,13 @@ func TestPromDockerRunArgs_OmitsUserWhenUIDUnknown(t *testing.T) {
 	assert.NotContains(t, args, "--user")
 }
 
+func TestPromDockerRunArgs_RelabelsMountsForSELinux(t *testing.T) {
+	args := promDockerRunArgs("argus-prom-1e72eebe", "/data", "/data/prometheus.yml", 1000, 1001)
+
+	assert.Contains(t, args, "/data:/prometheus:z")
+	assert.Contains(t, args, "/data/prometheus.yml:/etc/prometheus/prometheus.yml:ro,z")
+}
+
 func TestWritePromConfig_WritesTheScrapeConfig(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "prometheus.yml")
 
