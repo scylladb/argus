@@ -28,6 +28,7 @@ const (
 	promContainerPrefix = "argus-prom-"
 	promMaxTTL          = 1 * time.Hour
 	promImage           = "prom/prometheus:latest"
+	promReadyTimeout    = 2 * time.Minute
 )
 
 const promConfig = `global:
@@ -118,7 +119,10 @@ var promStartCmd = &cobra.Command{
 		// Check if container already exists for this run
 		containerName := promContainerName(runID)
 		if containerExists(ctx, containerName) {
-			port, _ := getContainerPort(ctx, containerName)
+			port, err := promAwaitReady(ctx, containerName)
+			if err != nil {
+				return fmt.Errorf("%w\nrun `argus prometheus stop --run-id %s` and start again", err, runID)
+			}
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Prometheus running at http://localhost:%s\n", port)
 			return nil
 		}
@@ -238,17 +242,21 @@ var promStartCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("docker run failed: %w\n%s", err, string(output))
 		}
+
+		port, err := promAwaitReady(ctx, containerName)
+		if err != nil {
+			rmCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+			defer cancel()
+			if out, rmErr := exec.CommandContext(rmCtx, "docker", "rm", "-f", containerName).CombinedOutput(); rmErr != nil {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not remove %s: %v\n%s", containerName, rmErr, out)
+			}
+			return err
+		}
 		started = true
 
 		// Store run ID metadata for list command
 		if err := os.WriteFile(filepath.Join(dataDir, "run_id"), []byte(runID), 0o644); err != nil {
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not record the run ID: %v\n", err)
-		}
-
-		// Get assigned port
-		port, err := getContainerPort(ctx, containerName)
-		if err != nil {
-			return fmt.Errorf("getting container port: %w", err)
 		}
 
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Prometheus running at http://localhost:%s\n", port)
@@ -505,6 +513,68 @@ func promContainerNames(ctx context.Context) ([]string, error) {
 func containerExists(ctx context.Context, name string) bool {
 	out, err := exec.CommandContext(ctx, "docker", "ps", "-a", "-q", "--filter", "name=^/"+name+"$").Output()
 	return err == nil && len(strings.TrimSpace(string(out))) > 0
+}
+
+// checkContainerRunning returns nil while the container runs.
+func checkContainerRunning(ctx context.Context, name string) error {
+	out, err := exec.CommandContext(ctx, "docker", "inspect", "-f", "{{.State.Running}}", name).Output()
+	if err != nil {
+		return fmt.Errorf("docker inspect: %w", err)
+	}
+	if strings.TrimSpace(string(out)) != "true" {
+		return errors.New("container exited")
+	}
+	return nil
+}
+
+// promAwaitReady returns the host port once Prometheus in the container is
+// ready, or an error carrying the tail of the container log.
+func promAwaitReady(ctx context.Context, name string) (string, error) {
+	running := func() error { return checkContainerRunning(ctx, name) }
+	var port string
+	err := running()
+	if err == nil {
+		if port, err = getContainerPort(ctx, name); err == nil {
+			err = waitPromReady(ctx, "http://localhost:"+port, running, promReadyTimeout)
+		}
+	}
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+	if err != nil {
+		logs, _ := exec.CommandContext(ctx, "docker", "logs", "--tail", "20", name).CombinedOutput()
+		return "", fmt.Errorf("prometheus in %s is not ready: %w\n%s", name, err, logs)
+	}
+	return port, nil
+}
+
+// waitPromReady polls /-/ready until it answers 200, failing fast once running
+// reports an error.
+func waitPromReady(ctx context.Context, baseURL string, running func() error, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeoutCause(ctx, timeout, fmt.Errorf("not ready after %s", timeout))
+	defer cancel()
+	tick := time.NewTicker(500 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		if err := running(); err != nil {
+			return err
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/-/ready", nil)
+		if err != nil {
+			return err
+		}
+		if resp, err := http.DefaultClient.Do(req); err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return nil
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		case <-tick.C:
+		}
+	}
 }
 
 func getContainerPort(ctx context.Context, name string) (string, error) {
