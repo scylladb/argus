@@ -6,6 +6,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,7 +26,10 @@ import (
 )
 
 // fakeDocker logs its arguments and keeps one container name in
-// $FAKE_DOCKER_STATE. `run` fails when $FAKE_DOCKER_RUN_FAILS is set.
+// $FAKE_DOCKER_STATE. `run` fails when $FAKE_DOCKER_RUN_FAILS is set, the
+// container reports exited when $FAKE_DOCKER_EXITED is set, `inspect` fails
+// when $FAKE_DOCKER_INSPECT_FAILS is set, `rm` fails when
+// $FAKE_DOCKER_RM_FAILS is set, and `port` answers $FAKE_DOCKER_PORT.
 const fakeDocker = `#!/bin/sh
 S="$FAKE_DOCKER_STATE"
 echo "$@" >> "$S/log"
@@ -32,8 +37,11 @@ case "$1" in
   ps) [ -f "$S/name" ] && cat "$S/name"; exit 0;;
   run) [ -n "$FAKE_DOCKER_RUN_FAILS" ] && { echo "run failed" >&2; exit 125; }
        echo "$4" > "$S/name"; exit 0;;
-  port) echo "0.0.0.0:12345"; exit 0;;
-  rm) rm -f "$S/name"; exit 0;;
+  port) echo "0.0.0.0:$FAKE_DOCKER_PORT"; exit 0;;
+  inspect) [ -n "$FAKE_DOCKER_INSPECT_FAILS" ] && { echo "inspect failed" >&2; exit 1; }
+           [ -n "$FAKE_DOCKER_EXITED" ] && echo false || echo true; exit 0;;
+  rm) [ -n "$FAKE_DOCKER_RM_FAILS" ] && { echo "rm failed" >&2; exit 1; }
+      rm -f "$S/name"; exit 0;;
 esac
 exit 0
 `
@@ -56,6 +64,9 @@ func promCmdEnv(t *testing.T) (context.Context, string, string) {
 	require.NoError(t, os.WriteFile(filepath.Join(bin, "docker"), []byte(fakeDocker), 0o755))
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("FAKE_DOCKER_STATE", state)
+	prom := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	t.Cleanup(prom.Close)
+	t.Setenv("FAKE_DOCKER_PORT", strings.TrimPrefix(prom.URL, "http://127.0.0.1:"))
 
 	appCache := cache.New(config.CacheDir())
 	key := cache.PrometheusLogKey(promTestRunID)
@@ -120,7 +131,7 @@ func TestPromStart_ReusesTheCachedArchive(t *testing.T) {
 	out, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
 
 	require.NoError(t, err)
-	assert.Equal(t, "Prometheus running at http://localhost:12345\n", out)
+	assert.Equal(t, "Prometheus running at http://localhost:"+os.Getenv("FAKE_DOCKER_PORT")+"\n", out)
 	assert.FileExists(t, filepath.Join(entry, promCmdArchive))
 	runDir := filepath.Join(promDataRoot(), promTestRunID)
 	assert.FileExists(t, filepath.Join(runDir, "run_id"))
@@ -137,6 +148,56 @@ func TestPromStart_FailedRunLeavesNoRunDir(t *testing.T) {
 	require.ErrorContains(t, err, "docker run failed")
 	assert.NoDirExists(t, filepath.Join(promDataRoot(), promTestRunID))
 	assert.FileExists(t, filepath.Join(entry, promCmdArchive))
+}
+
+func TestPromStart_ExitedContainerIsRemoved(t *testing.T) {
+	ctx, state, _ := promCmdEnv(t)
+	t.Setenv("FAKE_DOCKER_EXITED", "1")
+
+	_, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
+
+	require.ErrorContains(t, err, "container exited")
+	assert.Contains(t, dockerLog(t, state), "rm -f argus-prom-1e72eebe")
+	assert.NoDirExists(t, filepath.Join(promDataRoot(), promTestRunID))
+}
+
+func TestPromStart_WarnsWhenTheContainerStays(t *testing.T) {
+	ctx, _, _ := promCmdEnv(t)
+	t.Setenv("FAKE_DOCKER_EXITED", "1")
+	t.Setenv("FAKE_DOCKER_RM_FAILS", "1")
+
+	out, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
+
+	require.ErrorContains(t, err, "container exited")
+	assert.Contains(t, out, "warning: could not remove argus-prom-1e72eebe: exit status 1\nrm failed\n")
+}
+
+func TestPromStart_InspectFailureIsNotAnExit(t *testing.T) {
+	ctx, _, _ := promCmdEnv(t)
+	t.Setenv("FAKE_DOCKER_INSPECT_FAILS", "1")
+
+	_, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
+
+	require.ErrorContains(t, err, "docker inspect")
+	assert.NotContains(t, err.Error(), "container exited")
+}
+
+func TestPromStart_InterruptRemovesTheContainer(t *testing.T) {
+	ctx, state, _ := promCmdEnv(t)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	prom := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		cancel()
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer prom.Close()
+	t.Setenv("FAKE_DOCKER_PORT", strings.TrimPrefix(prom.URL, "http://127.0.0.1:"))
+
+	_, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Contains(t, dockerLog(t, state), "rm -f argus-prom-1e72eebe")
+	assert.NoDirExists(t, filepath.Join(promDataRoot(), promTestRunID))
 }
 
 // Another start of the run holds the directory and has no container yet. A

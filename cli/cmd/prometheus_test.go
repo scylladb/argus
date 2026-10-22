@@ -2,11 +2,15 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -107,6 +111,48 @@ func TestPromDockerRunArgs_RelabelsMountsForSELinux(t *testing.T) {
 
 	assert.Contains(t, args, "/data:/prometheus:z")
 	assert.Contains(t, args, "/data/prometheus.yml:/etc/prometheus/prometheus.yml:ro,z")
+}
+
+func TestWaitPromReady_ReturnsOnceReady(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/-/ready", r.URL.Path)
+		if calls.Add(1) < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	}))
+	defer srv.Close()
+
+	require.NoError(t, waitPromReady(t.Context(), srv.URL, func() error { return nil }, 10*time.Second))
+	assert.Equal(t, int32(3), calls.Load())
+}
+
+func TestWaitPromReady_FailsWhenContainerStops(t *testing.T) {
+	stopped := errors.New("container exited")
+
+	err := waitPromReady(t.Context(), "http://127.0.0.1:1", func() error { return stopped }, 10*time.Second)
+
+	assert.ErrorIs(t, err, stopped)
+}
+
+func TestWaitPromReady_ReportsCancelNotTimeout(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	err := waitPromReady(ctx, "http://127.0.0.1:1", func() error { return nil }, 10*time.Second)
+
+	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func TestWaitPromReady_FailsAfterTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	err := waitPromReady(t.Context(), srv.URL, func() error { return nil }, time.Second)
+
+	assert.ErrorContains(t, err, "not ready after 1s")
 }
 
 func TestWritePromConfig_WritesTheScrapeConfig(t *testing.T) {
