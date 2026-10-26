@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Optional
 from uuid import UUID, uuid4
 from datetime import UTC, datetime
 
@@ -16,7 +16,7 @@ class JiraIssue(Document):
     key: Annotated[str, Indexed()]
     state: str
     project: str
-    priority: str | None = None
+    priority: Optional[str] = None
     permalink: Annotated[str, Indexed()]
     labels: list[IssueLabel] = Field(default_factory=list)
     assignees: list[str] = Field(default_factory=list)
