@@ -31,11 +31,11 @@ model, and optionally its own router, through the plugin layer.
     `client_api.py`, `view_api.py`, `planner_api.py`, `admin_api.py`,
     `notification_api.py`, `replay_api.py`, `ssh_api.py`, `cost_api.py`,
     `health_api.py`, `auth.py`.
-  - `service/` — 26 modules. The business logic each router calls.
+  - `service/` — 30 modules. The business logic each router calls.
   - `models/` — 13 modules. `web.py` holds the core entities. `jira.py`,
     `github_issue.py`, `pytest.py`, `result.py`, `plan.py`, `view_widgets.py`,
-    `ssh_key.py`, `run_config.py`, `run_cost.py`, `runtime_store.py` and
-    `argus_ai.py` hold the rest.
+    `ssh_key.py`, `run_config.py`, `run_cost.py`, `run_cost_rollup.py`,
+    `runtime_store.py` and `argus_ai.py` hold the rest.
   - `util/` — 7 modules of shared helpers.
   - `rendering.py` — the template helpers the `.j2` files expect.
   - `db.py` — session setup.
