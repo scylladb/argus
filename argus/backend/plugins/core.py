@@ -72,6 +72,10 @@ class PluginModelBase(Document):
     async def cost_rollup_fields(self, item_names: set[str]) -> dict:
         return {}
 
+    @classmethod
+    async def delete_run_data(cls, run_id: UUID) -> None:
+        return None
+
     async def assign_categories(self):
         key = self.build_id
         try:
