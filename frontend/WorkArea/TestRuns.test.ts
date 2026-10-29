@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/svelte";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/svelte";
 
 vi.mock("../argus", () => ({ applicationCurrentUser: { roles: [] } }));
 vi.mock("../Common/PluginDispatch", () => ({ AVAILABLE_PLUGINS: {}, isPluginSupported: () => true }));
@@ -146,5 +146,28 @@ describe("TestRuns picked runs", () => {
 
         await vi.waitFor(() => expect(runListRequests()).toHaveLength(2));
         expect(runListRequests()[1]).toContain("additionalRuns[]=r2");
+    });
+});
+
+describe("TestRuns run deletion", () => {
+    it("tells the workspace which run of which test was deleted", async () => {
+        const editableInfo = { ...TEST_INFO, release: { id: "r-1", name: "staging", user_editable: true } };
+        const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+            if (init?.method === "DELETE") return Promise.resolve(respond({ status: "ok", response: { deleted: RUNS[0].id } }));
+            if (url.startsWith("/api/v1/test-info")) return Promise.resolve(respond({ status: "ok", response: editableInfo }));
+            if (url.startsWith(`/api/v1/test/${TEST_ID}/runs`)) return Promise.resolve(respond({ status: "ok", response: RUNS }));
+            return Promise.resolve(respond({}, 404));
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const onRunDeleted = vi.fn();
+        render(TestRuns, { props: { testId: TEST_ID, tab: "details" }, events: { runDeleted: onRunDeleted } });
+
+        await fireEvent.click(await screen.findByRole("button", { name: "#412" }));
+        await fireEvent.click(await screen.findByRole("button", { name: "Delete run #412" }));
+        await fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+        await waitFor(() => expect(onRunDeleted).toHaveBeenCalledTimes(1));
+        expect(onRunDeleted.mock.calls[0][0].detail).toEqual({ testId: TEST_ID, runId: RUNS[0].id });
+        expect(fetchMock).toHaveBeenCalledWith(`/api/v1/test/${TEST_ID}/run/${RUNS[0].id}`, { method: "DELETE" });
     });
 });
