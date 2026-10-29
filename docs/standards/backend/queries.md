@@ -43,3 +43,7 @@ window small and treat a duplicate as possible.
 A dashboard aggregate that several requests share belongs in a snapshot table,
 as `ReleaseStatsSnapshot` does for the release statistics. Write the aggregate
 once and read the row, rather than recomputing it per request.
+
+A fact a dashboard folds many ways belongs in a per-row table keyed for the
+read, as `run_cost_by_month_v1` does for the cost of every run: one row per
+run under its month, rewritten on every change, read by month partition.
