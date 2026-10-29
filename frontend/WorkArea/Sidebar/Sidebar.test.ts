@@ -501,4 +501,20 @@ describe("Sidebar", () => {
         await waitFor(() => expect(sendMessage).toHaveBeenCalledWith("error", "Release scylla-master is not user editable", expect.any(String)));
         expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy();
     });
+
+    it("closes the open tests of a deleted group without visiting the group first", async () => {
+        const fetchMock = serve({ releases: [EDITABLE, OLD] });
+        const { onToggleTest } = renderSidebar({ openTests: ["t1", "other"] });
+        await fireEvent.click(await waitFor(() => row("scylla-master")));
+        await waitFor(() => row("Longevity"));
+
+        await fireEvent.click(screen.getByRole("button", { name: "Delete Longevity" }));
+        await fireEvent.input(screen.getByLabelText(/to confirm/), { target: { value: "longevity" } });
+        await fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/v1/group/g1", { method: "DELETE" }));
+        expect(fetchMock.mock.calls.some(([url]) => url === "/api/v1/tests?groupId=g1")).toBe(true);
+        expect(onToggleTest).toHaveBeenCalledWith("t1");
+        expect(onToggleTest).not.toHaveBeenCalledWith("other");
+    });
 });

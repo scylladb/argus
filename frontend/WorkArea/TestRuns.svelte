@@ -270,6 +270,7 @@
         const id = e.detail.id;
         additionalRuns = additionalRuns.filter((runId) => runId !== id);
         delete clickedTestRuns[id];
+        dispatch("runDeleted", { testId, runId: id });
         fetchTestRuns();
     };
 
