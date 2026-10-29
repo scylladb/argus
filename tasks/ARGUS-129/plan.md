@@ -159,4 +159,4 @@ test rows of a release with `user_editable`; `confirmDelete` sends the
 
 - [x] Describe the three `DELETE` routes, the flag, and the admin switch.
 - [x] Run `uv run pre-commit run --all-files`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Commit, with the boxes of this task checked.
