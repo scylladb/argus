@@ -55,6 +55,7 @@ export default defineConfig({
                 profileSchedules: "./frontend/profile-schedules.js",
                 teams: "./frontend/teams.js",
                 issueLinks: "./frontend/issue-links.js",
+                costExplorer: "./frontend/cost-explorer.js",
             },
             output: {
                 entryFileNames: "[name].bundle.js",
