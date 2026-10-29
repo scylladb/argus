@@ -83,7 +83,7 @@ Routes: `DELETE /api/v1/test/{test_id}/run/{run_id}`
 - [x] Run them and confirm the failure.
 - [x] Write the smallest change that passes them.
 - [x] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 3 — Frontend: the confirmation modal and the sidebar
 
