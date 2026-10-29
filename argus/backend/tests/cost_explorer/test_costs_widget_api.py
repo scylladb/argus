@@ -29,5 +29,6 @@ def test_widget_uses_weeks_past_a_month_and_rejects_a_long_window(api_client: Te
     view_id = create_view(api_client, [])
 
     assert api_client.get(WIDGET, params={"view_id": view_id, "days": 90}).json()["response"]["window"]["granularity"] == "week"
-    assert api_client.get(WIDGET, params={"view_id": view_id, "days": 400}).json()["status"] == "error"
+    assert api_client.get(WIDGET, params={"view_id": view_id, "days": 365}).json()["status"] == "ok"
+    assert api_client.get(WIDGET, params={"view_id": view_id, "days": 366}).json()["status"] == "error"
     assert api_client.get(WIDGET, params={"view_id": str(uuid.uuid4())}).json()["status"] == "error"

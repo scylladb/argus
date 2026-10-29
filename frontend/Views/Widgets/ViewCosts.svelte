@@ -15,7 +15,7 @@
 
     let { dashboardObject, settings }: Props = $props();
 
-    const days = $derived(Number(settings?.days) > 0 ? Math.min(Number(settings.days), 366) : 30);
+    const days = $derived(Number(settings?.days) > 0 ? Math.min(Number(settings.days), 365) : 30);
     let data: ExplorerResponse | undefined = $state();
     let error = $state("");
     const windowDays = $derived(

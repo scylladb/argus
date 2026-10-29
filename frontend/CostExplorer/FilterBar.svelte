@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount, untrack } from "svelte";
     import MultiSelect, { type ObjectOption } from "svelte-multiselect";
     import Fa from "svelte-fa";
     import { faBusinessTime, faFolder, faVial } from "@fortawesome/free-solid-svg-icons";
@@ -54,6 +54,9 @@
         const kept = filters[key].filter((id) => ids.has(id));
         if (kept.length !== filters[key].length) filters[key] = kept;
     };
+    const prune = (key: ListKey) => untrack(() => { if (filters[key].length > 0) clear(key); });
+    let groupLoad = 0;
+    let testLoad = 0;
 
     const presetActive = (days: number): boolean => {
         const range = presetRange(days);
@@ -78,24 +81,34 @@
     });
 
     $effect(() => {
+        const load = ++groupLoad;
+        if (filters.releaseNames.length === 0) {
+            groups = [];
+            prune("groupIds");
+            return;
+        }
         const selected = releases.filter((release) => filters.releaseNames.includes(release.name));
         if (selected.length === 0) {
             groups = [];
             return;
         }
         Promise.all(selected.map((release) => loadGroups(release.id))).then((loaded) => {
+            if (load !== groupLoad) return;
             groups = loaded.flat();
             keep("groupIds", groups);
         });
     });
 
     $effect(() => {
+        const load = ++testLoad;
         const ids = filters.groupIds;
         if (ids.length === 0) {
             tests = [];
+            prune("testIds");
             return;
         }
         Promise.all(ids.map((id) => loadTests(id))).then((loaded) => {
+            if (load !== testLoad) return;
             tests = loaded.flat();
             keep("testIds", tests);
         });

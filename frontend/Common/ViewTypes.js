@@ -215,7 +215,7 @@ export const WIDGET_TYPES = {
             days: {
                 type: IntegerValue,
                 default: 30,
-                help: "How many days back the spend is summed, up to 366",
+                help: "How many days back the spend is summed, up to 365",
                 displayName: "Days",
             },
         },
