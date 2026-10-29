@@ -25,7 +25,7 @@
 
     const showGraphsButtonIfResultsExist = async function () {
         try {
-            let res = await fetch(`/api/v1/test-results?testId=${testId}`, {
+            let res = await fetch(`/api/v1/results/test?testId=${testId}`, {
                 method: "HEAD"
             });
             if (res.status === 200) {

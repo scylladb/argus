@@ -1,12 +1,12 @@
-"""Controller-level integration tests for the graph-view + test-results
+"""Controller-level integration tests for the graph-view + results/test
 endpoints exposed by ``argus/backend/controller/api.py``.
 
 Scope (iteration 7 of the controller coverage matrix):
 
-- ``POST /api/v1/create-graph-view``
-- ``POST /api/v1/update-graph-view``
-- ``GET  /api/v1/test-results``
-- ``HEAD /api/v1/test-results``
+- ``POST /api/v1/results/graph-view/create``
+- ``POST /api/v1/results/graph-view/update``
+- ``GET  /api/v1/results/test``
+- ``HEAD /api/v1/results/test``
 """
 
 import json
@@ -19,7 +19,7 @@ API_PREFIX = "/api/v1"
 
 
 # ---------------------------------------------------------------------------
-# /create-graph-view + /update-graph-view
+# /results/graph-view/create + /results/graph-view/update
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
@@ -29,7 +29,7 @@ def created_graph_view(api_client, fake_test):
         "name": "iteration7-view",
         "description": "iteration7-desc",
     }
-    resp = api_client.post(f"{API_PREFIX}/create-graph-view", json=payload)
+    resp = api_client.post(f"{API_PREFIX}/results/graph-view/create", json=payload)
     assert resp.status_code == 200, resp.content
     body = resp.json()
     assert body["status"] == "ok"
@@ -43,9 +43,9 @@ def test_create_graph_view_round_trip(api_client, fake_test, created_graph_view)
     view_id = str(created_graph_view["id"])
     assert view_id
 
-    # Verify via GET /test-results — graph_views section should include it.
+    # Verify via GET /results/test — graph_views section should include it.
     get_resp = api_client.get(
-        f"{API_PREFIX}/test-results", params={"testId": str(fake_test.id)}
+        f"{API_PREFIX}/results/test", params={"testId": str(fake_test.id)}
     )
     assert get_resp.status_code == 200, get_resp.content
     body = get_resp.json()
@@ -62,7 +62,7 @@ def test_update_graph_view_changes_name_and_graphs(api_client, fake_test, create
         "description": "iteration7-updated-desc",
         "graphs": {"graph-key-1": "graph-data-1"},
     }
-    resp = api_client.post(f"{API_PREFIX}/update-graph-view", json=payload)
+    resp = api_client.post(f"{API_PREFIX}/results/graph-view/update", json=payload)
     assert resp.status_code == 200, resp.content
     body = resp.json()
     assert body["status"] == "ok"
@@ -70,9 +70,9 @@ def test_update_graph_view_changes_name_and_graphs(api_client, fake_test, create
     assert body["response"]["description"] == "iteration7-updated-desc"
     assert body["response"]["graphs"]["graph-key-1"] == "graph-data-1"
 
-    # Round-trip via /test-results
+    # Round-trip via /results/test
     get_resp = api_client.get(
-        f"{API_PREFIX}/test-results", params={"testId": str(fake_test.id)}
+        f"{API_PREFIX}/results/test", params={"testId": str(fake_test.id)}
     )
     views = {str(v["id"]): v for v in get_resp.json()["response"]["graph_views"]}
     assert views[str(created_graph_view["id"])]["name"] == "iteration7-updated"
@@ -86,18 +86,18 @@ def test_update_graph_view_unknown_id_errors(api_client, fake_test):
         "description": "x",
         "graphs": {},
     }
-    resp = api_client.post(f"{API_PREFIX}/update-graph-view", json=payload)
+    resp = api_client.post(f"{API_PREFIX}/results/graph-view/update", json=payload)
     assert resp.status_code == 200
     assert resp.json()["status"] == "error"
 
 
 # ---------------------------------------------------------------------------
-# /test-results  (GET + HEAD)
+# /results/test  (GET + HEAD)
 # ---------------------------------------------------------------------------
 
 def test_test_results_returns_graphs_payload(api_client, fake_test):
     resp = api_client.get(
-        f"{API_PREFIX}/test-results", params={"testId": str(fake_test.id)}
+        f"{API_PREFIX}/results/test", params={"testId": str(fake_test.id)}
     )
     assert resp.status_code == 200, resp.content
     body = resp.json()
@@ -111,7 +111,7 @@ def test_test_results_returns_graphs_payload(api_client, fake_test):
 
 def test_test_results_with_date_range(api_client, fake_test):
     resp = api_client.get(
-        f"{API_PREFIX}/test-results",
+        f"{API_PREFIX}/results/test",
         params={
             "testId": str(fake_test.id),
             "startDate": "2025-01-01T00:00:00",
@@ -123,13 +123,13 @@ def test_test_results_with_date_range(api_client, fake_test):
 
 
 def test_test_results_missing_test_id(api_client):
-    resp = api_client.get(f"{API_PREFIX}/test-results")
+    resp = api_client.get(f"{API_PREFIX}/results/test")
     assert resp.status_code == 200
     assert resp.json()["status"] == "error"
 
 
 def test_test_results_head_returns_404_when_no_results(api_client, fake_test):
     resp = api_client.head(
-        f"{API_PREFIX}/test-results", params={"testId": str(fake_test.id)}
+        f"{API_PREFIX}/results/test", params={"testId": str(fake_test.id)}
     )
     assert resp.status_code == 404

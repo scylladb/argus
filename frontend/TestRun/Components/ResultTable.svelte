@@ -124,7 +124,7 @@
                 "tableNames[]": [table_name],
             });
 
-            let res = await fetch(`/api/v1/test-results?${params}`);
+            let res = await fetch(`/api/v1/results/test?${params}`);
             if (res.status !== 200) {
                 throw new Error(`HTTP Error ${res.status} trying to fetch test results`);
             }
