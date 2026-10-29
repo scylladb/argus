@@ -149,14 +149,14 @@ row-cols-md-3 row-cols-lg-4 row-cols-xxl-5 g-2 p-2` grid, one `col` with a
 `<ScreenshotModal bind:selectedScreenshot screenshots={urls} />`. The
 fixed-size thumbnail rules go.
 
-- [ ] Write the failing tests: one button per screenshot with a numbered
+- [x] Write the failing tests: one button per screenshot with a numbered
   alt text and the proxied URL; the empty message without screenshots; a
   click opens the viewer on that screenshot; `ArrowRight` moves to the next
   gallery entry; the focus returns to the thumbnail that opened the viewer.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 5 — Live check
 
