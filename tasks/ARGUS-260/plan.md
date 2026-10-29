@@ -119,7 +119,7 @@ surface (`touch-action: none; user-select: none; overscroll-behavior:
 contain; overflow: hidden`), the image fit, the grab cursors. The
 `screenshot-button` rules go.
 
-- [ ] Write the failing tests: renders nothing when no screenshot is
+- [x] Write the failing tests: renders nothing when no screenshot is
   selected; shows the selected screenshot with the counter for a list and
   neither counter nor arrows for a single URL; closes on Escape; the arrows
   move through the list, update the counter and reset the transform;
@@ -129,10 +129,10 @@ contain; overflow: hidden`), the image fit, the grab cursors. The
   moves to the dialog on open and back to the trigger on close; the body
   gets `overflow-hidden` while open and loses it on close; a failed image
   shows the message and keeps the open-original link.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 4 — The gallery
 
