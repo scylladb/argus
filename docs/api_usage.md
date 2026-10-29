@@ -586,6 +586,56 @@ them. `to_investigate` counts the failed, test error and error tests nobody has
 investigated. `start_time` is `null` for a test that never ran. A dormant
 release answers `{"dormant": true}` unless it has a stored snapshot.
 
+## Release cleanup API
+
+An admin marks a release as user editable from the admin panel. The switch
+and the release editor both set the flag:
+
+```http
+POST /admin/api/v1/release/set_user_editable
+```
+
+```json
+{"release_id": "8d25dcb2-1f9b-460a-bd80-0bf6ec59a2a5", "user_editable": true}
+```
+
+```json
+{"status": "ok", "response": {"updated": true}}
+```
+
+Every read of a release carries the flag as `user_editable`. On a release
+with the flag, any logged-in user removes a group, a test or a run. Without
+it, each call answers the error envelope with the message
+`Release <name> is not user editable` and removes nothing.
+
+```http
+DELETE /api/v1/group/{group_id}
+```
+
+Removes the group, every test of the group and every run of those tests.
+
+```http
+DELETE /api/v1/test/{test_id}
+```
+
+Removes the test and every run of the test, in every plugin.
+
+```http
+DELETE /api/v1/test/{test_id}/run/{run_id}
+```
+
+Removes one run of the test. The call answers the error envelope when the
+run belongs to another test.
+
+A removed run takes its comments, events, issue links, configuration, cost,
+pytest results, generic result rows and the plugin's own rows with it. A
+removed test also takes its generic result metadata, best results and graph
+views.
+
+```json
+{"status": "ok", "response": {"deleted": "a7b1c2d3-0000-4000-8000-000000000412"}}
+```
+
 ## Email reporting API
 
 ```http
