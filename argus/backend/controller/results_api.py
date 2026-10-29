@@ -34,6 +34,6 @@ async def release_results(release: str,
                           sut_until: Annotated[OptionalDate, Query(alias="sutUntil")] = None,
                           user: User = Depends(api_current_user)):
     results = await ResultsService().get_release_results(
-        release=release, table_filter=table, statuses=statuses, since=_utc(since), until=_utc(until),
+        release=release, table_filter=table, statuses=[status.upper() for status in statuses], since=_utc(since), until=_utc(until),
         sut_since=_utc(sut_since), sut_until=_utc(sut_until))
     return APIResponse({"status": "ok", "response": results})

@@ -63,22 +63,16 @@ Time values are ISO-8601, for example 2026-10-01 or 2026-10-01T12:00:00Z.
 		ctx := cmd.Context()
 		log := logging.For(LoggerFrom(ctx), "results-query")
 
-		params := url.Values{}
 		table, _ := cmd.Flags().GetString("table")
-		params.Set("table", table)
 		statuses, _ := cmd.Flags().GetStringSlice("status")
-		for _, s := range statuses {
-			params.Add("status[]", s)
-		}
-		for flag, param := range map[string]string{
-			"since": "since", "until": "until", "sut-since": "sutSince", "sut-until": "sutUntil",
-		} {
+		window := map[string]string{}
+		for flag, param := range releaseResultsWindowParams {
 			if value, _ := cmd.Flags().GetString(flag); value != "" {
-				params.Set(param, value)
+				window[param] = value
 			}
 		}
+		route := releaseResultsRoute(args[0], table, statuses, window)
 
-		route := fmt.Sprintf(api.ReleaseResults, url.PathEscape(args[0])) + "?" + params.Encode()
 		log.Debug().Str("route", route).Msg("fetching release results")
 		req, err := APIClientFrom(ctx).NewRequest(ctx, "GET", route, nil)
 		if err != nil {
@@ -93,6 +87,25 @@ Time values are ISO-8601, for example 2026-10-01 or 2026-10-01T12:00:00Z.
 		}
 		return OutputterFrom(ctx).Write(groups)
 	},
+}
+
+// releaseResultsWindowParams maps each time-window flag to its query parameter.
+var releaseResultsWindowParams = map[string]string{
+	"since": "since", "until": "until", "sut-since": "sutSince", "sut-until": "sutUntil",
+}
+
+// releaseResultsRoute builds the release results route. window holds the
+// time-window query parameters by name.
+func releaseResultsRoute(release, table string, statuses []string, window map[string]string) string {
+	params := url.Values{}
+	params.Set("table", table)
+	for _, s := range statuses {
+		params.Add("status[]", s)
+	}
+	for param, value := range window {
+		params.Set(param, value)
+	}
+	return fmt.Sprintf(api.ReleaseResults, url.PathEscape(release)) + "?" + params.Encode()
 }
 
 func init() {

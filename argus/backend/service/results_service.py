@@ -751,12 +751,12 @@ class ResultsService:
                                   sut_since: datetime | None = None, sut_until: datetime | None = None) -> list[dict]:
         """Generic results of every test in a release, grouped by table, then test, then run.
 
-        ``since``/``until`` filter on the write time of the result and default to the last
-        ``RELEASE_RESULTS_WINDOW``. The runs are selected by start time first: a run that started up to
+        ``since``/``until`` filter on the write time of the result. ``since`` defaults to
+        ``RELEASE_RESULTS_WINDOW`` before ``until``, or before now when ``until`` is not set. The runs are selected by start time first: a run that started up to
         ``RUN_START_MARGIN`` before ``since`` can still write results inside the window.
         ``sut_since``/``sut_until`` filter on ``sut_timestamp``, the date of the SUT build.
         """
-        since = since or datetime.now(timezone.utc) - RELEASE_RESULTS_WINDOW
+        since = since or (until or datetime.now(timezone.utc)) - RELEASE_RESULTS_WINDOW
         release_tables = await self._get_release_tables(release, table_filter)
         release_tables = [(test, tables) for test, tables in release_tables if tables]
         runs_per_test = await gather_limited(self._get_runs_started(test, since - RUN_START_MARGIN, until)

@@ -47,11 +47,13 @@ stays in every plan built from a spec.
   Cells are filtered by status, by write time, and by `sut_timestamp`, then
   grouped by table, test, and run, in the shape of the spec `Outputs`.
 
-- [x] Write the failing tests: grouping and `build_number`, the status and
-  write-time filters, the run start-time window, ignored runs left out, and
+- [x] Write the service.
+- [x] Write the tests: grouping and `build_number`, the status and
+  write-time filters, the run start-time window, `until` alone with a
+  backdated run, ignored runs left out, a run of the `generic` plugin, and
   the table catalog.
-- [x] Run them and confirm the failure.
-- [x] Write the smallest change that passes them.
+- [x] Run the `until` test against the service without the fix, and confirm
+  that it fails.
 - [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
 - [x] Commit, with the boxes of this task checked.
 
@@ -69,10 +71,9 @@ stays in every plan built from a spec.
   `status[]`, `since`, `until`, `sutSince` and `sutUntil`. The dates go to
   UTC before the service call.
 
-- [x] Write the failing tests: the endpoint by release name, and an unknown
-  release that gives `status: error`.
-- [x] Run them and confirm the failure.
-- [x] Write the smallest change that passes them.
+- [x] Write the router. Upper-case `status[]` before the service call.
+- [x] Write the tests: the endpoint by release name, a lower-case status,
+  and an unknown release that gives `status: error`.
 - [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
 - [x] Commit with Task 1, because both tasks share one test file.
 
@@ -94,8 +95,32 @@ stays in every plan built from a spec.
 - `ResultTableSummaries` and `ResultGroups` implement `output.Tabular`.
   `ResultGroups` prints one row per cell. `ReleaseResultCell` avoids
   `ResultCell` of `models/runs.go`.
+- `releaseResultsRoute(release, table, statuses, window)` builds the query
+  route, and `releaseResultsWindowParams` maps the time flags to parameters.
 
 - [x] Write the commands and the models.
+- [x] Write the tests: `cmd/results_test.go` for the route and the flags,
+  `internal/models/results_test.go` for the text rows.
 - [x] Run `make fmt`, then `make lint` and `go test -race ./...` in `cli/`.
   Revert the files that `make fmt` changes outside this task.
+- [x] Commit, with the boxes of this task checked.
+
+## Task 4 — Move the per-test results endpoints
+
+**Files:**
+- Modify: `argus/backend/controller/api.py` (remove `test_results`,
+  `create_graph_view`, `update_graph_view` and their request models)
+- Modify: `argus/backend/controller/results_api.py`
+- Modify: `frontend/WorkArea/TestRunsSelector.svelte`,
+  `frontend/TestRun/ResultsGraphs.svelte`,
+  `frontend/TestRun/Components/ResultTable.svelte`
+- Test: `argus/backend/tests/api/test_graphs_api.py`
+
+**Internals:** the three endpoints and `CreateGraphViewRequest` and
+`UpdateGraphViewRequest` move unchanged, at the paths of the spec table.
+
+- [x] Move the endpoints and the request models.
+- [x] Point the frontend and `test_graphs_api.py` at the new paths.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`,
+  and `yarn build`.
 - [x] Commit, with the boxes of this task checked.

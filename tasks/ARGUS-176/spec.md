@@ -10,6 +10,8 @@ selects the runs of each test that started in the time window from the run
 table, leaves out the ignored runs, then reads the cells of only those
 runs. It groups the cells by table, then by test, then by run. The CLI gets
 `argus results tables` and `argus results query` on top of the two routes.
+The per-test results endpoints move from `api.py` into the same router, and
+the frontend calls their new routes.
 The schema does not change, so results that exist today are readable at once.
 
 ## Constraints
@@ -78,7 +80,8 @@ tests per table name and merges the column names.
 | No table name matches `table` | An empty list |
 | A test or a run has no cell after the filters | The test or the run is left out of the output |
 | A cell has no `sut_timestamp` and a `sut_*` filter is set | The cell is left out |
-| The request has no `since` | `since` is 30 days before the request |
+| The request has no `since` | `since` is 30 days before `until`, or before the request when `until` is not set |
+| A status is in lower case | The router compares it in upper case |
 | A run is marked as ignored | The run is left out |
 | A test has no `plugin_name` or no `build_system_id` | The test is left out |
 
@@ -100,8 +103,8 @@ GET /api/v1/results/release/{release}/tables
 ```
 GET /api/v1/results/release/{release}
     table      required, case-insensitive substring of the table name
-    status[]   repeatable, keeps cells with one of these statuses
-    since      ISO-8601, write time of the result >= since, default 30 days ago
+    status[]   repeatable, any case, keeps cells with one of these statuses
+    since      ISO-8601, write time of the result >= since, default 30 days before until or now
     until      ISO-8601, write time of the result <= until
     sutSince   ISO-8601, sut_timestamp >= sutSince
     sutUntil   ISO-8601, sut_timestamp <= sutUntil
@@ -132,6 +135,15 @@ argus results query <release> --table <substring> [--status S]... \
 
 The CLI prints the response as JSON, or one row per cell with `--text`.
 
+The per-test endpoints keep their parameters and their responses. Only the
+path and the route name change. The client API endpoints do not change.
+
+| Before | After | Route name |
+|---|---|---|
+| `GET`, `HEAD /api/v1/test-results` | `GET`, `HEAD /api/v1/results/test` | `api.results.test_results` |
+| `POST /api/v1/create-graph-view` | `POST /api/v1/results/graph-view/create` | `api.results.create_graph_view` |
+| `POST /api/v1/update-graph-view` | `POST /api/v1/results/graph-view/update` | `api.results.update_graph_view` |
+
 ### Module API
 
 ```python
@@ -157,9 +169,6 @@ class ResultsService:
 - A read across releases. It needs approach B, a query table keyed by the
   table name and a time bucket, and a backfill. The service API keeps
   `release` as one argument, so a second method can sit next to it.
-- The move of the per-test results endpoints from `api.py` into the
-  `results` router, and the frontend change that follows it. The intent asks
-  for it. This change only puts the new routes in the new router.
 
 ## Decisions
 
@@ -171,4 +180,10 @@ class ResultsService:
   the name it already knows. (spec)
 - `since` defaults to 30 days, and the run window starts 7 days before
   `since`. (open)
+- With only `until` set, the 30-day window ends at `until`, so a read of an
+  old window is not empty. (review)
+- The status filter takes any case, because the CLI help names the statuses
+  and a user types them in lower case. (review)
+- The old per-test paths are removed, not kept as aliases. The frontend is
+  the only caller, and it ships in the same release. (build)
 - A read across releases waits for approach B. (open)

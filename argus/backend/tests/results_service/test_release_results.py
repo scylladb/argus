@@ -1,10 +1,14 @@
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
+import time
+from uuid import UUID, uuid4
 
 import pytest
+from coodie.aio import execute_raw
 
 from argus.backend.error_handlers import DataValidationError
+from argus.backend.models.result import ArgusGenericResultData, ArgusGenericResultMetadata, ColumnMetadata as ColumnMeta
+from argus.backend.plugins.generic.model import GenericRun
 from argus.backend.plugins.sct.testrun import SCTTestRun
 
 from argus.backend.tests.conftest import get_fake_test_run
@@ -92,6 +96,50 @@ async def test_release_results_leave_out_ignored_runs(results_service, release, 
                for group in results for test in group["tests"] for run in test["runs"])
 
 
+async def _generic_run_with_result(release_manager_service, release, group, table_name: str,
+                                   started: datetime) -> tuple:
+    """A generic plugin run that started and wrote one cell at ``started``."""
+    name = f"generic_{time.time_ns()}"
+    test = await release_manager_service.create_test(name, name, name, name, group_id=group.id,
+                                                     release_id=release.id, plugin_name="generic")
+    run = GenericRun(id=uuid4(), build_id=test.build_system_id, test_id=test.id, release_id=release.id,
+                     group_id=group.id, build_job_url="http://example.com/job/generic/3/", build_number=3,
+                     started_by="tester", start_time=started)
+    await run.save()
+    await ArgusGenericResultMetadata(test_id=test.id, name=table_name,
+                                     columns_meta=[ColumnMeta(name="ops", unit="op/s", type="FLOAT")],
+                                     rows_meta=["write"]).save()
+    await execute_raw(
+        f"INSERT INTO {ArgusGenericResultData._get_keyspace()}.{ArgusGenericResultData.table_name()} "
+        "(test_id, name, run_id, column, row, sut_timestamp, value, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+        f"USING TIMESTAMP {int(started.timestamp() * 1_000_000)}",
+        [test.id, table_name, run.id, "ops", "write", started, 7.0, "PASS"])
+    return test, run
+
+
+async def test_release_results_until_alone_reads_the_window_before_it(results_service, release_manager_service,
+                                                                     release, group):
+    started = datetime.now(timezone.utc) - timedelta(days=60)
+    _, run = await _generic_run_with_result(release_manager_service, release, group, "Old Release Table", started)
+
+    results = await results_service.get_release_results(release=release.name, table_filter="old release",
+                                                        until=started + timedelta(days=1))
+
+    assert [r["run_id"] for group in results for test in group["tests"] for r in test["runs"]] == [run.id]
+
+
+async def test_release_results_read_generic_plugin_runs(results_service, release_manager_service, release, group):
+    test, run = await _generic_run_with_result(release_manager_service, release, group, "Generic Release Table",
+                                               datetime.now(timezone.utc))
+
+    results = await results_service.get_release_results(release=release.name, table_filter="generic release")
+
+    [group_result] = results
+    [test_result] = group_result["tests"]
+    assert test_result["test_id"] == test.id
+    assert [(r["run_id"], r["build_number"]) for r in test_result["runs"]] == [(run.id, 3)]
+
+
 async def test_release_result_tables_lists_names(results_service, release, release_run):
     tables = await results_service.get_release_result_tables(release=release.name)
 
@@ -105,6 +153,15 @@ def test_release_results_endpoint(api_client, release, release_run):
     resp = api_client.get(f"{API_PREFIX}/results/release/{release.name}", params={"table": "latency"})
 
     assert resp.status_code == 200, resp.text
+    tables = [group["table"] for group in resp.json()["response"]]
+    assert LatencyTable.Meta.name in tables
+    assert ThroughputTable.Meta.name not in tables
+
+
+def test_release_results_endpoint_accepts_lowercase_status(api_client, release, release_run):
+    resp = api_client.get(f"{API_PREFIX}/results/release/{release.name}",
+                          params={"table": "release", "status[]": "error"})
+
     tables = [group["table"] for group in resp.json()["response"]]
     assert LatencyTable.Meta.name in tables
     assert ThroughputTable.Meta.name not in tables
