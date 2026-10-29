@@ -165,11 +165,23 @@ fixed-size thumbnail rules go.
 Against the dev instance with the development bundle, on a seeded SCT run
 that carries the screenshot links of the run named in the intent.
 
-- [ ] At a desktop width: the screenshot opens fitted and centred; the
+- [x] At a desktop width: the screenshot opens fitted and centred; the
   wheel zooms around the pointer; ctrl+wheel pinches; a drag pans within
   the bounds; the arrows, the keys and the buttons move through the run;
   `0`, `1` and a double-click switch the zoom; the backdrop click and
   Escape close and the focus returns to the thumbnail; the page does not
   scroll behind the viewer.
-- [ ] At a narrow width: the thumbnails wrap in two columns and stay
+- [x] At a narrow width: the thumbnails wrap in two columns and stay
   square; the viewer fits the window; the toolbar stays reachable.
+
+Run in headless Chrome 156 over the Chrome DevTools Protocol at 1440×900
+and 390×844, on a seeded run that carries the three Grafana captures of the
+run named in the intent, one of them 1920×6539. The first pass found that a
+real double-click reached the surface instead of the image: the pointer
+capture taken on pointerdown retargets the mouse events of the second
+click, which jsdom cannot show. The capture now starts with the drag, and
+a test pins it. The review found that a touch tap on the backdrop closed
+the viewer on the pointerup and let the synthesized click re-open it on
+the thumbnail beneath; the tap now closes on that click, and a second pass
+with touch emulation at 390×844 confirmed the backdrop tap, the image tap
+and the swipe.
