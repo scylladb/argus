@@ -40,3 +40,11 @@ describe("TestRunsSelector ignore-runs dialog", () => {
         expect(first.container.querySelector(".modal")?.classList.contains("show")).toBe(false);
     });
 });
+
+describe("TestRunsSelector results check", () => {
+    it("asks the results router whether the test has results", () => {
+        render(TestRunsSelector, { props: { testInfo: TEST_INFO, testId: TEST_INFO.test.id, runs: RUNS } });
+
+        expect(fetch).toHaveBeenCalledWith(`/api/v1/results/test?testId=${TEST_INFO.test.id}`, { method: "HEAD" });
+    });
+});

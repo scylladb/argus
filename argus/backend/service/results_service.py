@@ -4,7 +4,7 @@ import logging
 import math
 import operator
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import partial
 from typing import List, Dict, Any
 from uuid import UUID, uuid4
@@ -14,7 +14,8 @@ from coodie.aio import execute_raw
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ArgusBestResultData, ColumnMetadata, ArgusGraphView
-from argus.backend.models.web import ArgusTest
+from argus.backend.error_handlers import DataValidationError
+from argus.backend.models.web import ArgusRelease, ArgusTest
 from argus.backend.util.common import chunk, gather_limited, select_rows
 from argus.backend.plugins.sct.udt import PackageVersion
 from argus.backend.service.testrun import TestRunService
@@ -23,6 +24,10 @@ LOGGER = logging.getLogger(__name__)
 
 type RunId = str
 type ReleasesMap = dict[str, list[RunId]]
+
+RELEASE_RESULTS_WINDOW = timedelta(days=30)
+DEFAULT_RUN_LIMIT = 100
+DEFAULT_TABLE_LIMIT = 500
 
 
 @dataclass
@@ -688,3 +693,133 @@ class ResultsService:
 
     async def get_argus_graph_views(self, test_id: UUID) -> list[ArgusGraphView]:
         return await ArgusGraphView.find(test_id=test_id).all()
+
+    async def _resolve_release_id(self, release: str) -> UUID:
+        try:
+            rows = await select_rows(ArgusRelease.find(id=UUID(release)), "id")
+        except ValueError:
+            rows = await select_rows(ArgusRelease.find(name=release), "id")
+        if not rows:
+            raise DataValidationError(f"Release not found: {release}")
+        return rows[0]["id"]
+
+    async def _get_release_tables(self, release: str, table_filter: str | None = None
+                                  ) -> list[tuple[dict, list[ArgusGenericResultMetadata]]]:
+        release_id = await self._resolve_release_id(release)
+        tests = await select_rows(ArgusTest.find(release_id=release_id),
+                                  "id", "name", "build_system_id", "plugin_name")
+        tables_per_test = await gather_limited(self._get_tables_metadata(test_id=test["id"]) for test in tests)
+        needle = table_filter.lower() if table_filter else None
+        return [(test, [table for table in tables if not needle or needle in table.name.lower()])
+                for test, tables in zip(tests, tables_per_test)]
+
+    async def get_release_result_tables(self, release: str, include_hidden: bool = False) -> list[dict]:
+        """Every generic result table name of a release, with the tests that submit it."""
+        catalog: dict[str, dict] = {}
+        for test, tables in await self._get_release_tables(release):
+            for table in tables:
+                entry = catalog.setdefault(table.name, {"name": table.name, "description": table.description,
+                                                        "columns": [], "tests": 0})
+                entry["tests"] += 1
+                for column in table.columns_meta:
+                    if (include_hidden or column.visible is not False) and column.name not in entry["columns"]:
+                        entry["columns"].append(column.name)
+        return sorted(catalog.values(), key=lambda entry: entry["name"])
+
+    async def _get_window_runs(self, test: dict, since: datetime, until: datetime | None,
+                               run_limit: int) -> tuple[dict[UUID, dict], bool]:
+        """The newest ``run_limit`` runs of a test that started in the window.
+
+        Ignored runs are left out. The flag is true when the limit left out older runs.
+        """
+        plugin = TestRunService().get_plugin(test["plugin_name"]) if test["plugin_name"] else None
+        if not plugin or not test["build_system_id"]:
+            return {}, False
+        query = plugin.model.find(build_id=test["build_system_id"]).filter(start_time__gte=since)
+        if until:
+            query = query.filter(start_time__lte=until)
+        rows = await select_rows(query.limit(run_limit + 1), "id", "start_time", "investigation_status", "build_number",
+                                 "scylla_version")
+        runs = [row for row in rows[:run_limit] if (row["investigation_status"] or "").lower() != "ignored"]
+        return {row["id"]: row for row in runs}, len(rows) > run_limit
+
+    async def _get_runs_cells(self, test_id: UUID, table_name: str, run_ids: list[UUID]) -> list[dict]:
+        cells = []
+        for batch in chunk(run_ids):
+            raw_query = ("SELECT run_id, column, row, value, value_text, status, sut_timestamp "
+                         f"FROM {ArgusGenericResultData._get_keyspace()}.{ArgusGenericResultData.table_name()} "
+                         f"WHERE test_id = ? AND name = ? AND run_id IN ({', '.join('?' * len(batch))})")
+            cells.extend(await execute_raw(raw_query, [test_id, table_name, *batch]))
+        return cells
+
+    async def get_release_results(self, release: str, table_filter: str, statuses: list[str] | None = None,
+                                  since: datetime | None = None, until: datetime | None = None,
+                                  sut_since: datetime | None = None, sut_until: datetime | None = None,
+                                  include_hidden: bool = False, columns: list[str] | None = None,
+                                  run_limit: int = DEFAULT_RUN_LIMIT,
+                                  table_limit: int = DEFAULT_TABLE_LIMIT) -> list[dict]:
+        """Generic results of every test in a release, grouped by table, then test, then run.
+
+        ``since``/``until`` filter on the start time of the run. ``since`` defaults to
+        ``RELEASE_RESULTS_WINDOW`` before ``until``, or before now when ``until`` is not set.
+        ``sut_since``/``sut_until`` filter on ``sut_timestamp``, the date of the SUT build.
+        ``columns`` keeps only the cells of these columns.
+        A filter that matches more than ``table_limit`` (test, table) pairs is an error.
+        Each test reads at most ``run_limit`` runs, and ``runs_truncated`` says when it read fewer
+        runs than the window holds. Columns marked as hidden are left out unless ``include_hidden`` is set.
+        """
+        if not table_filter or not table_filter.strip():
+            raise DataValidationError("The table filter must not be empty")
+        since = since or (until or datetime.now(timezone.utc)) - RELEASE_RESULTS_WINDOW
+        release_tables = await self._get_release_tables(release, table_filter.strip())
+        release_tables = [(test, tables) for test, tables in release_tables if tables]
+        table_reads = sum(len(tables) for _, tables in release_tables)
+        if table_reads > table_limit:
+            raise DataValidationError(f"The table filter matches {table_reads} tables across the tests of the release, "
+                                      f"more than {table_limit}. Use a longer table filter, or a higher table limit.")
+        runs_per_test = await gather_limited(self._get_window_runs(test, since, until, run_limit)
+                                             for test, _ in release_tables)
+        pairs = [(test, table, runs, truncated)
+                 for (test, tables), (runs, truncated) in zip(release_tables, runs_per_test) if runs
+                 for table in tables]
+        cells_per_pair = await gather_limited(self._get_runs_cells(test["id"], table.name, list(runs))
+                                              for test, table, runs, _ in pairs)
+
+        grouped: dict[str, dict] = {}
+        for (test, table, test_runs, truncated), cells in zip(pairs, cells_per_pair):
+            hidden = set() if include_hidden else {col.name for col in table.columns_meta if col.visible is False}
+            runs: dict[UUID, dict] = {}
+            for cell in cells:
+                if cell["column"] in hidden or (columns and cell["column"] not in columns) \
+                        or (statuses and cell["status"] not in statuses):
+                    continue
+                sut_timestamp = cell["sut_timestamp"].replace(tzinfo=timezone.utc) if cell["sut_timestamp"] else None
+                if (sut_since and (not sut_timestamp or sut_timestamp < sut_since)) or \
+                        (sut_until and (not sut_timestamp or sut_timestamp > sut_until)):
+                    continue
+                run_info = test_runs[cell["run_id"]]
+                run = runs.setdefault(cell["run_id"], {
+                    "run_id": cell["run_id"],
+                    "build_number": run_info["build_number"],
+                    "scylla_version": run_info["scylla_version"],
+                    "started_at": run_info["start_time"].replace(tzinfo=timezone.utc),
+                    "sut_timestamp": sut_timestamp,
+                    "cells": [],
+                })
+                run["cells"].append({
+                    "row": cell["row"],
+                    "column": cell["column"],
+                    "value": cell["value"] if cell["value"] is not None else cell["value_text"],
+                    "status": cell["status"],
+                })
+            if not runs:
+                continue
+            group = grouped.setdefault(table.name, {"table": table.name, "description": table.description, "tests": []})
+            group["tests"].append({
+                "test_id": test["id"],
+                "test_name": test["name"],
+                "build_id": test["build_system_id"],
+                "runs_truncated": truncated,
+                "runs": sorted(runs.values(), key=lambda run: run["started_at"], reverse=True),
+            })
+        return sorted(grouped.values(), key=lambda group: group["table"])

@@ -354,6 +354,19 @@ argus issue runs SCT-1234 --raw    # the issue and every link field, as returned
 
 Each run carries `id`, `test`, `build_id`, `build_number`, `version` (the Scylla version, or the product version when the run reports none), `status`, `start_time` and `argus_url`, the link to the run page. The key may be given in any case. A key that Argus holds no runs for prints an empty list and exits 0. A value that is not an issue key, such as `SCT1234`, is an error.
 
+## Compare generic results across a release
+
+List the generic result table names of a release, then read one table across every test of that release:
+
+```bash
+argus results tables scylla-master --text
+argus results query scylla-master --table throughput --since 2026-10-15
+argus results query scylla-master --table latency --status ERROR --sut-since 2026-10-01
+argus results query scylla-master --table throughput --column ops --run-limit 20
+```
+
+The release is a name or a UUID. `--table` matches a substring of the table name, in any case. The output groups the results by table, then by test with its `build_id`, then by run, newest run first. `--since` and `--until` filter on the start time of the run, and `--since` defaults to 30 days before `--until`, or before now. Runs marked as ignored are left out. Each test returns its 100 newest runs, and `runs_truncated` is true when it has more. `--run-limit` changes that number. A `--table` filter that matches more than 500 tables across the tests is an error, and `--table-limit` changes that number. `--column` keeps only the cells of the named columns. Columns marked as hidden are left out unless you pass `--show-hidden`. `--sut-since` and `--sut-until` filter on `sut_timestamp`, the date of the SUT build.
+
 ---
 
 ## Storage locations

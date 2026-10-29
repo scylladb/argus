@@ -44,6 +44,10 @@ const (
 	TestRunPytestResults = "/api/v1/run/%s/pytest/results"        // GET  – pytest results for a run (run_id)
 	PytestFilterResults  = "/api/v1/views/widgets/pytest/results" // GET  – filtered pytest results (query params: test, limit, before, after, status[], query, filters[], markers[])
 
+	// Generic result routes (results_api router, mounted at /api/v1/results)
+	ReleaseResultTables = "/api/v1/results/release/%s/tables" // GET  – generic result table names of a release (release name or id)
+	ReleaseResults      = "/api/v1/results/release/%s"        // GET  – results grouped by table, test, run (release); params: table, status[], since, until, sutSince, sutUntil
+
 	// Log file routes
 	TestRunLogDownload = "/api/v1/tests/%s/%s/log/%s/download" // GET  – download log file, 302 to S3 (plugin_name, run_id, log_name)
 
