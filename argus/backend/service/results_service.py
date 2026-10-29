@@ -26,8 +26,8 @@ type RunId = str
 type ReleasesMap = dict[str, list[RunId]]
 
 RELEASE_RESULTS_WINDOW = timedelta(days=30)
-MAX_RUNS_PER_TEST = 100
-MAX_TABLE_READS = 500
+DEFAULT_RUN_LIMIT = 100
+DEFAULT_TABLE_LIMIT = 500
 
 
 @dataclass
@@ -726,10 +726,11 @@ class ResultsService:
                         entry["columns"].append(column.name)
         return sorted(catalog.values(), key=lambda entry: entry["name"])
 
-    async def _get_window_runs(self, test: dict, since: datetime, until: datetime | None) -> tuple[dict[UUID, dict], bool]:
-        """The newest ``MAX_RUNS_PER_TEST`` runs of a test that started in the window.
+    async def _get_window_runs(self, test: dict, since: datetime, until: datetime | None,
+                               run_limit: int) -> tuple[dict[UUID, dict], bool]:
+        """The newest ``run_limit`` runs of a test that started in the window.
 
-        Ignored runs are left out. The flag is true when the cap left out older runs.
+        Ignored runs are left out. The flag is true when the limit left out older runs.
         """
         plugin = TestRunService().get_plugin(test["plugin_name"]) if test["plugin_name"] else None
         if not plugin or not test["build_system_id"]:
@@ -737,9 +738,10 @@ class ResultsService:
         query = plugin.model.find(build_id=test["build_system_id"]).filter(start_time__gte=since)
         if until:
             query = query.filter(start_time__lte=until)
-        rows = await select_rows(query, "id", "start_time", "investigation_status", "build_number", "scylla_version")
-        runs = [row for row in rows if (row["investigation_status"] or "").lower() != "ignored"]
-        return {row["id"]: row for row in runs[:MAX_RUNS_PER_TEST]}, len(runs) > MAX_RUNS_PER_TEST
+        rows = await select_rows(query.limit(run_limit + 1), "id", "start_time", "investigation_status", "build_number",
+                                 "scylla_version")
+        runs = [row for row in rows[:run_limit] if (row["investigation_status"] or "").lower() != "ignored"]
+        return {row["id"]: row for row in runs}, len(rows) > run_limit
 
     async def _get_runs_cells(self, test_id: UUID, table_name: str, run_ids: list[UUID]) -> list[dict]:
         cells = []
@@ -753,14 +755,17 @@ class ResultsService:
     async def get_release_results(self, release: str, table_filter: str, statuses: list[str] | None = None,
                                   since: datetime | None = None, until: datetime | None = None,
                                   sut_since: datetime | None = None, sut_until: datetime | None = None,
-                                  include_hidden: bool = False) -> list[dict]:
+                                  include_hidden: bool = False, columns: list[str] | None = None,
+                                  run_limit: int = DEFAULT_RUN_LIMIT,
+                                  table_limit: int = DEFAULT_TABLE_LIMIT) -> list[dict]:
         """Generic results of every test in a release, grouped by table, then test, then run.
 
         ``since``/``until`` filter on the start time of the run. ``since`` defaults to
         ``RELEASE_RESULTS_WINDOW`` before ``until``, or before now when ``until`` is not set.
         ``sut_since``/``sut_until`` filter on ``sut_timestamp``, the date of the SUT build.
-        A filter that matches more than ``MAX_TABLE_READS`` (test, table) pairs is an error.
-        Each test reads at most ``MAX_RUNS_PER_TEST`` runs, and ``runs_truncated`` says when it read fewer
+        ``columns`` keeps only the cells of these columns.
+        A filter that matches more than ``table_limit`` (test, table) pairs is an error.
+        Each test reads at most ``run_limit`` runs, and ``runs_truncated`` says when it read fewer
         runs than the window holds. Columns marked as hidden are left out unless ``include_hidden`` is set.
         """
         if not table_filter or not table_filter.strip():
@@ -769,10 +774,11 @@ class ResultsService:
         release_tables = await self._get_release_tables(release, table_filter.strip())
         release_tables = [(test, tables) for test, tables in release_tables if tables]
         table_reads = sum(len(tables) for _, tables in release_tables)
-        if table_reads > MAX_TABLE_READS:
+        if table_reads > table_limit:
             raise DataValidationError(f"The table filter matches {table_reads} tables across the tests of the release, "
-                                      f"more than {MAX_TABLE_READS}. Use a longer table filter.")
-        runs_per_test = await gather_limited(self._get_window_runs(test, since, until) for test, _ in release_tables)
+                                      f"more than {table_limit}. Use a longer table filter, or a higher table limit.")
+        runs_per_test = await gather_limited(self._get_window_runs(test, since, until, run_limit)
+                                             for test, _ in release_tables)
         pairs = [(test, table, runs, truncated)
                  for (test, tables), (runs, truncated) in zip(release_tables, runs_per_test) if runs
                  for table in tables]
@@ -784,7 +790,8 @@ class ResultsService:
             hidden = set() if include_hidden else {col.name for col in table.columns_meta if col.visible is False}
             runs: dict[UUID, dict] = {}
             for cell in cells:
-                if cell["column"] in hidden or (statuses and cell["status"] not in statuses):
+                if cell["column"] in hidden or (columns and cell["column"] not in columns) \
+                        or (statuses and cell["status"] not in statuses):
                     continue
                 sut_timestamp = cell["sut_timestamp"].replace(tzinfo=timezone.utc) if cell["sut_timestamp"] else None
                 if (sut_since and (not sut_timestamp or sut_timestamp < sut_since)) or \

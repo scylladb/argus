@@ -6,8 +6,8 @@ A new `results` router answers two reads for one release. The first lists the
 generic result table names of the release. The second returns the cells of
 the tables whose name matches a substring, for every test of the release.
 The service reads the tests of the release and their table metadata. It
-selects the runs of each test that can hold results written in the time
-window from the run table, keeps the newest 100, leaves out the ignored
+selects the runs of each test that started in the time window from the
+run table, keeps the newest 100, leaves out the ignored
 runs, then reads the cells of only those runs. It groups the cells by table, then by test, then by run. The CLI gets
 `argus results tables` and `argus results query` on top of the two routes.
 The per-test results endpoints move from `api.py` into the same router, and
@@ -24,7 +24,7 @@ The schema does not change, so results that exist today are readable at once.
 - The cost of the cell read follows the time window, not the full history of
   a test.
 - One request reads a bounded amount of data: at most 500 (test, table)
-  pairs, and at most 100 runs per test.
+  pairs, and at most 100 runs per test. A request can set both limits.
 
 ## Design
 
@@ -40,8 +40,7 @@ The schema does not change, so results that exist today are readable at once.
 
 This spec selects A′. A release bounds the fan-out, a release is the scope
 that the users need now, and the run table already holds the time index.
-B is the path when a read across releases becomes necessary, see
-`Deferred work`.
+B is the path if a read across releases becomes necessary.
 
 ### Read flow
 
@@ -60,13 +59,13 @@ sequenceDiagram
     end
     Note over S: keep tests with a table whose name contains table_filter
     par one per test, at most 50 at a time
-        S->>DB: <plugin run table> WHERE build_id = ?<br/>AND start_time >= since [AND start_time <= until]<br/>columns: id, start_time, ...
+        S->>DB: <plugin run table> WHERE build_id = ?<br/>AND start_time >= since [AND start_time <= until]<br/>LIMIT runLimit + 1<br/>columns: id, start_time, ...
     end
-    Note over S: drop ignored runs, keep the newest 100
+    Note over S: keep the newest runLimit, drop ignored runs
     par one per (test, table), at most 50 at a time
         S->>DB: generic_result_data_v1 WHERE test_id = ? AND name = ?<br/>AND run_id IN (... up to 90 ...)
     end
-    Note over S: drop hidden columns, filter by status,<br/>sut_timestamp, group by table, test, run
+    Note over S: drop hidden columns, filter by status, column,<br/>sut_timestamp, group by table, test, run
     S-->>R: list of table groups
     R-->>C: APIResponse
 ```
@@ -80,8 +79,9 @@ tests per table name and merges the column names.
 |---|---|
 | The release name or UUID matches no release | `DataValidationError`, the response has `status: error` |
 | `table` is empty or blank | `DataValidationError` |
-| `table` matches more than 500 (test, table) pairs | `DataValidationError` that asks for a longer filter |
-| A test has more than 100 runs that qualify | The newest 100 by start time, and `runs_truncated` is true |
+| `table` matches more than `tableLimit` (test, table) pairs | `DataValidationError` that asks for a longer filter or a higher limit |
+| A test has more than `runLimit` runs in the window | The newest `runLimit` by start time, and `runs_truncated` is true |
+| `runLimit` or `tableLimit` is below 1 | The router rejects the request |
 | A column is marked `visible=False` | The column is left out, unless `includeHidden=true` |
 | No table name matches `table` | An empty list |
 | A test or a run has no cell after the filters | The test or the run is left out of the output |
@@ -116,6 +116,9 @@ GET /api/v1/results/release/{release}
     sutSince   ISO-8601, sut_timestamp >= sutSince
     sutUntil   ISO-8601, sut_timestamp <= sutUntil
     includeHidden  true keeps the cells of the columns marked as hidden
+    columns[]  repeatable, keeps the cells of these columns
+    runLimit   newest runs per test, default 100
+    tableLimit most (test, table) pairs that table may match, default 500
 ```
 
 ```json
@@ -171,13 +174,7 @@ class ResultsService:
 | A release with many tests and tables sends many queries | `gather_limited` holds the reads at 50 at a time. The `table` filter cuts the data reads before they start. |
 | A run starts before `since` and writes results inside the window | Its results fall outside the window. With the 30-day default, only the runs at the edge of the window are left out. A short window needs an earlier `since`. |
 | The run partition of a test with a long history is large | `start_time` is the clustering key, so the run read covers only the window. |
-| A wide window still reads every run in it | The 30-day default bounds a read with no window. Approach B removes the cost. |
-
-## Deferred work
-
-- A read across releases. It needs approach B, a query table keyed by the
-  table name and a time bucket, and a backfill. The service API keeps
-  `release` as one argument, so a second method can sit next to it.
+| A wide window holds many runs | The run read stops at `runLimit + 1` rows per test. |
 
 ## Decisions
 
@@ -197,9 +194,13 @@ class ResultsService:
   and a user types them in lower case. (review)
 - Each test returns its newest 100 runs, and a filter can match at most 500
   (test, table) pairs, so one request cannot read the full history of a
-  release. (review)
+  release. A request can set both limits. (review)
+- A request can name the columns to keep, so an agent reads only the
+  columns in its scope. (review)
 - The release read hides the columns marked as hidden, as the per-run read
   and the graphs do. (review)
 - The old per-test paths are removed, not kept as aliases. The frontend is
   the only caller, and it ships in the same release. (build)
-- A read across releases waits for approach B. (open)
+- The read covers one release. Users read the supported releases, or
+  compare two. A read across releases waits for a request with a use case.
+  (review)

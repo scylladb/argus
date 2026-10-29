@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from starlette.responses import Response
 
 from argus.backend.models.web import User
-from argus.backend.service.results_service import ResultsService
+from argus.backend.service.results_service import DEFAULT_RUN_LIMIT, DEFAULT_TABLE_LIMIT, ResultsService
 from argus.backend.service.user import api_current_user
 from argus.backend.util.common import NoneIfEmpty
 from argus.backend.util.encoders import APIResponse
@@ -52,10 +52,14 @@ async def release_results(release: str,
                           sut_since: Annotated[OptionalDate, Query(alias="sutSince")] = None,
                           sut_until: Annotated[OptionalDate, Query(alias="sutUntil")] = None,
                           include_hidden: bool = Query(False, alias="includeHidden"),
+                          columns: list[str] = Query(default=[], alias="columns[]"),
+                          run_limit: int = Query(DEFAULT_RUN_LIMIT, alias="runLimit", ge=1),
+                          table_limit: int = Query(DEFAULT_TABLE_LIMIT, alias="tableLimit", ge=1),
                           user: User = Depends(api_current_user)):
     results = await ResultsService().get_release_results(
         release=release, table_filter=table, statuses=[status.upper() for status in statuses], since=_utc(since), until=_utc(until),
-        sut_since=_utc(sut_since), sut_until=_utc(sut_until), include_hidden=include_hidden)
+        sut_since=_utc(sut_since), sut_until=_utc(sut_until), include_hidden=include_hidden, columns=columns,
+        run_limit=run_limit, table_limit=table_limit)
     return APIResponse({"status": "ok", "response": results})
 
 

@@ -136,12 +136,16 @@ stays in every plan built from a spec.
   `frontend/WorkArea/TestRunsSelector.test.ts`
 
 **Internals:**
-- `MAX_RUNS_PER_TEST = 100`. `_get_window_runs` replaces
-  `_get_runs_started`. It returns the newest runs that started in the window,
-  with a truncation flag.
+- `DEFAULT_RUN_LIMIT = 100`. `_get_window_runs` replaces
+  `_get_runs_started`. It reads `run_limit + 1` runs that started in the
+  window, returns the newest `run_limit` that are not ignored, and a
+  truncation flag.
 - `_resolve_release_id` checks that a UUID names a release.
-- `MAX_TABLE_READS = 500`. A filter that matches more (test, table) pairs
-  raises `DataValidationError`.
+- `DEFAULT_TABLE_LIMIT = 500`. A filter that matches more than `table_limit`
+  (test, table) pairs raises `DataValidationError`.
+- `get_release_results` takes `columns`, `run_limit` and `table_limit`. The
+  route takes `columns[]`, `runLimit` and `tableLimit`, both limits at least 1.
+  The CLI adds `--column`, `--run-limit` and `--table-limit`.
 - A run carries `started_at`, its start time, and the runs sort by it.
 - `get_release_results` rejects a blank `table_filter` and drops hidden
   columns. Both service reads and both routes take `include_hidden`.
@@ -150,7 +154,7 @@ stays in every plan built from a spec.
   `--show-hidden`. `releaseResultsQuery` holds the query parameters.
 - `ResultsRoutes` holds the three per-test paths for the frontend.
 
-- [x] Write the tests: a long run that writes in the window, the run cap, the
+- [x] Write the tests: a run that started before the window, the run cap, the
   hidden columns, an unknown release UUID, a blank table, the CLI commands
   against a stub server, a dot-segment release, and the frontend routes.
 - [x] Run the long-run, unknown-UUID and blank-table tests against the old

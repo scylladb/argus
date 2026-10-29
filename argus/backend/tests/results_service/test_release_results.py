@@ -168,16 +168,15 @@ def test_release_results_endpoint(api_client, release, release_run):
     assert ThroughputTable.Meta.name not in tables
 
 
-async def test_release_results_cap_the_runs_per_test(results_service, release_manager_service, release, group,
-                                                     monkeypatch):
-    monkeypatch.setattr("argus.backend.service.results_service.MAX_RUNS_PER_TEST", 1)
+async def test_release_results_cap_the_runs_per_test(results_service, release_manager_service, release, group):
     now = datetime.now(timezone.utc)
     test, _ = await _generic_run_with_result(release_manager_service, release, group, "Capped Release Table",
                                              started=now - timedelta(hours=2))
     _, newest = await _generic_run_with_result(release_manager_service, release, group, "Capped Release Table",
                                                started=now - timedelta(hours=1), test=test)
 
-    [group_result] = await results_service.get_release_results(release=release.name, table_filter="capped release")
+    [group_result] = await results_service.get_release_results(release=release.name, table_filter="capped release",
+                                                               run_limit=1)
 
     [test_result] = group_result["tests"]
     assert test_result["runs_truncated"] is True
@@ -238,12 +237,21 @@ async def test_release_results_reject_an_unknown_release_id(results_service):
         await results_service.get_release_results(release=str(uuid4()), table_filter="release")
 
 
-async def test_release_results_reject_a_filter_that_matches_too_many_tables(results_service, release, release_run,
-                                                                            monkeypatch):
-    monkeypatch.setattr("argus.backend.service.results_service.MAX_TABLE_READS", 1)
-
+async def test_release_results_reject_a_filter_that_matches_too_many_tables(results_service, release, release_run):
     with pytest.raises(DataValidationError, match="longer table filter"):
-        await results_service.get_release_results(release=release.name, table_filter="release")
+        await results_service.get_release_results(release=release.name, table_filter="release", table_limit=1)
+
+
+async def test_release_results_keep_only_the_requested_columns(results_service, release_manager_service, release,
+                                                               group):
+    await _generic_run_with_result(release_manager_service, release, group, "Column Release Table",
+                                   datetime.now(timezone.utc))
+
+    results = await results_service.get_release_results(release=release.name, table_filter="column release",
+                                                        include_hidden=True, columns=["debug"])
+
+    assert {cell["column"] for group in results for test in group["tests"]
+            for run in test["runs"] for cell in run["cells"]} == {"debug"}
 
 
 async def test_release_results_reject_an_empty_table_filter(results_service, release):
@@ -258,6 +266,20 @@ def test_release_results_endpoint_accepts_lowercase_status(api_client, release, 
     tables = [group["table"] for group in resp.json()["response"]]
     assert LatencyTable.Meta.name in tables
     assert ThroughputTable.Meta.name not in tables
+
+
+def test_release_results_endpoint_takes_columns_and_limits(api_client, release, release_run):
+    resp = api_client.get(f"{API_PREFIX}/results/release/{release.name}",
+                          params={"table": "release", "columns[]": "p99", "runLimit": 1, "tableLimit": 500})
+
+    assert resp.json()["status"] == "ok", resp.text
+    assert {group["table"] for group in resp.json()["response"]} == {LatencyTable.Meta.name}
+
+
+def test_release_results_endpoint_rejects_a_zero_run_limit(api_client, release):
+    resp = api_client.get(f"{API_PREFIX}/results/release/{release.name}", params={"table": "release", "runLimit": 0})
+
+    assert resp.json()["status"] == "error"
 
 
 def test_release_results_endpoint_unknown_release(api_client):

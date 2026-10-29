@@ -24,7 +24,9 @@ func TestReleaseResultsRoute(t *testing.T) {
 		Table:      "throughput",
 		Statuses:   []string{"PASS", "ERROR"},
 		Window:     map[string]string{"since": "2026-10-01", "sutUntil": "2026-10-20"},
+		Columns:    []string{"ops", "p99"},
 		ShowHidden: true,
+		RunLimit:   20,
 	})
 	require.NoError(t, err)
 
@@ -39,6 +41,9 @@ func TestReleaseResultsRoute(t *testing.T) {
 	assert.Equal(t, "2026-10-01", params.Get("since"))
 	assert.Equal(t, "2026-10-20", params.Get("sutUntil"))
 	assert.Equal(t, "true", params.Get("includeHidden"))
+	assert.Equal(t, []string{"ops", "p99"}, params["columns[]"])
+	assert.Equal(t, "20", params.Get("runLimit"))
+	assert.False(t, params.Has("tableLimit"))
 	assert.False(t, params.Has("until"))
 }
 
@@ -149,4 +154,23 @@ func TestGenericResultsTablesCmd_ListsTheTables(t *testing.T) {
 	var tables models.ResultTableSummaries
 	require.NoError(t, json.Unmarshal([]byte(out), &tables))
 	assert.Equal(t, models.ResultTableSummaries{{Name: "latency", Columns: []string{"p99"}, Tests: 3}}, tables)
+}
+
+func TestGenericResultsQueryCmd_SendsTheColumnsAndLimits(t *testing.T) {
+	_, received, err := runResultsCommand(t, genericResultsQueryCmd, []string{"scylla-master"}, "[]",
+		map[string]string{"table": "throughput", "column": "ops", "run-limit": "5", "table-limit": "50"})
+	require.NoError(t, err)
+
+	require.Len(t, received, 1)
+	assert.Equal(t, []string{"ops"}, received[0].Query()["columns[]"])
+	assert.Equal(t, "5", received[0].Query().Get("runLimit"))
+	assert.Equal(t, "50", received[0].Query().Get("tableLimit"))
+}
+
+func TestGenericResultsQueryCmd_RejectsANegativeLimit(t *testing.T) {
+	_, received, err := runResultsCommand(t, genericResultsQueryCmd, []string{"scylla-master"}, "[]",
+		map[string]string{"table": "throughput", "run-limit": "-1"})
+
+	require.Error(t, err)
+	assert.Empty(t, received)
 }
