@@ -63,6 +63,10 @@ class PluginModelBase(Document):
     def _stats_columns(cls) -> tuple[str, ...]:
         raise NotImplementedError()
 
+    @classmethod
+    async def delete_run_data(cls, run_id: UUID) -> None:
+        return None
+
     async def assign_categories(self):
         key = self.build_id
         try:

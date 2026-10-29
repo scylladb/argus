@@ -181,6 +181,14 @@ class SCTTestRun(PluginModelBase):
     class Settings:
         name = "sct_test_run"
 
+    @classmethod
+    async def delete_run_data(cls, run_id: UUID) -> None:
+        for severity in SCTEventSeverity:
+            await SCTEvent.find(run_id=run_id, severity=severity.value).delete()
+        for table in (SCTUnprocessedEvent, SCTNemesis, SCTResource, StressCommand):
+            await table.find(run_id=run_id).delete()
+        await SCTJunitReports.find(test_id=run_id).delete()
+
     # Test Details
     test_name: Optional[str] = None
     stress_duration: Optional[float] = None

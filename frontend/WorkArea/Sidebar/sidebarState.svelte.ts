@@ -9,6 +9,7 @@ export const HIDDEN_KEY = "argus-workspace-hidden-releases";
 export interface Release extends NamedEntity {
     enabled: boolean;
     dormant: boolean;
+    user_editable?: boolean;
     priority?: number | null;
 }
 
@@ -230,7 +231,7 @@ export class SidebarState {
         const known = this.releases.data?.find((release) => release.id === id);
         if (known) return known;
         if (!fallback) return undefined;
-        return { enabled: true, dormant: false, ...fallback } as Release;
+        return { enabled: true, dormant: false, user_editable: false, ...fallback } as Release;
     }
 
     locate(hit: SearchHit): string | null {

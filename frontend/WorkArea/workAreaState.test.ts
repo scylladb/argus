@@ -73,4 +73,17 @@ describe("WorkAreaState", () => {
         expect(work.testRuns).toEqual(["t2", "t1"]);
         expect(work.additionalRuns).toEqual({ t2: ["r2"] });
     });
+
+    it("forgets a deleted run and keeps its test open", () => {
+        const work = new WorkAreaState();
+        work.openRun("t1", "r1");
+        work.openRun("t1", "r2");
+
+        work.forgetRun("t1", "r1");
+        work.forgetRun("t1", "missing");
+        work.forgetRun("t2", "r1");
+
+        expect(work.testRuns).toEqual(["t1"]);
+        expect(work.additionalRuns).toEqual({ t1: ["r2"] });
+    });
 });

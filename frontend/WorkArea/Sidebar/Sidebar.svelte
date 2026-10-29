@@ -7,6 +7,9 @@
     import { hideDrawer, isDrawer, offcanvas, showDrawer } from "./offcanvas";
     import SidebarRow from "./SidebarRow.svelte";
     import SidebarSearch from "./SidebarSearch.svelte";
+    import ConfirmDeleteModal from "../../Common/ConfirmDeleteModal.svelte";
+    import { fetchJson } from "../../Common/ApiUtils";
+    import { sendMessage } from "../../Stores/AlertStore";
 
     interface Props {
         openTests?: string[];
@@ -35,6 +38,8 @@
     let focusTarget: string | null = $state(null);
     let focusRequest = $state(0);
     let pending: { id: string | typeof FIRST_ROW; move: boolean } | null = $state(null);
+    let deleteTarget: Entry | null = $state(null);
+    let deleting = $state(false);
 
     const summary = $derived(sidebar.summary(sidebar.release));
     const releaseStats = $derived(sidebar.release ? sidebar.stats.get(sidebar.release.name) : undefined);
@@ -58,6 +63,7 @@
     });
 
     const hiddenCount = $derived((sidebar.releases.data ?? []).filter((release) => sidebar.hidden.has(release.id)).length);
+    const canDelete = $derived(!!sidebar.release?.user_editable);
 
     const activeIndex = $derived(Math.max(0, entries.findIndex((entry) => entry.item.id === activeId)));
     const duplicates = $derived(duplicateNames(entries.map((entry) => entry.item)));
@@ -169,6 +175,38 @@
         sidebar.toggleHidden(release);
         if (hiddenCount === 0) sidebar.showHidden = false;
         pending = { id: next?.item.id ?? FIRST_ROW, move: true };
+    };
+
+    const removedTests = (target: Entry): string[] => {
+        if (target.kind === "test") return [target.item.id];
+        if (target.kind === "group") return (sidebar.tests.get(target.item.id)?.data ?? []).map((test) => test.id);
+        return [];
+    };
+
+    const confirmDelete = async () => {
+        const target = deleteTarget;
+        const release = sidebar.release;
+        if (!target || !release || target.kind === "release") return;
+        deleting = true;
+        try {
+            if (target.kind === "group") await sidebar.loadTests(target.item);
+            await fetchJson(`/api/v1/${target.kind}/${target.item.id}`, { method: "DELETE" });
+            for (const testId of removedTests(target)) {
+                if (openSet.has(testId)) onToggleTest(testId);
+            }
+            deleteTarget = null;
+            sendMessage("success", `Deleted ${target.kind} ${displayName(target.item)}.`, "Sidebar::confirmDelete");
+            if (target.kind === "test" && sidebar.group) {
+                await sidebar.loadTests(sidebar.group, { force: true });
+            } else {
+                await sidebar.loadGroups(release, { force: true });
+            }
+            sidebar.ensureStats(release, { force: true });
+        } catch (error) {
+            sendMessage("error", error instanceof Error ? error.message : String(error), "Sidebar::confirmDelete");
+        } finally {
+            deleting = false;
+        }
     };
 
     const hitStats = (hit: SearchHit) => {
@@ -380,6 +418,7 @@
                                 onTogglePin={entry.kind === "release" ? () => togglePin(entry.item) : undefined}
                                 hidden={entry.kind === "release" ? sidebar.hidden.has(entry.item.id) : undefined}
                                 onToggleHidden={entry.kind === "release" ? () => toggleHidden(entry.item, index) : undefined}
+                                onDelete={canDelete && entry.kind !== "release" ? () => (deleteTarget = entry) : undefined}
                                 dormant={entry.kind === "release" && entry.item.dormant}
                                 assignees={assigneesFor(entry)}
                                 focusRequest={focusTarget === entry.item.id ? focusRequest : 0}
@@ -397,6 +436,23 @@
         </div>
     </div>
 </aside>
+
+{#if deleteTarget && deleteTarget.kind !== "release"}
+    {@const target = deleteTarget}
+    <ConfirmDeleteModal
+        heading={`Delete ${target.kind} ${displayName(target.item)}`}
+        confirmName={target.item.name}
+        working={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => (deleteTarget = null)}
+    >
+        <p>
+            This removes the {target.kind} <span class="fw-bold">{displayName(target.item)}</span>{target.kind === "group"
+                ? ", all its tests and their runs"
+                : " and all its runs"}. This cannot be undone.
+        </p>
+    </ConfirmDeleteModal>
+{/if}
 
 <button
     type="button"

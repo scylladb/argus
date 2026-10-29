@@ -266,6 +266,14 @@
         clickedTestRuns[id] = false;
     };
 
+    const handleRunDeleted = function (e) {
+        const id = e.detail.id;
+        additionalRuns = additionalRuns.filter((runId) => runId !== id);
+        delete clickedTestRuns[id];
+        dispatch("runDeleted", { testId, runId: id });
+        fetchTestRuns();
+    };
+
     const handleShowGraph = function (e) {
         clickedGraph = !clickedGraph;
     };
@@ -503,6 +511,7 @@
                         bind:clickedTestRuns
                         on:runClick={handleTestRunClick}
                         on:closeRun={handleTestRunClose}
+                        on:runDeleted={handleRunDeleted}
                         on:increaseLimit={handleIncreaseLimit}
                         on:ignoreRuns={handleIgnoreRuns}
                         on:fetchNewRuns={fetchTestRuns}

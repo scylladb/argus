@@ -1,6 +1,6 @@
 <script lang="ts">
     import Fa from "svelte-fa";
-    import { faChevronRight, faEyeSlash, faThumbtack, faTriangleExclamation } from "@fortawesome/free-solid-svg-icons";
+    import { faChevronRight, faEyeSlash, faThumbtack, faTrash, faTriangleExclamation } from "@fortawesome/free-solid-svg-icons";
     import { timestampToISODate } from "../../Common/DateUtils";
     import AssigneeList from "../AssigneeList.svelte";
     import StatusDot from "./StatusDot.svelte";
@@ -22,6 +22,7 @@
         onTogglePin?: () => void;
         hidden?: boolean;
         onToggleHidden?: () => void;
+        onDelete?: () => void;
         dormant?: boolean;
         assignees?: string[];
         focusRequest?: number;
@@ -45,6 +46,7 @@
         onTogglePin,
         hidden,
         onToggleHidden,
+        onDelete,
         dormant = false,
         assignees = [],
         focusRequest = 0,
@@ -138,6 +140,19 @@
             onkeydown={(event) => onKeydown?.(event)}
         >
             <Fa icon={faEyeSlash} />
+        </button>
+    {/if}
+    {#if onDelete}
+        <button
+            type="button"
+            class="row-toggle btn rounded-0 border-0 px-2"
+            tabindex={active ? 0 : -1}
+            aria-label={`Delete ${name}`}
+            title="Delete"
+            onclick={() => onDelete()}
+            onkeydown={(event) => onKeydown?.(event)}
+        >
+            <Fa icon={faTrash} />
         </button>
     {/if}
 </div>

@@ -13,6 +13,7 @@ from argus.backend.rendering import url_for
 from argus.backend.service.github_service import GithubService
 from argus.backend.service.issue_service import IssueService
 from argus.backend.service.jenkins_service import JenkinsService
+from argus.backend.service.release_cleanup import ReleaseCleanupService
 from argus.backend.service.results_service import ResultsService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import api_current_user
@@ -104,6 +105,16 @@ async def get_runs_for_test(test_id: UUID, limit: int = Query(10), before: float
     return APIResponse({
         "status": "ok",
         "response": runs
+    })
+
+
+@router.delete("/test/{test_id}/run/{run_id}", name="api.testrun_api.delete_run")
+async def delete_run(test_id: UUID, run_id: UUID, user: User = Depends(api_current_user)):
+    await ReleaseCleanupService().delete_run(test_id=test_id, run_id=run_id, user=user)
+
+    return APIResponse({
+        "status": "ok",
+        "response": {"deleted": run_id}
     })
 
 

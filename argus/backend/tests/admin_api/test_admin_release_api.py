@@ -9,6 +9,7 @@ Scope (iteration 8 of the controller coverage matrix):
 - ``POST /admin/api/v1/release/set_perpetual``
 - ``POST /admin/api/v1/release/set_state``
 - ``POST /admin/api/v1/release/set_dormant``
+- ``POST /admin/api/v1/release/set_user_editable``
 - ``POST /admin/api/v1/release/edit``
 - ``POST /admin/api/v1/release/delete``
 - ``GET  /admin/api/v1/releases/get``
@@ -20,6 +21,7 @@ import uuid
 
 import pytest
 
+from argus.backend.tests.conftest import g
 from argus.backend.tests.util import client_post
 
 ADMIN_PREFIX = "/admin/api/v1"
@@ -129,6 +131,45 @@ def test_admin_set_release_dormant(api_client, admin_release):
 # /release/edit
 # ---------------------------------------------------------------------------
 
+def test_admin_set_release_user_editable(api_client, admin_release):
+    resp = api_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
+    assert resp.json()["response"]["user_editable"] is False
+
+    payload = {"release_id": admin_release["id"], "user_editable": True}
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/release/set_user_editable", payload)
+    assert resp.status_code == 200, resp.content
+    assert resp.json()["status"] == "ok"
+    assert resp.json()["response"]["updated"] is True
+
+    resp = api_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
+    assert resp.json()["response"]["user_editable"] is True
+
+    resp = api_client.get(f"{API_PREFIX}/releases?all=true")
+    listed = next(r for r in resp.json()["response"] if r["id"] == admin_release["id"])
+    assert listed["user_editable"] is True
+
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/release/set_user_editable",
+                       {"release_id": admin_release["id"], "user_editable": False})
+    assert resp.json()["status"] == "ok"
+
+    resp = api_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
+    assert resp.json()["response"]["user_editable"] is False
+
+
+@pytest.fixture
+def normal_user_identity():
+    previous_roles = list(g.user.roles)
+    g.user.roles = ["ROLE_USER"]
+    yield
+    g.user.roles = previous_roles
+
+
+def test_admin_set_release_user_editable_refuses_a_normal_user(api_client, admin_release, normal_user_identity):
+    payload = {"release_id": admin_release["id"], "user_editable": True}
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/release/set_user_editable", payload)
+    assert resp.status_code == 403
+
+
 def test_admin_edit_release(api_client, admin_release):
     payload = {
         "id": admin_release["id"],
@@ -138,6 +179,7 @@ def test_admin_edit_release(api_client, admin_release):
         "enabled": False,
         "perpetual": True,
         "dormant": True,
+        "user_editable": True,
     }
     resp = client_post(api_client, f"{ADMIN_PREFIX}/release/edit", payload)
     assert resp.status_code == 200, resp.content
@@ -155,6 +197,18 @@ def test_admin_edit_release(api_client, admin_release):
     assert body["response"]["enabled"] is False
     assert body["response"]["perpetual"] is True
     assert body["response"]["dormant"] is True
+    assert body["response"]["user_editable"] is True
+
+
+def test_admin_edit_release_without_the_flag_clears_user_editable(api_client, admin_release):
+    client_post(api_client, f"{ADMIN_PREFIX}/release/set_user_editable",
+                {"release_id": admin_release["id"], "user_editable": True})
+
+    resp = client_post(api_client, f"{ADMIN_PREFIX}/release/edit", _edit_release_payload(admin_release))
+    assert resp.json()["status"] == "ok"
+
+    resp = api_client.get(f"{API_PREFIX}/release/{admin_release['id']}/details")
+    assert resp.json()["response"]["user_editable"] is False
 
 
 def _edit_release_payload(release: dict, **changes) -> dict:

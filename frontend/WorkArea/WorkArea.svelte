@@ -35,6 +35,7 @@
                 bind:testRuns={work.testRuns}
                 bind:additionalRuns={work.additionalRuns}
                 on:testRunRemove={(event) => work.removeTest(event.detail.testId)}
+                on:runDeleted={(event) => work.forgetRun(event.detail.testId, event.detail.runId)}
                 workAreaAttached={true}
             />
         </div>

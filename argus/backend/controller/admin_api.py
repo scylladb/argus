@@ -41,6 +41,11 @@ class SetReleaseDormancyRequest(BaseModel):
     dormant: bool
 
 
+class SetReleaseUserEditableRequest(BaseModel):
+    release_id: UUID
+    user_editable: bool
+
+
 MAX_RELEASE_PRIORITY = 2**31 - 1
 
 
@@ -52,6 +57,7 @@ class EditReleaseRequest(BaseModel):
     enabled: bool
     perpetual: bool
     dormant: bool
+    user_editable: bool = False
     priority: Annotated[int, Field(ge=0, le=MAX_RELEASE_PRIORITY)] | None = None
 
 
@@ -182,6 +188,18 @@ async def set_release_state(payload: SetReleaseStateRequest, user: User = Depend
 @router.post("/release/set_dormant", name="admin.admin_api.set_release_dormancy")
 async def set_release_dormancy(payload: SetReleaseDormancyRequest, user: User = Depends(admin_user)):
     result = await ReleaseManagerService().set_release_dormancy(**payload.model_dump())
+
+    return APIResponse({
+        "status": "ok",
+        "response": {
+            "updated": result
+        }
+    })
+
+
+@router.post("/release/set_user_editable", name="admin.admin_api.set_release_user_editable")
+async def set_release_user_editable(payload: SetReleaseUserEditableRequest, user: User = Depends(admin_user)):
+    result = await ReleaseManagerService().set_release_user_editable(**payload.model_dump())
 
     return APIResponse({
         "status": "ok",
