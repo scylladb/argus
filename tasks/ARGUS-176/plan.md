@@ -144,6 +144,9 @@ stays in every plan built from a spec.
   or heartbeat is at or after `since`, and returns the newest runs with a
   truncation flag.
 - `_resolve_release_id` checks that a UUID names a release.
+- `MAX_TABLE_READS = 500`. A filter that matches more (test, table) pairs
+  raises `DataValidationError`.
+- A run takes `submitted_at` from the latest write time of its kept cells.
 - `get_release_results` rejects a blank `table_filter` and drops hidden
   columns. Both service reads and both routes take `include_hidden`.
 - The CLI returns every flag error, panics when `MarkFlagRequired` fails,

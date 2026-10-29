@@ -28,6 +28,7 @@ type ReleasesMap = dict[str, list[RunId]]
 RELEASE_RESULTS_WINDOW = timedelta(days=30)
 RUN_START_MARGIN = timedelta(days=7)
 MAX_RUNS_PER_TEST = 100
+MAX_TABLE_READS = 500
 
 
 @dataclass
@@ -769,6 +770,7 @@ class ResultsService:
         ``since``/``until`` filter on the write time of the result. ``since`` defaults to
         ``RELEASE_RESULTS_WINDOW`` before ``until``, or before now when ``until`` is not set.
         ``sut_since``/``sut_until`` filter on ``sut_timestamp``, the date of the SUT build.
+        A filter that matches more than ``MAX_TABLE_READS`` (test, table) pairs is an error.
         Each test reads at most ``MAX_RUNS_PER_TEST`` runs, and ``runs_truncated`` says when it read fewer
         runs than the window holds. Columns marked as hidden are left out unless ``include_hidden`` is set.
         """
@@ -777,6 +779,10 @@ class ResultsService:
         since = since or (until or datetime.now(timezone.utc)) - RELEASE_RESULTS_WINDOW
         release_tables = await self._get_release_tables(release, table_filter.strip())
         release_tables = [(test, tables) for test, tables in release_tables if tables]
+        table_reads = sum(len(tables) for _, tables in release_tables)
+        if table_reads > MAX_TABLE_READS:
+            raise DataValidationError(f"The table filter matches {table_reads} tables across the tests of the release, "
+                                      f"more than {MAX_TABLE_READS}. Use a longer table filter.")
         runs_per_test = await gather_limited(self._get_window_runs(test, since, until) for test, _ in release_tables)
         pairs = [(test, table, runs, truncated)
                  for (test, tables), (runs, truncated) in zip(release_tables, runs_per_test) if runs

@@ -249,6 +249,14 @@ async def test_release_results_reject_an_unknown_release_id(results_service):
         await results_service.get_release_results(release=str(uuid4()), table_filter="release")
 
 
+async def test_release_results_reject_a_filter_that_matches_too_many_tables(results_service, release, release_run,
+                                                                            monkeypatch):
+    monkeypatch.setattr("argus.backend.service.results_service.MAX_TABLE_READS", 1)
+
+    with pytest.raises(DataValidationError, match="longer table filter"):
+        await results_service.get_release_results(release=release.name, table_filter="release")
+
+
 async def test_release_results_reject_an_empty_table_filter(results_service, release):
     with pytest.raises(DataValidationError):
         await results_service.get_release_results(release=release.name, table_filter="  ")

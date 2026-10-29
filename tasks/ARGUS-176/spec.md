@@ -23,7 +23,8 @@ The schema does not change, so results that exist today are readable at once.
   `sut_timestamp` is a second, separate filter.
 - The cost of the cell read follows the time window, not the full history of
   a test.
-- One request reads a bounded amount of data: at most 100 runs per test.
+- One request reads a bounded amount of data: at most 500 (test, table)
+  pairs, and at most 100 runs per test.
 
 ## Design
 
@@ -79,6 +80,7 @@ tests per table name and merges the column names.
 |---|---|
 | The release name or UUID matches no release | `DataValidationError`, the response has `status: error` |
 | `table` is empty or blank | `DataValidationError` |
+| `table` matches more than 500 (test, table) pairs | `DataValidationError` that asks for a longer filter |
 | A test has more than 100 runs that qualify | The newest 100 by start time, and `runs_truncated` is true |
 | A column is marked `visible=False` | The column is left out, unless `includeHidden=true` |
 | No table name matches `table` | An empty list |
@@ -196,8 +198,9 @@ class ResultsService:
   and a user types them in lower case. (review)
 - A run qualifies by its end time and its heartbeat too, so a long run that
   writes inside the window keeps its results. (review)
-- Each test returns its newest 100 runs, so one request cannot read the full
-  history of a release. (review)
+- Each test returns its newest 100 runs, and a filter can match at most 500
+  (test, table) pairs, so one request cannot read the full history of a
+  release. (review)
 - The release read hides the columns marked as hidden, as the per-run read
   and the graphs do. (review)
 - The old per-test paths are removed, not kept as aliases. The frontend is
