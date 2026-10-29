@@ -8,7 +8,7 @@ import ReleaseEditor from "./ReleaseEditor.svelte";
 
 const RELEASE = {
     id: "r1", name: "scylla-master", pretty_name: null, description: null, valid_version_regex: null,
-    enabled: true, perpetual: false, dormant: false, priority: null,
+    enabled: true, perpetual: false, dormant: false, user_editable: false, priority: null,
 };
 
 afterEach(() => {
@@ -41,5 +41,15 @@ describe("ReleaseEditor", () => {
 
         expect(onReleaseEdit).toHaveBeenCalledTimes(1);
         expect(onReleaseEdit.mock.calls[0][0].detail.priority).toBe(7);
+    });
+
+    it("saves the user editable flag", async () => {
+        const onReleaseEdit = renderEditor();
+
+        await fireEvent.click(screen.getByLabelText("Users may delete groups, tests and runs"));
+        await fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+        expect(onReleaseEdit).toHaveBeenCalledTimes(1);
+        expect(onReleaseEdit.mock.calls[0][0].detail.user_editable).toBe(true);
     });
 });

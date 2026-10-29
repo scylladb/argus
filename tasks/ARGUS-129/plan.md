@@ -150,7 +150,7 @@ test rows of a release with `user_editable`; `confirmDelete` sends the
 - [x] Run it and confirm the failure.
 - [x] Write the smallest change that passes it.
 - [x] Run the verify sequence and `yarn build`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 6 — Documentation
 

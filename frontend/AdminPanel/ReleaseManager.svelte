@@ -302,6 +302,17 @@
         }
     };
 
+    const handleReleaseUserEditableChange = async function (e) {
+        let result = await apiMethodCall("/admin/api/v1/release/set_user_editable", {
+            release_id: currentReleaseId,
+            user_editable: currentRelease.user_editable,
+        });
+
+        if (result.status === "ok") {
+            fetchReleases();
+        }
+    };
+
     const handleVisibilityToggle = async function(entity, type, state) {
         let result = await apiMethodCall(
             `/admin/api/v1/release/${type}/state/toggle`,
@@ -376,6 +387,21 @@
                     <label
                         class="form-check-label"
                         for="releaseManagerSwitchDormant">Dormant</label
+                    >
+                </div>
+                <div class="ms-2 form-check form-switch">
+                    <input
+                        class="form-check-input"
+                        type="checkbox"
+                        role="switch"
+                        title="Let any user delete groups, tests and runs of this release"
+                        bind:checked={currentRelease.user_editable}
+                        onchange={handleReleaseUserEditableChange}
+                        id="releaseManagerSwitchUserEditable"
+                    />
+                    <label
+                        class="form-check-label"
+                        for="releaseManagerSwitchUserEditable">User editable</label
                     >
                 </div>
                 <div class="ms-2 form-check form-switch">
