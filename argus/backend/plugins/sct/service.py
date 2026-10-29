@@ -12,6 +12,8 @@ from time import time
 from typing import TypedDict
 from uuid import UUID
 from xml.etree import ElementTree
+from cassandra import DriverException
+from cassandra.cluster import NoHostAvailable
 from cassandra.util import uuid_from_time
 from coodie.aio import execute_raw
 from coodie.exceptions import DocumentNotFound
@@ -21,6 +23,7 @@ from argus.backend.models.jira import JiraIssue
 from argus.backend.models.web import ArgusEventTypes, CriticalEventEmbeddings, ErrorEventEmbeddings, User
 from argus.backend.models.argus_ai import SCTErrorEventEmbedding, SCTCriticalEventEmbedding
 from argus.backend.plugins.sct.testrun import (
+    SPOT_TERMINATION_EVENT,
     SCTEvent,
     SCTEventSeverity,
     SCTJunitReports,
@@ -39,6 +42,7 @@ from argus.backend.plugins.sct.udt import (
     PackageVersion,
     PerformanceHDRHistogram,
 )
+from argus.backend.service.cost_rollup_service import CostRollupService
 from argus.backend.service.event_service import EventService
 from argus.backend.util.common import chunk, gather_limited
 from argus.backend.util.config import Config
@@ -585,6 +589,8 @@ class SCTService:
         except Exception:
             LOGGER.warning(
                 "Unable to parse event for coredump links.", exc_info=True)
+        if (event.event_type or "").lower() == SPOT_TERMINATION_EVENT:
+            await cls._refresh_cost_rollup(run_id)
         # Add to unprocessed events queue for ERROR and CRITICAL events
         if event.severity in (SCTEventSeverity.ERROR.value, SCTEventSeverity.CRITICAL.value):
             try:
@@ -615,6 +621,17 @@ class SCTService:
     @staticmethod
     async def count_events_by_severity(run_id: UUID, severity: SCTEventSeverity) -> int:
         return await SCTEvent.find(run_id=run_id, severity=SCTEventSeverity(severity).value).count()
+
+    @staticmethod
+    async def _refresh_cost_rollup(run_id: UUID) -> None:
+        try:
+            run = await SCTTestRun.find(id=run_id).only(*SCTTestRun.cost_rollup_columns()).first()
+            if not run:
+                LOGGER.warning("Spot termination event for unknown run %s", run_id)
+                return
+            await CostRollupService().refresh(run)
+        except (DriverException, NoHostAvailable):
+            LOGGER.exception("Could not refresh the cost rollup of run %s, the event is stored", run_id)
 
     @staticmethod
     def create_coredump_link(event_message: str, event_ts: datetime | None = None) -> CoredumpLink | None:

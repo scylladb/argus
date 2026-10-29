@@ -29,6 +29,7 @@ from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.generic.model import GenericRun
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
 from argus.backend.events.event_processors import EVENT_PROCESSORS
+from argus.backend.service.cost_rollup_service import CostRollupService
 from argus.backend.service.results_service import ResultsService, Cell
 from argus.backend.service.run_cost_service import RunCostService
 from argus.backend.util.common import save_in_batches
@@ -148,8 +149,9 @@ class ClientService:
         await run.save()
         try:
             await RunCostService().recompute_actual_cost(run_id, use_estimate=True)
+            await CostRollupService().refresh(run)
         except (DriverException, NoHostAvailable):
-            LOGGER.exception("Could not recompute the actual cost of run %s, the run is finalized", run_id)
+            LOGGER.exception("Could not recompute the cost of run %s, the run is finalized", run_id)
 
         return "Finalized"
 
