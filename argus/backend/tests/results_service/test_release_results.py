@@ -62,7 +62,7 @@ async def test_release_results_grouped_by_table_test_run(results_service, releas
     assert run["cells"] == [{"row": "write", "column": "ops", "value": 100, "status": "PASS"}]
 
 
-async def test_release_results_filter_by_status_and_write_time(results_service, release, release_run):
+async def test_release_results_filter_by_status_and_start_time(results_service, release, release_run):
     by_status = await results_service.get_release_results(
         release=str(release.id), table_filter="release", statuses=["ERROR"])
     tables = [group["table"] for group in by_status]
@@ -97,13 +97,11 @@ async def test_release_results_leave_out_ignored_runs(results_service, release, 
 
 
 async def _generic_run_with_result(release_manager_service, release, group, table_name: str,
-                                   started: datetime, written: datetime | None = None, test=None,
-                                   **run_fields) -> tuple:
-    """A generic plugin run that started at ``started`` and wrote one cell at ``written``.
+                                   started: datetime, test=None) -> tuple:
+    """A generic plugin run that started at ``started`` and wrote one result row.
 
     The table has a visible ``ops`` column and a hidden ``debug`` column, and the run writes both.
     """
-    written = written or started
     if test is None:
         name = f"generic_{time.time_ns()}"
         test = await release_manager_service.create_test(name, name, name, name, group_id=group.id,
@@ -113,16 +111,14 @@ async def _generic_run_with_result(release_manager_service, release, group, tabl
                                                        ColumnMeta(name="debug", unit="", type="FLOAT",
                                                                   visible=False)],
                                          rows_meta=["write"]).save()
-    run_fields.setdefault("heartbeat", int(started.timestamp()))
     run = GenericRun(id=uuid4(), build_id=test.build_system_id, test_id=test.id, release_id=release.id,
                      group_id=group.id, build_job_url="http://example.com/job/generic/3/", build_number=3,
-                     started_by="tester", start_time=started, **run_fields)
+                     started_by="tester", start_time=started)
     await run.save()
     for column, value in (("ops", 7.0), ("debug", 1.0)):
         await execute_raw(
             f"INSERT INTO {ArgusGenericResultData._get_keyspace()}.{ArgusGenericResultData.table_name()} "
-            "(test_id, name, run_id, column, row, sut_timestamp, value, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
-            f"USING TIMESTAMP {int(written.timestamp() * 1_000_000)}",
+            "(test_id, name, run_id, column, row, sut_timestamp, value, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             [test.id, table_name, run.id, column, "write", started, value, "PASS"])
     return test, run
 
@@ -172,19 +168,6 @@ def test_release_results_endpoint(api_client, release, release_run):
     assert ThroughputTable.Meta.name not in tables
 
 
-async def test_release_results_keep_a_long_run_that_writes_in_the_window(results_service, release_manager_service,
-                                                                        release, group):
-    now = datetime.now(timezone.utc)
-    _, run = await _generic_run_with_result(release_manager_service, release, group, "Long Release Table",
-                                            started=now - timedelta(days=40), written=now,
-                                            end_time=now, heartbeat=int(now.timestamp()))
-
-    results = await results_service.get_release_results(release=release.name, table_filter="long release",
-                                                        since=now - timedelta(days=1))
-
-    assert _run_ids(results) == [run.id]
-
-
 async def test_release_results_cap_the_runs_per_test(results_service, release_manager_service, release, group,
                                                      monkeypatch):
     monkeypatch.setattr("argus.backend.service.results_service.MAX_RUNS_PER_TEST", 1)
@@ -201,27 +184,33 @@ async def test_release_results_cap_the_runs_per_test(results_service, release_ma
     assert [run["run_id"] for run in test_result["runs"]] == [newest.id]
 
 
-async def test_release_results_date_a_run_by_its_latest_cell(results_service, release_manager_service, release,
-                                                             group):
+async def test_release_results_leave_out_a_run_that_started_before_the_window(results_service,
+                                                                              release_manager_service, release,
+                                                                              group):
     now = datetime.now(timezone.utc)
-    test, late = await _generic_run_with_result(release_manager_service, release, group, "Dated Release Table",
-                                                started=now - timedelta(hours=3))
-    # "debug" sorts before "ops", so the read meets the older cell of the run first.
-    await execute_raw(
-        f"UPDATE {ArgusGenericResultData._get_keyspace()}.{ArgusGenericResultData.table_name()} "
-        f"USING TIMESTAMP {int(now.timestamp() * 1_000_000)} SET value = ?, status = ? "
-        "WHERE test_id = ? AND name = ? AND run_id = ? AND column = ? AND row = ?",
-        [8.0, "PASS", test.id, "Dated Release Table", late.id, "ops", "write"])
-    _, middle = await _generic_run_with_result(release_manager_service, release, group, "Dated Release Table",
+    test, _ = await _generic_run_with_result(release_manager_service, release, group, "Early Release Table",
+                                             started=now - timedelta(days=2))
+    _, recent = await _generic_run_with_result(release_manager_service, release, group, "Early Release Table",
                                                started=now - timedelta(hours=1), test=test)
 
-    [group_result] = await results_service.get_release_results(
-        release=release.name, table_filter="dated release", include_hidden=True)
+    results = await results_service.get_release_results(release=release.name, table_filter="early release",
+                                                        since=now - timedelta(days=1))
+
+    assert _run_ids(results) == [recent.id]
+
+
+async def test_release_results_sort_runs_by_start_time(results_service, release_manager_service, release, group):
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    test, older = await _generic_run_with_result(release_manager_service, release, group, "Sorted Release Table",
+                                                 started=now - timedelta(hours=3))
+    _, newer = await _generic_run_with_result(release_manager_service, release, group, "Sorted Release Table",
+                                              started=now - timedelta(hours=1), test=test)
+
+    [group_result] = await results_service.get_release_results(release=release.name, table_filter="sorted release")
 
     [test_result] = group_result["tests"]
-    assert [run["run_id"] for run in test_result["runs"]] == [late.id, middle.id]
-    assert test_result["runs"][0]["submitted_at"] == datetime.fromtimestamp(
-        int(now.timestamp() * 1_000_000) / 1_000_000, tz=timezone.utc)
+    assert [run["run_id"] for run in test_result["runs"]] == [newer.id, older.id]
+    assert test_result["runs"][0]["started_at"] == now - timedelta(hours=1)
 
 
 async def test_release_results_hide_hidden_columns(results_service, release_manager_service, release, group):

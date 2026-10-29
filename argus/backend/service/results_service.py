@@ -26,7 +26,6 @@ type RunId = str
 type ReleasesMap = dict[str, list[RunId]]
 
 RELEASE_RESULTS_WINDOW = timedelta(days=30)
-RUN_START_MARGIN = timedelta(days=7)
 MAX_RUNS_PER_TEST = 100
 MAX_TABLE_READS = 500
 
@@ -728,34 +727,24 @@ class ResultsService:
         return sorted(catalog.values(), key=lambda entry: entry["name"])
 
     async def _get_window_runs(self, test: dict, since: datetime, until: datetime | None) -> tuple[dict[UUID, dict], bool]:
-        """The newest ``MAX_RUNS_PER_TEST`` runs of a test that can hold results written in the window.
+        """The newest ``MAX_RUNS_PER_TEST`` runs of a test that started in the window.
 
-        A run qualifies when it started up to ``RUN_START_MARGIN`` before ``since``, or when its end time
-        or its last heartbeat is at or after ``since``. Ignored runs are left out. The flag is true when
-        the cap left out older runs.
+        Ignored runs are left out. The flag is true when the cap left out older runs.
         """
         plugin = TestRunService().get_plugin(test["plugin_name"]) if test["plugin_name"] else None
         if not plugin or not test["build_system_id"]:
             return {}, False
-        query = plugin.model.find(build_id=test["build_system_id"])
+        query = plugin.model.find(build_id=test["build_system_id"]).filter(start_time__gte=since)
         if until:
             query = query.filter(start_time__lte=until)
-        rows = await select_rows(query, "id", "start_time", "end_time", "heartbeat", "investigation_status",
-                                 "build_number", "scylla_version")
-        started_after = (since - RUN_START_MARGIN).replace(tzinfo=None)
-        naive_since = since.replace(tzinfo=None)
-        runs = [row for row in rows
-                if (row["investigation_status"] or "").lower() != "ignored"
-                and (row["start_time"] >= started_after
-                     or (row["end_time"] and row["end_time"] >= naive_since)
-                     or (row["heartbeat"] or 0) >= since.timestamp())]
+        rows = await select_rows(query, "id", "start_time", "investigation_status", "build_number", "scylla_version")
+        runs = [row for row in rows if (row["investigation_status"] or "").lower() != "ignored"]
         return {row["id"]: row for row in runs[:MAX_RUNS_PER_TEST]}, len(runs) > MAX_RUNS_PER_TEST
 
     async def _get_runs_cells(self, test_id: UUID, table_name: str, run_ids: list[UUID]) -> list[dict]:
         cells = []
         for batch in chunk(run_ids):
-            raw_query = ("SELECT run_id, column, row, value, value_text, status, sut_timestamp, "
-                         "WRITETIME(status) AS submitted "
+            raw_query = ("SELECT run_id, column, row, value, value_text, status, sut_timestamp "
                          f"FROM {ArgusGenericResultData._get_keyspace()}.{ArgusGenericResultData.table_name()} "
                          f"WHERE test_id = ? AND name = ? AND run_id IN ({', '.join('?' * len(batch))})")
             cells.extend(await execute_raw(raw_query, [test_id, table_name, *batch]))
@@ -767,7 +756,7 @@ class ResultsService:
                                   include_hidden: bool = False) -> list[dict]:
         """Generic results of every test in a release, grouped by table, then test, then run.
 
-        ``since``/``until`` filter on the write time of the result. ``since`` defaults to
+        ``since``/``until`` filter on the start time of the run. ``since`` defaults to
         ``RELEASE_RESULTS_WINDOW`` before ``until``, or before now when ``until`` is not set.
         ``sut_since``/``sut_until`` filter on ``sut_timestamp``, the date of the SUT build.
         A filter that matches more than ``MAX_TABLE_READS`` (test, table) pairs is an error.
@@ -790,8 +779,6 @@ class ResultsService:
         cells_per_pair = await gather_limited(self._get_runs_cells(test["id"], table.name, list(runs))
                                               for test, table, runs, _ in pairs)
 
-        since_us = since.timestamp() * 1_000_000
-        until_us = until.timestamp() * 1_000_000 if until else None
         grouped: dict[str, dict] = {}
         for (test, table, test_runs, truncated), cells in zip(pairs, cells_per_pair):
             hidden = set() if include_hidden else {col.name for col in table.columns_meta if col.visible is False}
@@ -799,23 +786,19 @@ class ResultsService:
             for cell in cells:
                 if cell["column"] in hidden or (statuses and cell["status"] not in statuses):
                     continue
-                if cell["submitted"] < since_us or (until_us and cell["submitted"] > until_us):
-                    continue
                 sut_timestamp = cell["sut_timestamp"].replace(tzinfo=timezone.utc) if cell["sut_timestamp"] else None
                 if (sut_since and (not sut_timestamp or sut_timestamp < sut_since)) or \
                         (sut_until and (not sut_timestamp or sut_timestamp > sut_until)):
                     continue
                 run_info = test_runs[cell["run_id"]]
-                submitted_at = datetime.fromtimestamp(cell["submitted"] / 1_000_000, tz=timezone.utc)
                 run = runs.setdefault(cell["run_id"], {
                     "run_id": cell["run_id"],
                     "build_number": run_info["build_number"],
                     "scylla_version": run_info["scylla_version"],
-                    "submitted_at": submitted_at,
+                    "started_at": run_info["start_time"].replace(tzinfo=timezone.utc),
                     "sut_timestamp": sut_timestamp,
                     "cells": [],
                 })
-                run["submitted_at"] = max(run["submitted_at"], submitted_at)
                 run["cells"].append({
                     "row": cell["row"],
                     "column": cell["column"],
@@ -830,6 +813,6 @@ class ResultsService:
                 "test_name": test["name"],
                 "build_id": test["build_system_id"],
                 "runs_truncated": truncated,
-                "runs": sorted(runs.values(), key=lambda run: run["submitted_at"], reverse=True),
+                "runs": sorted(runs.values(), key=lambda run: run["started_at"], reverse=True),
             })
         return sorted(grouped.values(), key=lambda group: group["table"])

@@ -19,7 +19,7 @@ The schema does not change, so results that exist today are readable at once.
 - No schema change and no backfill. The release read is needed now.
 - No `ALLOW FILTERING` query. Every read names a full partition key, or the
   `release_id` index of `argus_test_v2`.
-- The time filter uses the write time of the result, as soyacz asked.
+- The time filter uses the start time of the run.
   `sut_timestamp` is a second, separate filter.
 - The cost of the cell read follows the time window, not the full history of
   a test.
@@ -60,13 +60,13 @@ sequenceDiagram
     end
     Note over S: keep tests with a table whose name contains table_filter
     par one per test, at most 50 at a time
-        S->>DB: <plugin run table> WHERE build_id = ?<br/>[AND start_time <= until]<br/>columns: id, start_time, end_time, heartbeat, ...
+        S->>DB: <plugin run table> WHERE build_id = ?<br/>AND start_time >= since [AND start_time <= until]<br/>columns: id, start_time, ...
     end
-    Note over S: keep a run that started at or after since - 7 days,<br/>or whose end_time or heartbeat is at or after since<br/>drop ignored runs, keep the newest 100
+    Note over S: drop ignored runs, keep the newest 100
     par one per (test, table), at most 50 at a time
-        S->>DB: generic_result_data_v1 WHERE test_id = ? AND name = ?<br/>AND run_id IN (... up to 90 ...) with WRITETIME(status)
+        S->>DB: generic_result_data_v1 WHERE test_id = ? AND name = ?<br/>AND run_id IN (... up to 90 ...)
     end
-    Note over S: drop hidden columns, filter by status, write time,<br/>sut_timestamp, group by table, test, run
+    Note over S: drop hidden columns, filter by status,<br/>sut_timestamp, group by table, test, run
     S-->>R: list of table groups
     R-->>C: APIResponse
 ```
@@ -111,8 +111,8 @@ GET /api/v1/results/release/{release}/tables
 GET /api/v1/results/release/{release}
     table      required, case-insensitive substring of the table name
     status[]   repeatable, any case, keeps cells with one of these statuses
-    since      ISO-8601, write time of the result >= since, default 30 days before until or now
-    until      ISO-8601, write time of the result <= until
+    since      ISO-8601, start time of the run >= since, default 30 days before until or now
+    until      ISO-8601, start time of the run <= until
     sutSince   ISO-8601, sut_timestamp >= sutSince
     sutUntil   ISO-8601, sut_timestamp <= sutUntil
     includeHidden  true keeps the cells of the columns marked as hidden
@@ -125,16 +125,14 @@ GET /api/v1/results/release/{release}
      "runs_truncated": false,
      "runs": [
        {"run_id": "<uuid>", "build_number": 412, "scylla_version": "2026.2.0~dev",
-        "submitted_at": "2026-10-20T08:12:00Z", "sut_timestamp": "2026-10-19T00:00:00Z",
+        "started_at": "2026-10-20T08:12:00Z", "sut_timestamp": "2026-10-19T00:00:00Z",
         "cells": [{"row": "write", "column": "ops", "value": 1200.5, "status": "PASS"}]}
      ]}
   ]}
 ]}
 ```
 
-Groups sort by table name. Runs sort by `submitted_at`, newest first.
-`submitted_at` is the latest write time of the cells that the read keeps
-for the run.
+Groups sort by table name. Runs sort by `started_at`, the start time of the run, newest first.
 `build_id` is `build_system_id` of the test. `value` holds `value_text` when
 the cell has no number.
 
@@ -171,10 +169,9 @@ class ResultsService:
 | Risk | Response |
 |---|---|
 | A release with many tests and tables sends many queries | `gather_limited` holds the reads at 50 at a time. The `table` filter cuts the data reads before they start. |
-| A run writes results after its end time and its last heartbeat, and more than 7 days after it starts | Its late results fall outside the window. A run sends its results while it runs, so the case needs a run that writes after it ends. |
-| The run partition of a test with a long history is large | The read selects seven small columns. The cell read, the large one, stays bounded by the window and the run cap. |
+| A run starts before `since` and writes results inside the window | Its results fall outside the window. With the 30-day default, only the runs at the edge of the window are left out. A short window needs an earlier `since`. |
+| The run partition of a test with a long history is large | `start_time` is the clustering key, so the run read covers only the window. |
 | A wide window still reads every run in it | The 30-day default bounds a read with no window. Approach B removes the cost. |
-| `WRITETIME(status)` changes when a run sends the same cell again | `submitted_at` shows the last write of the cell, not the first. |
 
 ## Deferred work
 
@@ -190,14 +187,14 @@ class ResultsService:
   readable at once. (spec)
 - The release path parameter takes a name or a UUID, so an agent can pass
   the name it already knows. (spec)
-- `since` defaults to 30 days, and the run window starts 7 days before
-  `since`. (open)
+- `since` and `until` filter on the start time of the run. ScyllaDB applies
+  the range on the clustering key, and the filter is the same one that the
+  run lists of Argus use. (review)
+- `since` defaults to 30 days. (spec)
 - With only `until` set, the 30-day window ends at `until`, so a read of an
   old window is not empty. (review)
 - The status filter takes any case, because the CLI help names the statuses
   and a user types them in lower case. (review)
-- A run qualifies by its end time and its heartbeat too, so a long run that
-  writes inside the window keeps its results. (review)
 - Each test returns its newest 100 runs, and a filter can match at most 500
   (test, table) pairs, so one request cannot read the full history of a
   release. (review)

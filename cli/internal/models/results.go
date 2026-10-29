@@ -42,7 +42,7 @@ type ResultRun struct {
 	RunID         string              `json:"run_id"`
 	BuildNumber   *int                `json:"build_number"`
 	ScyllaVersion string              `json:"scylla_version"`
-	SubmittedAt   time.Time           `json:"submitted_at"`
+	StartedAt     time.Time           `json:"started_at"`
 	SUTTimestamp  *time.Time          `json:"sut_timestamp"`
 	Cells         []ReleaseResultCell `json:"cells"`
 }
@@ -68,7 +68,7 @@ type ResultGroup struct {
 type ResultGroups []ResultGroup
 
 func (g ResultGroups) Headers() []string {
-	return []string{"Table", "Build ID", "Build", "Run ID", "Submitted", "Row", "Column", "Value", "Status"}
+	return []string{"Table", "Build ID", "Build", "Run ID", "Started", "Row", "Column", "Value", "Status"}
 }
 
 func (g ResultGroups) Rows() [][]string {
@@ -78,7 +78,7 @@ func (g ResultGroups) Rows() [][]string {
 			for _, run := range test.Runs {
 				for _, cell := range run.Cells {
 					rows = append(rows, []string{
-						group.Table, test.BuildID, buildNumber(run.BuildNumber), run.RunID, run.SubmittedAt.Format(time.RFC3339),
+						group.Table, test.BuildID, buildNumber(run.BuildNumber), run.RunID, run.StartedAt.Format(time.RFC3339),
 						cell.Row, cell.Column, fmt.Sprint(cell.Value), cell.Status,
 					})
 				}

@@ -364,7 +364,7 @@ argus results query scylla-master --table throughput --since 2026-10-15
 argus results query scylla-master --table latency --status ERROR --sut-since 2026-10-01
 ```
 
-The release is a name or a UUID. `--table` matches a substring of the table name, in any case. The output groups the results by table, then by test with its `build_id`, then by run, newest run first. `--since` and `--until` filter on the time Argus received the result, and `--since` defaults to 30 days before `--until`, or before now. Runs marked as ignored are left out. Each test returns its 100 newest runs, and `runs_truncated` is true when it has more. Columns marked as hidden are left out unless you pass `--show-hidden`. `--sut-since` and `--sut-until` filter on `sut_timestamp`, the date of the SUT build.
+The release is a name or a UUID. `--table` matches a substring of the table name, in any case. The output groups the results by table, then by test with its `build_id`, then by run, newest run first. `--since` and `--until` filter on the start time of the run, and `--since` defaults to 30 days before `--until`, or before now. Runs marked as ignored are left out. Each test returns its 100 newest runs, and `runs_truncated` is true when it has more. Columns marked as hidden are left out unless you pass `--show-hidden`. `--sut-since` and `--sut-until` filter on `sut_timestamp`, the date of the SUT build.
 
 ---
 

@@ -97,7 +97,7 @@ func runResultsCommand(t *testing.T, cmd *cobra.Command, args []string, payload 
 const releaseResultsPayload = `[{"table": "throughput", "description": "", "tests": [
 	{"test_id": "t1", "test_name": "longevity", "build_id": "scylla-master/longevity", "runs_truncated": true,
 	 "runs": [{"run_id": "r1", "build_number": 7, "scylla_version": "2026.2.0",
-	           "submitted_at": "2026-10-20T08:12:00.000Z", "sut_timestamp": null,
+	           "started_at": "2026-10-20T08:12:00.000Z", "sut_timestamp": null,
 	           "cells": [{"row": "write", "column": "ops", "value": 1200.5, "status": "PASS"}]}]}]}]`
 
 func TestGenericResultsQueryCmd_SendsTheFlagsAndDecodesTheGroups(t *testing.T) {

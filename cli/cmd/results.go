@@ -64,7 +64,7 @@ var genericResultsQueryCmd = &cobra.Command{
 name contains --table (case-insensitive).
 
 The output groups the results by table, then by test with its build ID, then by
-run. --since and --until filter on the time Argus received the result.
+run. --since and --until filter on the start time of the run.
 --since defaults to 30 days before --until, or before now.
 Each test returns at most its 100 newest runs in the window, and runs_truncated
 is true when it has more.
@@ -178,8 +178,8 @@ func init() {
 		panic(err)
 	}
 	genericResultsQueryCmd.Flags().StringSlice("status", nil, "Keep only cells with this status (repeatable): PASS, WARNING, ERROR, UNSET")
-	genericResultsQueryCmd.Flags().String("since", "", "Only results received at or after this time (default: 30 days before --until, or before now)")
-	genericResultsQueryCmd.Flags().String("until", "", "Only results received at or before this time")
+	genericResultsQueryCmd.Flags().String("since", "", "Only runs started at or after this time (default: 30 days before --until, or before now)")
+	genericResultsQueryCmd.Flags().String("until", "", "Only runs started at or before this time")
 	genericResultsQueryCmd.Flags().String("sut-since", "", "Only results with sut_timestamp at or after this time")
 	genericResultsQueryCmd.Flags().String("sut-until", "", "Only results with sut_timestamp at or before this time")
 

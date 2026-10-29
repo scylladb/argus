@@ -15,11 +15,11 @@ func TestResultGroupsRows(t *testing.T) {
 		Tests: []ResultTest{{
 			BuildID: "scylla-master/longevity-cdc",
 			Runs: []ResultRun{
-				{RunID: "r1", BuildNumber: &build, SubmittedAt: submitted, Cells: []ReleaseResultCell{
+				{RunID: "r1", BuildNumber: &build, StartedAt: submitted, Cells: []ReleaseResultCell{
 					{Row: "write", Column: "ops", Value: 1200.5, Status: "PASS"},
 					{Row: "read", Column: "ops", Value: "n/a", Status: "UNSET"},
 				}},
-				{RunID: "r2", SubmittedAt: submitted, Cells: []ReleaseResultCell{
+				{RunID: "r2", StartedAt: submitted, Cells: []ReleaseResultCell{
 					{Row: "write", Column: "ops", Value: 900.0, Status: "ERROR"},
 				}},
 			},

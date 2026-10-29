@@ -26,8 +26,7 @@ stays in every plan built from a spec.
 - Test: `argus/backend/tests/results_service/test_release_results.py`
 
 **Internals:**
-- `RELEASE_RESULTS_WINDOW = timedelta(days=30)` and
-  `RUN_START_MARGIN = timedelta(days=7)`, module constants.
+- `RELEASE_RESULTS_WINDOW = timedelta(days=30)`, a module constant.
 - `_resolve_release_id(release)`: a UUID string as is, else
   `ArgusRelease.find(name=...)`. No match raises `DataValidationError`.
 - `_get_release_tables(release, table_filter)`: the tests of the release
@@ -38,13 +37,12 @@ stays in every plan built from a spec.
   `investigation_status`, `build_number` and `scylla_version`, ignored runs
   left out. A test with no plugin or no `build_system_id` gives `{}`.
 - `_get_runs_cells(test_id, table_name, run_ids)`: a raw read of
-  `generic_result_data_v1` with `run_id IN (...)` and
-  `WRITETIME(status) AS submitted`, 90 ids per query.
+  `generic_result_data_v1` with `run_id IN (...)`, 90 ids per query.
 - `get_release_result_tables(release)`: one entry per table name with
   `description`, the merged `columns`, and the `tests` count.
 - `get_release_results(...)`: `since` defaults to now minus
-  `RELEASE_RESULTS_WINDOW`. Runs are selected from `since - RUN_START_MARGIN`.
-  Cells are filtered by status, by write time, and by `sut_timestamp`, then
+  `RELEASE_RESULTS_WINDOW`. Runs are selected by `start_time` in the window.
+  Cells are filtered by status and by `sut_timestamp`, then
   grouped by table, test, and run, in the shape of the spec `Outputs`.
 
 - [x] Write the service.
@@ -139,14 +137,12 @@ stays in every plan built from a spec.
 
 **Internals:**
 - `MAX_RUNS_PER_TEST = 100`. `_get_window_runs` replaces
-  `_get_runs_started`. It reads `start_time`, `end_time` and `heartbeat`,
-  keeps a run that started after `since - RUN_START_MARGIN` or whose end time
-  or heartbeat is at or after `since`, and returns the newest runs with a
-  truncation flag.
+  `_get_runs_started`. It returns the newest runs that started in the window,
+  with a truncation flag.
 - `_resolve_release_id` checks that a UUID names a release.
 - `MAX_TABLE_READS = 500`. A filter that matches more (test, table) pairs
   raises `DataValidationError`.
-- A run takes `submitted_at` from the latest write time of its kept cells.
+- A run carries `started_at`, its start time, and the runs sort by it.
 - `get_release_results` rejects a blank `table_filter` and drops hidden
   columns. Both service reads and both routes take `include_hidden`.
 - The CLI returns every flag error, panics when `MarkFlagRequired` fails,
