@@ -84,7 +84,8 @@ deduplicated by run id. A run submitted before its test existed has no
 |---|---|
 | The release has no `user_editable`, or it is `false` | `ReleaseCleanupError` before any write. The response is the error envelope with the message |
 | The run is not a run of the test in the path | `ReleaseCleanupError` before any write |
-| The test, the group or the run does not exist | `DocumentNotFound` through the catch-all handler, the error envelope |
+| The test or the group does not exist | `DocumentNotFound` through the catch-all handler, the error envelope |
+| The run does not exist in any plugin | `ReleaseCleanupError` before any write |
 | A cleanup write fails midway | The exception propagates. The rows written so far stay deleted. A second request removes the rest |
 | The user is not logged in | 403 from `api_current_user`, as every API route |
 
