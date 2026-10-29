@@ -99,6 +99,11 @@ async def issue_links(asgi_request: Request, key: str, user: User = Depends(ui_c
     return templates.TemplateResponse(asgi_request, "issue_links.html.j2", {"key": key})
 
 
+@router.get("/costs", name="main.cost_explorer")
+async def cost_explorer(asgi_request: Request, user: User = Depends(ui_current_user)):
+    return templates.TemplateResponse(asgi_request, "cost_explorer.html.j2", {})
+
+
 @router.get("/", name="main.home")
 async def home(asgi_request: Request):
     return RedirectResponse(url_for(asgi_request, "main.run_dashboard"), status_code=302)

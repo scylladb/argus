@@ -1,0 +1,16 @@
+{% extends "base.html.j2" %}
+
+{% block title %}
+Cost Explorer
+{% endblock %}
+
+{% block javascripts %}
+{{ super() }}
+<script defer type="module" src="/s/dist/costExplorer.bundle.js"></script>
+{% endblock javascripts %}
+
+{% block body %}
+<div class="container-fluid my-2 px-2 px-md-3" id="costExplorer">
+
+</div>
+{% endblock %}
