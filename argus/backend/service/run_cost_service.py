@@ -46,7 +46,7 @@ class RunCostService:
 
     async def set_estimated_cost(self, run_id: UUID, value: float) -> dict:
         await RunCost.find(run_id=run_id).update(estimated_cost=value)
-        await self._refresh_rollup_guarded(run_id)
+        await self.refresh_rollup_guarded(run_id)
         return {"run_id": str(run_id), "estimated_cost": value}
 
     async def submit_cost_items(self, run_id: UUID, items: list[CostItemRequest]) -> dict:
@@ -60,7 +60,7 @@ class RunCostService:
                 batch.add(*self._item_write(run_id, item))
 
         actual_cost = await self.recompute_actual_cost(run_id)
-        await self._refresh_rollup_guarded(run_id)
+        await self.refresh_rollup_guarded(run_id)
         return {"run_id": str(run_id), "submitted": len(items), "actual_cost": actual_cost}
 
     @staticmethod
@@ -136,8 +136,22 @@ class RunCostService:
             return None
         return await CostRollupService().refresh(run)
 
-    async def _refresh_rollup_guarded(self, run_id: UUID) -> None:
+    async def relocate_rollup(self, run_id: UUID, old_release_id: UUID | None) -> RunCostRollup | None:
+        run = await self._find_run(run_id)
+        if run is None:
+            LOGGER.debug("No run %s in any plugin, the cost rollup waits for the run", run_id)
+            return None
+        return await CostRollupService().relocate(run, old_release_id)
+
+    async def refresh_rollup_guarded(self, run_id: UUID) -> None:
+        await self._guarded(self.refresh_rollup(run_id), run_id)
+
+    async def relocate_rollup_guarded(self, run_id: UUID, old_release_id: UUID | None) -> None:
+        await self._guarded(self.relocate_rollup(run_id, old_release_id), run_id)
+
+    @staticmethod
+    async def _guarded(refresh, run_id: UUID) -> None:
         try:
-            await self.refresh_rollup(run_id)
+            await refresh
         except (DriverException, NoHostAvailable):
-            LOGGER.exception("Could not refresh the cost rollup of run %s, the cost is stored", run_id)
+            LOGGER.exception("Could not refresh the cost rollup of run %s, the run is stored", run_id)

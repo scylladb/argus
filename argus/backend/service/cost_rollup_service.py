@@ -74,6 +74,13 @@ class CostRollupService:
         await self.extend_span(rollup.release_id, rollup.start_time)
         return rollup
 
+    async def relocate(self, run: PluginModelBase, old_release_id: UUID | None) -> RunCostRollup:
+        old_key = old_release_id or UNASSIGNED_RELEASE
+        if old_key != (run.release_id or UNASSIGNED_RELEASE):
+            await RunCostRollup.find(month=self.month_of(run.start_time), release_id=old_key,
+                                     start_time=as_utc(run.start_time), run_id=run.id).delete()
+        return await self.refresh(run)
+
     @staticmethod
     async def extend_span(release_id: UUID, start_time: datetime) -> None:
         try:

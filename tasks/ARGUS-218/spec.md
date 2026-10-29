@@ -269,7 +269,7 @@ partition, with no date bound. It is idempotent.
 | Two refreshes extend a release span at once and the older bound wins | The span only widens, so the next refresh of a later run, or the backfill, restores it |
 | The driver returns a naive datetime for `start_time` | The month key is derived after `replace(tzinfo=UTC)` on a naive value |
 | `release_id__in` on the first clustering column is refused by the mapper | One query per release, gathered |
-| A run whose test is registered after the run started has no release | It is rolled up under "Unassigned" and stays there: the release is resolved at submit only, and `release_id` is part of the row key, so a later reassignment would add a second row rather than move this one |
+| A run whose test is registered after the run started has no release | It is rolled up under "Unassigned" until the test is registered: the paths that reassign a run's release, the test registration and the replay, delete the row under the old key and refresh the run, so the row moves rather than doubles |
 
 ## Deferred work
 

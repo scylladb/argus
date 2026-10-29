@@ -103,6 +103,7 @@ from argus.backend.error_handlers import APIException, DataValidationError
 from argus.backend.models.web import User
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
 from argus.backend.service.client_service import ClientException, ClientService
+from argus.backend.service.run_cost_service import RunCostService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.util.config import Config
 
@@ -852,10 +853,11 @@ class ReplayService:
             return
 
         changed = False
+        old_release_id = getattr(run, "release_id", None)
         if not getattr(run, "test_id", None):
             run.test_id = test.id
             changed = True
-        if not getattr(run, "release_id", None):
+        if not old_release_id:
             run.release_id = test.release_id
             changed = True
         if not getattr(run, "group_id", None):
@@ -863,6 +865,7 @@ class ReplayService:
             changed = True
         if changed:
             await run.save()
+            await RunCostService().relocate_rollup_guarded(run.id, old_release_id)
             LOGGER.info(
                 "Back-filled categorical fields on existing run %s (test_id=%s)",
                 run_id, test.id,

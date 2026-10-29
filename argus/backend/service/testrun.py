@@ -18,6 +18,7 @@ from coodie.aio import AsyncBatchQuery
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.util.config import Config
+from argus.backend.service.run_cost_service import RunCostService
 
 from argus.backend.models.pytest import PytestResultTable
 from argus.backend.models.web import (
@@ -169,6 +170,7 @@ class TestRunService:
         old_status = run.status
         run.status = new_status.value
         await run.save()
+        await RunCostService().refresh_rollup_guarded(run_id)
 
         await EventService.create_run_event(
             kind=ArgusEventTypes.TestRunStatusChanged,
@@ -507,6 +509,7 @@ class TestRunService:
             old_status = run.status
             run.status = TestStatus.ABORTED.value
             await run.save()
+            await RunCostService().refresh_rollup_guarded(run.id)
 
             await EventService.create_run_event(
                 kind=ArgusEventTypes.TestRunStatusChanged,

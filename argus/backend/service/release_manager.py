@@ -4,6 +4,7 @@ from uuid import UUID
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.plugins.sct.testrun import SCTTestRun
+from argus.backend.service.run_cost_service import RunCostService
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, ReleaseDistinctVersions, ReleaseDistinctImages, ReleaseStatsSnapshot, invalidate_release_snapshots
 
 LOGGER = logging.getLogger(__name__)
@@ -228,8 +229,9 @@ class ReleaseManagerService:
         return True
 
     async def move_test_runs(self, test: ArgusTest) -> None:
-        runs = await SCTTestRun.find(build_id=test.build_system_id).only("build_id", "start_time") \
-            .values_list("build_id", "start_time").consistency("ONE").all()
-        for build_id, start_time in runs:
+        runs = await SCTTestRun.find(build_id=test.build_system_id).only("build_id", "start_time", "id", "release_id") \
+            .values_list("build_id", "start_time", "id", "release_id").consistency("ONE").all()
+        for build_id, start_time, run_id, old_release_id in runs:
             await SCTTestRun.find(build_id=build_id, start_time=start_time).update(
                 test_id=test.id, group_id=test.group_id, release_id=test.release_id)
+            await RunCostService().relocate_rollup_guarded(run_id, old_release_id)
