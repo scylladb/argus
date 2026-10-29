@@ -40,7 +40,7 @@ degenerate bounds returned unchanged), `zoomAt(view, factor, point,
 bounds)` (clamp the scale, move the centre by the clamped ratio so the
 point stays fixed, clamp the offset), `panBy(view, dx, dy, bounds)`.
 
-- [ ] Write the failing tests: a fit view stays centred when the image is
+- [x] Write the failing tests: a fit view stays centred when the image is
   smaller than the surface; the pan is limited to the overflow of the zoomed
   image (surface 1000×800, image 1000×562.5, scale 2: ±500 and ±162.5);
   the scale is limited to `[1, maxScale]`; the point under the pointer stays
@@ -48,10 +48,10 @@ point stays fixed, clamp the offset), `panBy(view, dx, dy, bounds)`.
   zooming back to fit re-centres; at `maxScale` the offset does not jump;
   `panBy` stops at the edge; degenerate bounds return the view unchanged;
   `measure` reads the sizes and the max scale from the elements.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 2 — The gesture action
 
@@ -76,7 +76,7 @@ scale 1, `dblclick` on the image toggles fit and
 `resize` re-clamps); `destroy` removes every listener. Constants: tap
 slop 4 px, swipe 50 px.
 
-- [ ] Write the failing tests: a wheel notch zooms around the pointer and
+- [x] Write the failing tests: a wheel notch zooms around the pointer and
   prevents the default; a line-mode wheel zooms by 16 px per line;
   ctrl+wheel zooms faster than a plain notch; a left-button drag pans the
   zoomed image and a right-button press does not; two pointers moving apart
@@ -89,10 +89,10 @@ slop 4 px, swipe 50 px.
   does not; a double-click on the image toggles fit and actual pixels; a
   window resize re-clamps the view; the pointer is captured only once a
   drag starts; `destroy` removes the listeners.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 3 — The viewer
 
