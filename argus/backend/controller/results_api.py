@@ -37,8 +37,9 @@ def _utc(value: datetime | None) -> datetime | None:
 
 
 @router.get("/release/{release}/tables", name="api.results.release_tables")
-async def release_tables(release: str, user: User = Depends(api_current_user)):
-    tables = await ResultsService().get_release_result_tables(release=release)
+async def release_tables(release: str, include_hidden: bool = Query(False, alias="includeHidden"),
+                         user: User = Depends(api_current_user)):
+    tables = await ResultsService().get_release_result_tables(release=release, include_hidden=include_hidden)
     return APIResponse({"status": "ok", "response": tables})
 
 
@@ -50,10 +51,11 @@ async def release_results(release: str,
                           until: Annotated[OptionalDate, Query()] = None,
                           sut_since: Annotated[OptionalDate, Query(alias="sutSince")] = None,
                           sut_until: Annotated[OptionalDate, Query(alias="sutUntil")] = None,
+                          include_hidden: bool = Query(False, alias="includeHidden"),
                           user: User = Depends(api_current_user)):
     results = await ResultsService().get_release_results(
         release=release, table_filter=table, statuses=[status.upper() for status in statuses], since=_utc(since), until=_utc(until),
-        sut_since=_utc(sut_since), sut_until=_utc(sut_until))
+        sut_since=_utc(sut_since), sut_until=_utc(sut_until), include_hidden=include_hidden)
     return APIResponse({"status": "ok", "response": results})
 
 

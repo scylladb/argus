@@ -124,3 +124,39 @@ stays in every plan built from a spec.
 - [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`,
   and `yarn build`.
 - [x] Commit, with the boxes of this task checked.
+
+## Task 5 — Fix the automated review findings
+
+**Files:**
+- Modify: `argus/backend/service/results_service.py`,
+  `argus/backend/controller/results_api.py`
+- Modify: `cli/cmd/results.go`, `cli/internal/models/results.go`
+- Create: `frontend/Common/ResultsRoutes.ts`
+- Modify: the three frontend callers of Task 4
+- Test: `argus/backend/tests/results_service/test_release_results.py`,
+  `cli/cmd/results_test.go`, `frontend/Common/ResultsRoutes.test.ts`,
+  `frontend/WorkArea/TestRunsSelector.test.ts`
+
+**Internals:**
+- `MAX_RUNS_PER_TEST = 100`. `_get_window_runs` replaces
+  `_get_runs_started`. It reads `start_time`, `end_time` and `heartbeat`,
+  keeps a run that started after `since - RUN_START_MARGIN` or whose end time
+  or heartbeat is at or after `since`, and returns the newest runs with a
+  truncation flag.
+- `_resolve_release_id` checks that a UUID names a release.
+- `get_release_results` rejects a blank `table_filter` and drops hidden
+  columns. Both service reads and both routes take `include_hidden`.
+- The CLI returns every flag error, panics when `MarkFlagRequired` fails,
+  rejects a dot-segment release in `releasePathSegment`, and adds
+  `--show-hidden`. `releaseResultsQuery` holds the query parameters.
+- `ResultsRoutes` holds the three per-test paths for the frontend.
+
+- [x] Write the tests: a long run that writes in the window, the run cap, the
+  hidden columns, an unknown release UUID, a blank table, the CLI commands
+  against a stub server, a dot-segment release, and the frontend routes.
+- [x] Run the long-run, unknown-UUID and blank-table tests against the old
+  service, and confirm that they fail.
+- [x] Write the fixes.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`,
+  and `yarn build`.
+- [x] Commit, with the boxes of this task checked.

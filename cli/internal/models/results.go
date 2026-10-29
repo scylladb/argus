@@ -49,10 +49,12 @@ type ResultRun struct {
 
 // ResultTest holds the runs of one test for a table.
 type ResultTest struct {
-	TestID   string      `json:"test_id"`
-	TestName string      `json:"test_name"`
-	BuildID  string      `json:"build_id"`
-	Runs     []ResultRun `json:"runs"`
+	TestID   string `json:"test_id"`
+	TestName string `json:"test_name"`
+	BuildID  string `json:"build_id"`
+	// RunsTruncated is true when the test has more runs in the window than the server returns.
+	RunsTruncated bool        `json:"runs_truncated"`
+	Runs          []ResultRun `json:"runs"`
 }
 
 // ResultGroup holds the results of one table across the tests of a release.

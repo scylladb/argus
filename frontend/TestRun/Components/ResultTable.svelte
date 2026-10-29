@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { ResultsRoutes } from "../../Common/ResultsRoutes";
     import {faMarkdown} from "@fortawesome/free-brands-svg-icons";
     import {faInfoCircle, faChartLine} from "@fortawesome/free-solid-svg-icons";
     import {ResultCellStatusStyleMap} from "../../Common/TestStatus";
@@ -124,7 +125,7 @@
                 "tableNames[]": [table_name],
             });
 
-            let res = await fetch(`/api/v1/results/test?${params}`);
+            let res = await fetch(`${ResultsRoutes.test}?${params}`);
             if (res.status !== 200) {
                 throw new Error(`HTTP Error ${res.status} trying to fetch test results`);
             }

@@ -27,6 +27,7 @@ type ReleasesMap = dict[str, list[RunId]]
 
 RELEASE_RESULTS_WINDOW = timedelta(days=30)
 RUN_START_MARGIN = timedelta(days=7)
+MAX_RUNS_PER_TEST = 100
 
 
 @dataclass
@@ -695,12 +696,12 @@ class ResultsService:
 
     async def _resolve_release_id(self, release: str) -> UUID:
         try:
-            return UUID(release)
+            rows = await select_rows(ArgusRelease.find(id=UUID(release)), "id")
         except ValueError:
             rows = await select_rows(ArgusRelease.find(name=release), "id")
-            if not rows:
-                raise DataValidationError(f"Release not found: {release}")
-            return rows[0]["id"]
+        if not rows:
+            raise DataValidationError(f"Release not found: {release}")
+        return rows[0]["id"]
 
     async def _get_release_tables(self, release: str, table_filter: str | None = None
                                   ) -> list[tuple[dict, list[ArgusGenericResultMetadata]]]:
@@ -712,7 +713,7 @@ class ResultsService:
         return [(test, [table for table in tables if not needle or needle in table.name.lower()])
                 for test, tables in zip(tests, tables_per_test)]
 
-    async def get_release_result_tables(self, release: str) -> list[dict]:
+    async def get_release_result_tables(self, release: str, include_hidden: bool = False) -> list[dict]:
         """Every generic result table name of a release, with the tests that submit it."""
         catalog: dict[str, dict] = {}
         for test, tables in await self._get_release_tables(release):
@@ -721,20 +722,33 @@ class ResultsService:
                                                         "columns": [], "tests": 0})
                 entry["tests"] += 1
                 for column in table.columns_meta:
-                    if column.name not in entry["columns"]:
+                    if (include_hidden or column.visible is not False) and column.name not in entry["columns"]:
                         entry["columns"].append(column.name)
         return sorted(catalog.values(), key=lambda entry: entry["name"])
 
-    async def _get_runs_started(self, test: dict, since: datetime, until: datetime | None) -> dict[UUID, dict]:
-        """Runs of a test that started in the window, ignored runs left out."""
+    async def _get_window_runs(self, test: dict, since: datetime, until: datetime | None) -> tuple[dict[UUID, dict], bool]:
+        """The newest ``MAX_RUNS_PER_TEST`` runs of a test that can hold results written in the window.
+
+        A run qualifies when it started up to ``RUN_START_MARGIN`` before ``since``, or when its end time
+        or its last heartbeat is at or after ``since``. Ignored runs are left out. The flag is true when
+        the cap left out older runs.
+        """
         plugin = TestRunService().get_plugin(test["plugin_name"]) if test["plugin_name"] else None
         if not plugin or not test["build_system_id"]:
-            return {}
-        query = plugin.model.find(build_id=test["build_system_id"]).filter(start_time__gte=since)
+            return {}, False
+        query = plugin.model.find(build_id=test["build_system_id"])
         if until:
             query = query.filter(start_time__lte=until)
-        rows = await select_rows(query, "id", "investigation_status", "build_number", "scylla_version")
-        return {row["id"]: row for row in rows if row["investigation_status"].lower() != "ignored"}
+        rows = await select_rows(query, "id", "start_time", "end_time", "heartbeat", "investigation_status",
+                                 "build_number", "scylla_version")
+        started_after = (since - RUN_START_MARGIN).replace(tzinfo=None)
+        naive_since = since.replace(tzinfo=None)
+        runs = [row for row in rows
+                if (row["investigation_status"] or "").lower() != "ignored"
+                and (row["start_time"] >= started_after
+                     or (row["end_time"] and row["end_time"] >= naive_since)
+                     or (row["heartbeat"] or 0) >= since.timestamp())]
+        return {row["id"]: row for row in runs[:MAX_RUNS_PER_TEST]}, len(runs) > MAX_RUNS_PER_TEST
 
     async def _get_runs_cells(self, test_id: UUID, table_name: str, run_ids: list[UUID]) -> list[dict]:
         cells = []
@@ -748,31 +762,36 @@ class ResultsService:
 
     async def get_release_results(self, release: str, table_filter: str, statuses: list[str] | None = None,
                                   since: datetime | None = None, until: datetime | None = None,
-                                  sut_since: datetime | None = None, sut_until: datetime | None = None) -> list[dict]:
+                                  sut_since: datetime | None = None, sut_until: datetime | None = None,
+                                  include_hidden: bool = False) -> list[dict]:
         """Generic results of every test in a release, grouped by table, then test, then run.
 
         ``since``/``until`` filter on the write time of the result. ``since`` defaults to
-        ``RELEASE_RESULTS_WINDOW`` before ``until``, or before now when ``until`` is not set. The runs are selected by start time first: a run that started up to
-        ``RUN_START_MARGIN`` before ``since`` can still write results inside the window.
+        ``RELEASE_RESULTS_WINDOW`` before ``until``, or before now when ``until`` is not set.
         ``sut_since``/``sut_until`` filter on ``sut_timestamp``, the date of the SUT build.
+        Each test reads at most ``MAX_RUNS_PER_TEST`` runs, and ``runs_truncated`` says when it read fewer
+        runs than the window holds. Columns marked as hidden are left out unless ``include_hidden`` is set.
         """
+        if not table_filter or not table_filter.strip():
+            raise DataValidationError("The table filter must not be empty")
         since = since or (until or datetime.now(timezone.utc)) - RELEASE_RESULTS_WINDOW
-        release_tables = await self._get_release_tables(release, table_filter)
+        release_tables = await self._get_release_tables(release, table_filter.strip())
         release_tables = [(test, tables) for test, tables in release_tables if tables]
-        runs_per_test = await gather_limited(self._get_runs_started(test, since - RUN_START_MARGIN, until)
-                                             for test, _ in release_tables)
-        pairs = [(test, table, runs) for (test, tables), runs in zip(release_tables, runs_per_test) if runs
+        runs_per_test = await gather_limited(self._get_window_runs(test, since, until) for test, _ in release_tables)
+        pairs = [(test, table, runs, truncated)
+                 for (test, tables), (runs, truncated) in zip(release_tables, runs_per_test) if runs
                  for table in tables]
         cells_per_pair = await gather_limited(self._get_runs_cells(test["id"], table.name, list(runs))
-                                              for test, table, runs in pairs)
+                                              for test, table, runs, _ in pairs)
 
         since_us = since.timestamp() * 1_000_000
         until_us = until.timestamp() * 1_000_000 if until else None
         grouped: dict[str, dict] = {}
-        for (test, table, test_runs), cells in zip(pairs, cells_per_pair):
+        for (test, table, test_runs, truncated), cells in zip(pairs, cells_per_pair):
+            hidden = set() if include_hidden else {col.name for col in table.columns_meta if col.visible is False}
             runs: dict[UUID, dict] = {}
             for cell in cells:
-                if statuses and cell["status"] not in statuses:
+                if cell["column"] in hidden or (statuses and cell["status"] not in statuses):
                     continue
                 if cell["submitted"] < since_us or (until_us and cell["submitted"] > until_us):
                     continue
@@ -802,6 +821,7 @@ class ResultsService:
                 "test_id": test["id"],
                 "test_name": test["name"],
                 "build_id": test["build_system_id"],
+                "runs_truncated": truncated,
                 "runs": sorted(runs.values(), key=lambda run: run["submitted_at"], reverse=True),
             })
         return sorted(grouped.values(), key=lambda group: group["table"])

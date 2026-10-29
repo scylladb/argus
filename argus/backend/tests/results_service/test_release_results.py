@@ -97,24 +97,38 @@ async def test_release_results_leave_out_ignored_runs(results_service, release, 
 
 
 async def _generic_run_with_result(release_manager_service, release, group, table_name: str,
-                                   started: datetime) -> tuple:
-    """A generic plugin run that started and wrote one cell at ``started``."""
-    name = f"generic_{time.time_ns()}"
-    test = await release_manager_service.create_test(name, name, name, name, group_id=group.id,
-                                                     release_id=release.id, plugin_name="generic")
+                                   started: datetime, written: datetime | None = None, test=None,
+                                   **run_fields) -> tuple:
+    """A generic plugin run that started at ``started`` and wrote one cell at ``written``.
+
+    The table has a visible ``ops`` column and a hidden ``debug`` column, and the run writes both.
+    """
+    written = written or started
+    if test is None:
+        name = f"generic_{time.time_ns()}"
+        test = await release_manager_service.create_test(name, name, name, name, group_id=group.id,
+                                                         release_id=release.id, plugin_name="generic")
+        await ArgusGenericResultMetadata(test_id=test.id, name=table_name,
+                                         columns_meta=[ColumnMeta(name="ops", unit="op/s", type="FLOAT"),
+                                                       ColumnMeta(name="debug", unit="", type="FLOAT",
+                                                                  visible=False)],
+                                         rows_meta=["write"]).save()
+    run_fields.setdefault("heartbeat", int(started.timestamp()))
     run = GenericRun(id=uuid4(), build_id=test.build_system_id, test_id=test.id, release_id=release.id,
                      group_id=group.id, build_job_url="http://example.com/job/generic/3/", build_number=3,
-                     started_by="tester", start_time=started)
+                     started_by="tester", start_time=started, **run_fields)
     await run.save()
-    await ArgusGenericResultMetadata(test_id=test.id, name=table_name,
-                                     columns_meta=[ColumnMeta(name="ops", unit="op/s", type="FLOAT")],
-                                     rows_meta=["write"]).save()
-    await execute_raw(
-        f"INSERT INTO {ArgusGenericResultData._get_keyspace()}.{ArgusGenericResultData.table_name()} "
-        "(test_id, name, run_id, column, row, sut_timestamp, value, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
-        f"USING TIMESTAMP {int(started.timestamp() * 1_000_000)}",
-        [test.id, table_name, run.id, "ops", "write", started, 7.0, "PASS"])
+    for column, value in (("ops", 7.0), ("debug", 1.0)):
+        await execute_raw(
+            f"INSERT INTO {ArgusGenericResultData._get_keyspace()}.{ArgusGenericResultData.table_name()} "
+            "(test_id, name, run_id, column, row, sut_timestamp, value, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            f"USING TIMESTAMP {int(written.timestamp() * 1_000_000)}",
+            [test.id, table_name, run.id, column, "write", started, value, "PASS"])
     return test, run
+
+
+def _run_ids(results) -> list:
+    return [run["run_id"] for group in results for test in group["tests"] for run in test["runs"]]
 
 
 async def test_release_results_until_alone_reads_the_window_before_it(results_service, release_manager_service,
@@ -125,7 +139,7 @@ async def test_release_results_until_alone_reads_the_window_before_it(results_se
     results = await results_service.get_release_results(release=release.name, table_filter="old release",
                                                         until=started + timedelta(days=1))
 
-    assert [r["run_id"] for group in results for test in group["tests"] for r in test["runs"]] == [run.id]
+    assert _run_ids(results) == [run.id]
 
 
 async def test_release_results_read_generic_plugin_runs(results_service, release_manager_service, release, group):
@@ -156,6 +170,65 @@ def test_release_results_endpoint(api_client, release, release_run):
     tables = [group["table"] for group in resp.json()["response"]]
     assert LatencyTable.Meta.name in tables
     assert ThroughputTable.Meta.name not in tables
+
+
+async def test_release_results_keep_a_long_run_that_writes_in_the_window(results_service, release_manager_service,
+                                                                        release, group):
+    now = datetime.now(timezone.utc)
+    _, run = await _generic_run_with_result(release_manager_service, release, group, "Long Release Table",
+                                            started=now - timedelta(days=40), written=now,
+                                            end_time=now, heartbeat=int(now.timestamp()))
+
+    results = await results_service.get_release_results(release=release.name, table_filter="long release",
+                                                        since=now - timedelta(days=1))
+
+    assert _run_ids(results) == [run.id]
+
+
+async def test_release_results_cap_the_runs_per_test(results_service, release_manager_service, release, group,
+                                                     monkeypatch):
+    monkeypatch.setattr("argus.backend.service.results_service.MAX_RUNS_PER_TEST", 1)
+    now = datetime.now(timezone.utc)
+    test, _ = await _generic_run_with_result(release_manager_service, release, group, "Capped Release Table",
+                                             started=now - timedelta(hours=2))
+    _, newest = await _generic_run_with_result(release_manager_service, release, group, "Capped Release Table",
+                                               started=now - timedelta(hours=1), test=test)
+
+    [group_result] = await results_service.get_release_results(release=release.name, table_filter="capped release")
+
+    [test_result] = group_result["tests"]
+    assert test_result["runs_truncated"] is True
+    assert [run["run_id"] for run in test_result["runs"]] == [newest.id]
+
+
+async def test_release_results_hide_hidden_columns(results_service, release_manager_service, release, group):
+    await _generic_run_with_result(release_manager_service, release, group, "Hidden Release Table",
+                                   datetime.now(timezone.utc))
+
+    def columns(results):
+        return {cell["column"] for group in results for test in group["tests"]
+                for run in test["runs"] for cell in run["cells"]}
+
+    assert columns(await results_service.get_release_results(
+        release=release.name, table_filter="hidden release")) == {"ops"}
+    assert columns(await results_service.get_release_results(
+        release=release.name, table_filter="hidden release", include_hidden=True)) == {"ops", "debug"}
+
+    tables = {t["name"]: t["columns"] for t in await results_service.get_release_result_tables(release.name)}
+    assert tables["Hidden Release Table"] == ["ops"]
+    tables = {t["name"]: t["columns"]
+              for t in await results_service.get_release_result_tables(release.name, include_hidden=True)}
+    assert tables["Hidden Release Table"] == ["ops", "debug"]
+
+
+async def test_release_results_reject_an_unknown_release_id(results_service):
+    with pytest.raises(DataValidationError):
+        await results_service.get_release_results(release=str(uuid4()), table_filter="release")
+
+
+async def test_release_results_reject_an_empty_table_filter(results_service, release):
+    with pytest.raises(DataValidationError):
+        await results_service.get_release_results(release=release.name, table_filter="  ")
 
 
 def test_release_results_endpoint_accepts_lowercase_status(api_client, release, release_run):

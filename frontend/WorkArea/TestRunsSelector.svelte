@@ -5,6 +5,7 @@
     import { StatusButtonCSSClassMap } from "../Common/TestStatus";
     import { Modal } from "bootstrap";
     import { sendMessage } from "../Stores/AlertStore";
+    import { ResultsRoutes } from "../Common/ResultsRoutes";
 
     let {
         testInfo = {},
@@ -25,7 +26,7 @@
 
     const showGraphsButtonIfResultsExist = async function () {
         try {
-            let res = await fetch(`/api/v1/results/test?testId=${testId}`, {
+            let res = await fetch(`${ResultsRoutes.test}?testId=${testId}`, {
                 method: "HEAD"
             });
             if (res.status === 200) {
