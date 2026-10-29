@@ -3,8 +3,8 @@
 Writes one row per run for:
 
 - every run that holds a ``run_cost_v1`` partition, whatever its plugin;
-- every SCT run, so a run that reported no cost is counted as "no data" rather
-  than left invisible.
+- every SCT run, listed from the run table itself so a run whose test record is
+  gone is still counted, as "no data" rather than left invisible.
 
 Every write rebuilds the whole row, so re-running is safe. A run that cannot be
 read is logged and the scan continues; the summary reports how many failed, and
@@ -24,7 +24,6 @@ import logging
 from uuid import UUID
 
 from argus.backend.db import ScyllaCluster
-from argus.backend.models.web import ArgusTest
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.service.cost_rollup_service import CostRollupService
 from argus.backend.service.run_cost_service import RunCostService
@@ -41,26 +40,26 @@ LIST_ATTEMPTS = 3
 REFRESH_CONCURRENCY = 20
 
 
-def list_cost_run_ids() -> set[UUID]:
+def list_partitions(table: str, column: str) -> set:
     for attempt in range(1, LIST_ATTEMPTS + 1):
         try:
-            return {row["run_id"] for row in DB.session.execute("SELECT DISTINCT run_id FROM run_cost_v1")}
+            return {row[column] for row in DB.session.execute(f"SELECT DISTINCT {column} FROM {table}")}
         except Exception:
-            LOGGER.exception("Listing the cost partitions failed on attempt %s of %s", attempt, LIST_ATTEMPTS)
-    raise RuntimeError("Could not list the cost partitions to backfill; re-run the script")
+            LOGGER.exception("Listing the partitions of %s failed on attempt %s of %s", table, attempt, LIST_ATTEMPTS)
+    raise RuntimeError(f"Could not list the partitions of {table}; re-run the script")
+
+
+def list_cost_run_ids() -> set[UUID]:
+    return list_partitions("run_cost_v1", "run_id")
 
 
 async def list_sct_run_ids() -> set[UUID]:
-    tests = [
-        test
-        for test in await ArgusTest.find().only("id", "build_system_id", "plugin_name").all()
-        if test.plugin_name == SCTTestRun._plugin_name
-    ]
-    LOGGER.info("Listing the SCT runs of %s tests...", len(tests))
-    per_test = await gather_limited(
-        SCTTestRun.find(build_id=test.build_system_id).only("id").values_list("id").all() for test in tests
+    build_ids = list_partitions("sct_test_run", "build_id")
+    LOGGER.info("Listing the SCT runs of %s jobs...", len(build_ids))
+    per_job = await gather_limited(
+        SCTTestRun.find(build_id=build_id).only("id").values_list("id").all() for build_id in sorted(build_ids)
     )
-    return {run_id for rows in per_test for (run_id,) in rows}
+    return {run_id for rows in per_job for (run_id,) in rows}
 
 
 async def refresh_sct_run(run_id: UUID) -> bool:
