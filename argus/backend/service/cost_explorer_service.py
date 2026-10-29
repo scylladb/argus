@@ -1,3 +1,4 @@
+import asyncio
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -89,14 +90,27 @@ class CostExplorerService:
         end = as_utc(query.end)
         previous_start = start - (end - start)
         rows = await self._read(self.months_between(previous_start, end), self._release_restriction(query))
-        current = [row for row in rows if start <= as_utc(row.start_time) < end and query.matches(row)]
-        previous = [row for row in rows if previous_start <= as_utc(row.start_time) < start and query.matches(row)]
+        current, previous = await asyncio.to_thread(self._select, rows, query, previous_start, start, end)
         names = await self._names(current)
         selected_releases = query.release_ids or (query.scope.release_ids if query.scope else frozenset())
+        span = await self._span(selected_releases)
+        panels = await asyncio.to_thread(self._fold, current, previous, query, names, start, end)
         return {
-            "span": await self._span(selected_releases),
+            "span": span,
             "window": {"from": start, "to": end, "granularity": query.granularity,
                        "breakdown": query.breakdown, "tiers": sorted(query.tiers)},
+            **panels,
+        }
+
+    @staticmethod
+    def _select(rows: list[RunCostRollup], query: CostQuery, previous_start: datetime, start: datetime,
+                end: datetime) -> tuple[list[RunCostRollup], list[RunCostRollup]]:
+        current = [row for row in rows if start <= as_utc(row.start_time) < end and query.matches(row)]
+        previous = [row for row in rows if previous_start <= as_utc(row.start_time) < start and query.matches(row)]
+        return current, previous
+
+    def _fold(self, current, previous, query: CostQuery, names: dict, start: datetime, end: datetime) -> dict:
+        return {
             "tiles": self._tiles(current, previous, query, start, end),
             "series": self._series(current, query, start, end),
             "releases": self._releases(current, query, names),
