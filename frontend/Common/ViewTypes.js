@@ -16,6 +16,7 @@ import GraphWidget from "../Views/Widgets/GraphsWidget/GraphsWidget.svelte";
 import ViewNemesisStats from "../Views/Widgets/ViewNemesisStats.svelte";
 import ViewGraphedStats from "../Views/Widgets/ViewGraphedStats.svelte";
 import PytestOverviewWidget from "../Views/Widgets/PytestWidget/PytestOverviewWidget.svelte";
+import ViewCosts from "../Views/Widgets/ViewCosts.svelte";
 
 export class Widget {
     constructor(position = -1, type = "testDashboard", settings = {}) {
@@ -204,6 +205,18 @@ export const WIDGET_TYPES = {
                 ),
                 help: "Select which statuses to enable by default",
                 displayName: "Statuses shown by default",
+            },
+        },
+    },
+    costs: {
+        type: ViewCosts,
+        friendlyName: "Costs",
+        settingDefinitions: {
+            days: {
+                type: IntegerValue,
+                default: 30,
+                help: "How many days back the spend is summed, up to 366",
+                displayName: "Days",
             },
         },
     },
