@@ -7,15 +7,24 @@
 
 import time
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 from argus.backend.tests.util import client_post
+from argus.client.generic_result import ColumnMetadata, ResultType, Status, StaticGenericResultTable
 
 ADMIN_PREFIX = "/admin/api/v1"
 API_PREFIX = "/api/v1"
 SCT = "scylla-cluster-tests"
+
+
+class CleanupResultTable(StaticGenericResultTable):
+    class Meta:
+        name = "Cleanup Table"
+        description = "Cleanup Table Description"
+        sut_package_name = "cleanup_package"
+        Columns = [ColumnMetadata(name="metric", unit="ms", type=ResultType.FLOAT, higher_is_better=False)]
 
 
 @pytest.fixture
@@ -123,6 +132,20 @@ def _run_exists(api_client, run_type, run_id) -> bool:
 def _entity_exists(api_client, kind, entity_id) -> bool:
     resp = api_client.get(f"{API_PREFIX}/{kind}/{entity_id}/details")
     return resp.json()["status"] == "ok"
+
+
+async def _submit_results(client_service, run_id):
+    table = CleanupResultTable()
+    table.sut_timestamp = 123
+    table.add_result(column="metric", row="row1", value=1.5, status=Status.UNSET)
+    response = await client_service.submit_results(SCT, UUID(run_id), table.as_dict())
+    assert response["status"] == "ok", response
+
+
+def _result_tables(api_client, test, run_id) -> list:
+    resp = api_client.get(f"{API_PREFIX}/run/{test.id}/{run_id}/fetch_results")
+    assert resp.json()["status"] == "ok", resp.text
+    return resp.json()["tables"]
 
 
 def _sct_event_count(api_client, run_id) -> int:
@@ -241,3 +264,30 @@ def test_delete_generic_run_uses_the_default_plugin_hook(api_client, cleanup_rel
 
     assert resp.json()["status"] == "ok", resp.text
     assert not _run_exists(api_client, "generic", run_id)
+
+
+async def test_delete_run_removes_its_generic_result_cells(api_client, client_service, cleanup_release, cleanup_test):
+    _mark_editable(api_client, cleanup_release)
+    run_id = _submit_sct_run(api_client, cleanup_test)
+    kept_run_id = _submit_sct_run(api_client, cleanup_test, build_number=2)
+    await _submit_results(client_service, run_id)
+    await _submit_results(client_service, kept_run_id)
+    assert len(_result_tables(api_client, cleanup_test, run_id)) == 1
+
+    resp = api_client.delete(f"{API_PREFIX}/test/{cleanup_test.id}/run/{run_id}")
+
+    assert resp.json()["status"] == "ok", resp.text
+    assert _result_tables(api_client, cleanup_test, run_id) == []
+    assert len(_result_tables(api_client, cleanup_test, kept_run_id)) == 1
+
+
+async def test_delete_test_removes_its_result_tables(api_client, client_service, cleanup_release, cleanup_test):
+    _mark_editable(api_client, cleanup_release)
+    run_id = _submit_sct_run(api_client, cleanup_test)
+    await _submit_results(client_service, run_id)
+    assert api_client.head(f"{API_PREFIX}/test-results?testId={cleanup_test.id}").status_code == 200
+
+    resp = api_client.delete(f"{API_PREFIX}/test/{cleanup_test.id}")
+
+    assert resp.json()["status"] == "ok", resp.text
+    assert api_client.head(f"{API_PREFIX}/test-results?testId={cleanup_test.id}").status_code == 404
