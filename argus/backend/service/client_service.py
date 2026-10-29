@@ -123,6 +123,7 @@ class ClientService:
         run = await model.load_test_run(run_id)
         run.change_status(new_status=TestStatus(new_status))
         await run.save()
+        await RunCostService().refresh_rollup_guarded(run_id)
 
         return run.status
 

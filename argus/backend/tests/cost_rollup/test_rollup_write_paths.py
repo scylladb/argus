@@ -1,11 +1,17 @@
+import uuid
+from dataclasses import asdict, replace
 from unittest.mock import patch
+from uuid import UUID
 
 import pytest
 from cassandra.cluster import NoHostAvailable
 
+from argus.backend.models.run_cost_rollup import UNASSIGNED_RELEASE
 from argus.backend.service.cost_rollup_service import CostRollupService
 from argus.backend.service.run_cost_service import CostItemRequest, RunCostService
+from argus.backend.tests.conftest import get_fake_test_run
 from argus.backend.tests.cost_rollup.helpers import rollup_rows, submitted_run
+from argus.common.enums import TestStatus
 
 
 @pytest.fixture(scope="session")
@@ -80,3 +86,45 @@ async def test_item_submit_survives_a_rollup_failure(client_service, run_cost_se
 
     assert result["submitted"] == 1
     assert result["actual_cost"] == pytest.approx(2.0)
+
+
+async def test_client_status_update_refreshes_the_row(client_service, fake_test):
+    run_type, run_id = await submitted_run(client_service, fake_test)
+
+    await client_service.update_run_status(run_type=run_type, run_id=run_id, new_status=TestStatus.FAILED.value)
+
+    (row,) = await rollup_rows(run_id, fake_test.release_id)
+    assert row.status == TestStatus.FAILED.value
+
+
+async def test_ui_status_change_refreshes_the_row(client_service, testrun_service, fake_test, logged_in_user):
+    run_type, run_id = await submitted_run(client_service, fake_test)
+    await client_service.finish_run(run_type=run_type, run_id=run_id)
+
+    await testrun_service.change_run_status(fake_test.id, run_id, TestStatus.ABORTED, logged_in_user)
+
+    (row,) = await rollup_rows(run_id, fake_test.release_id)
+    assert row.status == TestStatus.ABORTED.value
+    assert row.end_time is not None
+
+
+async def test_registering_the_test_moves_the_row_out_of_unassigned(client_service, run_cost_service,
+                                                                     release_manager_service, fake_test, group,
+                                                                     release):
+    run_type, request = get_fake_test_run(fake_test)
+    request = replace(request, job_name=f"unregistered/{uuid.uuid4()}")
+    await client_service.submit_run(run_type, asdict(request))
+    run_id = UUID(request.run_id)
+    await run_cost_service.set_estimated_cost(run_id, 20.0)
+    (unassigned,) = await rollup_rows(run_id, UNASSIGNED_RELEASE)
+    assert unassigned.test_id is None
+
+    test = await release_manager_service.create_test(request.job_name, request.job_name, request.job_name,
+                                                     "http://example.com/job", group_id=group.id,
+                                                     release_id=release.id, plugin_name="scylla-cluster-tests")
+
+    assert await rollup_rows(run_id, UNASSIGNED_RELEASE) == []
+    (row,) = await rollup_rows(run_id, release.id)
+    assert row.test_id == test.id
+    assert row.group_id == group.id
+    assert row.estimated_cost == pytest.approx(20.0)
