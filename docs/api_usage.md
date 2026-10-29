@@ -268,6 +268,63 @@ zero. Items are sorted by category, then by name.
 ```
 
 ```http
+GET /api/v1/cost/explorer
+```
+
+Aggregates the cost of every run in a time window from the rollup
+`run_cost_by_month_v1`, for the Cost Explorer page and the view widget.
+
+| Query parameter | Type | Description |
+|---|---|---|
+| from | ISO datetime, optional | Start of the window, inclusive. Default: 90 days before `to`, at 00:00 UTC |
+| to | ISO datetime, optional | End of the window, exclusive. Default: now. At most 366 days after `from` |
+| releaseName | string, repeatable | Release names as the releases page shows them; an unknown name is an error |
+| groupId, testId | UUID, repeatable | A run must match one value of every parameter given |
+| viewId | UUID, optional | A run must match any release, group or test of the view |
+| backend | string, repeatable | The run's backend, such as `aws` |
+| plugin | string, repeatable | The run's plugin, such as `scylla-cluster-tests` |
+| status | string, repeatable | The run's status, such as `failed` or `test_error` |
+| tier | `spot`, `on-demand`, repeatable | Which spend the figures sum. Default: every tier |
+| breakdown | `group`, `test` | The rows under each release. Default `group` |
+| granularity | `day`, `week`, `month` | The buckets of the series, in UTC; a week starts on Monday. Default `week` |
+
+```json
+{
+  "response": {
+    "window": {"from": "2026-10-01T00:00:00+00:00", "to": "2026-10-31T00:00:00+00:00",
+               "granularity": "week", "breakdown": "group", "tiers": []},
+    "span": {"from": "2026-02-03T09:12:00+00:00", "to": "2026-10-28T22:40:00+00:00"},
+    "tiles": {"spend": 118406.2, "previous_spend": 105340.0, "weekly_run_rate": 27628.1,
+              "errored_spend": 21733.0, "leaked_spend": 4918.0, "leaked_count": 31,
+              "runs": 1284, "priced_runs": 1182},
+    "series": {"buckets": ["2026-09-28", "2026-10-05"], "backends": {"aws": [1.0, 2.0], "gce": [0.5, 0.0]}},
+    "releases": [{"id": "...", "name": "2026.1", "runs": 300, "priced_runs": 280, "spend": 40000.0,
+                  "rows": [{"id": "...", "name": "longevity", "runs": 120, "priced_runs": 118,
+                            "spend": 20000.0, "cost_per_run": 169.5}]}],
+    "top_runs": [{"run_id": "...", "build_id": "...", "build_number": 12,
+                  "plugin_name": "scylla-cluster-tests", "release": "2026.1", "group": "longevity",
+                  "test": "longevity-100gb-4h", "status": "failed", "start_time": "...", "end_time": "...",
+                  "backend": "aws", "region": "eu-west-1", "spend": 812.4, "coverage": "partial",
+                  "spot_terminated": false}],
+    "coverage": {"complete": 1002, "partial": 180, "none": 102},
+    "tiers": {"spot": {"spend": 24286.0, "items": 5100}, "on_demand": {"spend": 94120.0, "items": 6200},
+              "untiered": {"spend": 0.0, "items": 0}},
+    "spot_terminations": {"count": 14, "spot_runs": 420, "rate": 0.033, "spend": 1900.0,
+                          "by_location": [{"backend": "aws", "region": "eu-west-1", "count": 9, "spend": 1200.0}]}
+  },
+  "status": "ok"
+}
+```
+
+`top_runs` holds at most twenty runs by spend. `series.buckets` and every
+backend list have the same length. `span` is the first and the last run
+start of the selected releases over their whole history, `null` when no
+release is selected or none has a run yet; the page uses it to move the
+window onto a release whose runs lie outside it. A run without a cost figure counts in
+`runs` and in `coverage.none` and adds nothing to a sum. A release or a group
+the run does not have is named `Unassigned`.
+
+```http
 GET /api/v1/health/summary
 ```
 
