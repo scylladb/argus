@@ -28,6 +28,7 @@ from argus.backend.models.run_config import (
     RunConfiguration,
 )
 from argus.backend.models.run_cost import RunCost
+from argus.backend.models.run_cost_rollup import RunCostReleaseSpan, RunCostRollup
 from coodie.aio import Document
 
 from argus.backend.models.runtime_store import RuntimeStore
@@ -482,6 +483,8 @@ USED_MODELS: list[type[Document]] = [
     RunConfigParamValueIndex,
     RunConfigParamName,
     RunCost,
+    RunCostRollup,
+    RunCostReleaseSpan,
     ErrorEventEmbeddings,  # to be deprecated
     CriticalEventEmbeddings,  # to be deprecated
     SCTErrorEventEmbedding,
