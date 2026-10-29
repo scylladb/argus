@@ -9,7 +9,7 @@ from argus.backend.service.user import api_current_user
 from argus.backend.util.encoders import APIResponse
 
 router = APIRouter(prefix="/widgets")
-MAX_WIDGET_DAYS = 366
+MAX_WIDGET_DAYS = 365
 DAILY_UP_TO = 31
 
 
