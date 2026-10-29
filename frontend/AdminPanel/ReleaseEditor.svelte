@@ -85,6 +85,15 @@
                     bind:checked={releaseData.enabled}
                 />
             </div>
+            <div class="form-group">
+                <label for="release-editor-user-editable" class="form-label mb-0">Users may delete groups, tests and runs</label>
+                <input
+                    id="release-editor-user-editable"
+                    type="checkbox"
+                    class="form-input-check"
+                    bind:checked={releaseData.user_editable}
+                />
+            </div>
             <div class="mt-2 text-end">
                 <button
                     class="btn btn-danger"
