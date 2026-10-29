@@ -1,10 +1,12 @@
 <script lang="ts">
     import { createEventDispatcher, onMount } from "svelte";
     import Fa from "svelte-fa";
-    import {faBan, faChartLine, faPlus, faRefresh, faTimes} from "@fortawesome/free-solid-svg-icons";
+    import {faBan, faChartLine, faPlus, faRefresh, faTimes, faTrash} from "@fortawesome/free-solid-svg-icons";
     import { StatusButtonCSSClassMap } from "../Common/TestStatus";
     import { Modal } from "bootstrap";
     import { sendMessage } from "../Stores/AlertStore";
+    import { fetchJson } from "../Common/ApiUtils";
+    import ConfirmDeleteModal from "../Common/ConfirmDeleteModal.svelte";
 
     let {
         testInfo = {},
@@ -22,6 +24,25 @@
     let showGraphButton = $state(false);
     let innerWidth = $state(window.innerWidth);
     const smallScreen = $derived(innerWidth < 768);
+    let deleteTarget: { id: string; build_number: number } | null = $state(null);
+    let deleting = $state(false);
+    const canDelete = $derived(!!testInfo.release?.user_editable);
+
+    const confirmRunDelete = async () => {
+        const run = deleteTarget;
+        if (!run) return;
+        deleting = true;
+        try {
+            await fetchJson(`/api/v1/test/${testId}/run/${run.id}`, { method: "DELETE" });
+            deleteTarget = null;
+            sendMessage("success", `Deleted run #${run.build_number}.`, "TestRunsSelector::confirmRunDelete");
+            dispatch("runDeleted", { id: run.id });
+        } catch (error) {
+            sendMessage("error", error instanceof Error ? error.message : String(error), "TestRunsSelector::confirmRunDelete");
+        } finally {
+            deleting = false;
+        }
+    };
 
     const showGraphsButtonIfResultsExist = async function () {
         try {
@@ -95,6 +116,16 @@
                     >
                         <Fa icon={faTimes} />
                     </button>
+                    {#if canDelete}
+                        <button
+                            class="btn border-start-dark {StatusButtonCSSClassMap[run.status]}"
+                            aria-label="Delete run #{run.build_number}"
+                            title="Delete run #{run.build_number}"
+                            onclick={() => (deleteTarget = run)}
+                        >
+                            <Fa icon={faTrash} />
+                        </button>
+                    {/if}
                 {/if}
             </div>
         </div>
@@ -131,6 +162,20 @@
         </button>
     </div>
 </div>
+
+{#if deleteTarget}
+    <ConfirmDeleteModal
+        heading={`Delete run #${deleteTarget.build_number}`}
+        working={deleting}
+        onConfirm={confirmRunDelete}
+        onCancel={() => (deleteTarget = null)}
+    >
+        <p>
+            This removes run <span class="fw-bold">#{deleteTarget.build_number}</span> of {testInfo.test.name}
+            with its events, comments and results. This cannot be undone.
+        </p>
+    </ConfirmDeleteModal>
+{/if}
 
 <div class="modal" tabindex="-1" bind:this={ignoreRunsDialog}>
     <div class="modal-dialog">
