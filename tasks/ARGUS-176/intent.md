@@ -97,26 +97,16 @@ We need to pause on this implementation and align on the design and API agreemen
 - `argus results` lists every generic result table name across tests, with
   the number of tests and the columns of each.
 - `argus results` returns the generic results for the table names that match
-  a name, across all tests, filtered by status and by time range.
+  a name, across all tests of a release, filtered by status and by time range.
 - The output is grouped by table name, then by test with its `build_id`,
   then by run.
 - Time filters use the time the result was submitted. The output also shows
   `sut_timestamp`, and a filter on `sut_timestamp` is available.
-- A cross-test read uses no `ALLOW FILTERING` query.
-- A cross-test read does no full table scan and no fan-out of one query per
-  partition.
 - The results endpoints from `api.py` are in their own router. The frontend
   calls the new routes. The client API endpoints do not change.
 
 ## Out of scope
 
 - Pytest, driver matrix, sirenada and SCT run data.
-- A filter by release.
 - A cross-test results view in the web UI.
 - Changes to the client API that submits results.
-
-## Open questions
-
-- How do results that exist before the change become readable across tests?
-  The choice is between a one-time backfill and forward-only data. The team
-  must decide this before the spec is approved.
