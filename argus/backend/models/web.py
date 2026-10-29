@@ -183,6 +183,7 @@ class ArgusRelease(Document):
     enabled: bool = True
     perpetual: bool = False
     dormant: bool = False
+    user_editable: bool = False
     priority: int = 0
 
     class Settings:

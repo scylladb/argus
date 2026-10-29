@@ -35,13 +35,13 @@ stays in every plan built from a spec.
 it. `POST /admin/api/v1/release/set_user_editable`, name
 `admin.admin_api.set_release_user_editable`, admin only.
 
-- [ ] Write the failing tests: the switch round-trips through
+- [x] Write the failing tests: the switch round-trips through
   `/release/{id}/details`, `/release/edit` keeps the flag, `/api/v1/releases`
   carries it, and a non-admin gets 403 from the switch.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 2 — Backend: the cleanup service and the routes
 
@@ -74,15 +74,15 @@ Routes: `DELETE /api/v1/test/{test_id}/run/{run_id}`
 (`api.testrun_api.delete_run`), `DELETE /api/v1/test/{test_id}`
 (`api.delete_test`), `DELETE /api/v1/group/{group_id}` (`api.delete_group`).
 
-- [ ] Write the failing tests: each route returns the error envelope and
+- [x] Write the failing tests: each route returns the error envelope and
   keeps the rows while the flag is off; a run removal drops the run, its
   comment, its event and its SCT events; a run of another test is refused;
   a test removal drops its runs and the test; a group removal drops its
   tests, their runs and the group; a generic run removal uses the default
   hook.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence.
 - [ ] Commit, with the boxes of this task checked.
 
 ## Task 3 — Frontend: the confirmation modal and the sidebar
@@ -105,14 +105,14 @@ test rows of a release with `user_editable`; `confirmDelete` sends the
 `DELETE`, closes each open test the removal takes, reloads the list with
 `force`, refreshes the stats, and reports through `sendMessage`.
 
-- [ ] Write the failing tests: the modal disables the button until the
+- [x] Write the failing tests: the modal disables the button until the
   name matches and calls `onConfirm`/`onCancel`; the sidebar shows the
   buttons only on a flagged release; a confirmed test removal sends
   `DELETE /api/v1/test/<id>`, calls `onToggleTest` for an open test and
   refetches the tests; a group removal sends `DELETE /api/v1/group/<id>`.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence and `yarn build`.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence and `yarn build`.
 - [ ] Commit, with the boxes of this task checked.
 
 ## Task 4 — Frontend: the run selector
@@ -129,12 +129,12 @@ test rows of a release with `user_editable`; `confirmDelete` sends the
 `TestRuns` drops the id from `additionalRuns` and `clickedTestRuns`, then
 `fetchTestRuns()`.
 
-- [ ] Write the failing tests: the button appears only with the flag and
+- [x] Write the failing tests: the button appears only with the flag and
   only on an open run; a confirmed removal sends the `DELETE` and
   dispatches `runDeleted`.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence and `yarn build`.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence and `yarn build`.
 - [ ] Commit, with the boxes of this task checked.
 
 ## Task 5 — Frontend: the admin switch and the editor
@@ -145,11 +145,11 @@ test rows of a release with `user_editable`; `confirmDelete` sends the
 - Modify: `frontend/AdminPanel/ReleaseEditor.svelte` (the checkbox)
 - Test: `frontend/AdminPanel/ReleaseEditor.test.ts`
 
-- [ ] Write the failing test: the `releaseEdit` detail carries
+- [x] Write the failing test: the `releaseEdit` detail carries
   `user_editable`.
-- [ ] Run it and confirm the failure.
-- [ ] Write the smallest change that passes it.
-- [ ] Run the verify sequence and `yarn build`.
+- [x] Run it and confirm the failure.
+- [x] Write the smallest change that passes it.
+- [x] Run the verify sequence and `yarn build`.
 - [ ] Commit, with the boxes of this task checked.
 
 ## Task 6 — Documentation
@@ -157,6 +157,6 @@ test rows of a release with `user_editable`; `confirmDelete` sends the
 **Files:**
 - Modify: `docs/api_usage.md`
 
-- [ ] Describe the three `DELETE` routes, the flag, and the admin switch.
-- [ ] Run `uv run pre-commit run --all-files`.
+- [x] Describe the three `DELETE` routes, the flag, and the admin switch.
+- [x] Run `uv run pre-commit run --all-files`.
 - [ ] Commit, with the boxes of this task checked.
