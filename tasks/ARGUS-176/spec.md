@@ -131,6 +131,8 @@ GET /api/v1/results/release/{release}
 ```
 
 Groups sort by table name. Runs sort by `submitted_at`, newest first.
+`submitted_at` is the latest write time of the cells that the read keeps
+for the run.
 `build_id` is `build_system_id` of the test. `value` holds `value_text` when
 the cell has no number.
 

@@ -800,14 +800,16 @@ class ResultsService:
                         (sut_until and (not sut_timestamp or sut_timestamp > sut_until)):
                     continue
                 run_info = test_runs[cell["run_id"]]
+                submitted_at = datetime.fromtimestamp(cell["submitted"] / 1_000_000, tz=timezone.utc)
                 run = runs.setdefault(cell["run_id"], {
                     "run_id": cell["run_id"],
                     "build_number": run_info["build_number"],
                     "scylla_version": run_info["scylla_version"],
-                    "submitted_at": datetime.fromtimestamp(cell["submitted"] / 1_000_000, tz=timezone.utc),
+                    "submitted_at": submitted_at,
                     "sut_timestamp": sut_timestamp,
                     "cells": [],
                 })
+                run["submitted_at"] = max(run["submitted_at"], submitted_at)
                 run["cells"].append({
                     "row": cell["row"],
                     "column": cell["column"],

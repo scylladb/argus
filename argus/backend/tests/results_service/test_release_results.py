@@ -201,6 +201,29 @@ async def test_release_results_cap_the_runs_per_test(results_service, release_ma
     assert [run["run_id"] for run in test_result["runs"]] == [newest.id]
 
 
+async def test_release_results_date_a_run_by_its_latest_cell(results_service, release_manager_service, release,
+                                                             group):
+    now = datetime.now(timezone.utc)
+    test, late = await _generic_run_with_result(release_manager_service, release, group, "Dated Release Table",
+                                                started=now - timedelta(hours=3))
+    # "debug" sorts before "ops", so the read meets the older cell of the run first.
+    await execute_raw(
+        f"UPDATE {ArgusGenericResultData._get_keyspace()}.{ArgusGenericResultData.table_name()} "
+        f"USING TIMESTAMP {int(now.timestamp() * 1_000_000)} SET value = ?, status = ? "
+        "WHERE test_id = ? AND name = ? AND run_id = ? AND column = ? AND row = ?",
+        [8.0, "PASS", test.id, "Dated Release Table", late.id, "ops", "write"])
+    _, middle = await _generic_run_with_result(release_manager_service, release, group, "Dated Release Table",
+                                               started=now - timedelta(hours=1), test=test)
+
+    [group_result] = await results_service.get_release_results(
+        release=release.name, table_filter="dated release", include_hidden=True)
+
+    [test_result] = group_result["tests"]
+    assert [run["run_id"] for run in test_result["runs"]] == [late.id, middle.id]
+    assert test_result["runs"][0]["submitted_at"] == datetime.fromtimestamp(
+        int(now.timestamp() * 1_000_000) / 1_000_000, tz=timezone.utc)
+
+
 async def test_release_results_hide_hidden_columns(results_service, release_manager_service, release, group):
     await _generic_run_with_result(release_manager_service, release, group, "Hidden Release Table",
                                    datetime.now(timezone.utc))
