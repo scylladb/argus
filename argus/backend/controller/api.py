@@ -15,6 +15,7 @@ from argus.backend.controller import (
     health_api,
     notification_api,
     planner_api,
+    results_api,
     run_config_api,
     team,
     testrun_api,
@@ -43,6 +44,7 @@ router.include_router(planner_api.router)
 router.include_router(team.router)
 router.include_router(view_api.router)
 router.include_router(run_config_api.router)
+router.include_router(results_api.router)
 
 
 class SetTestPluginRequest(BaseModel):
