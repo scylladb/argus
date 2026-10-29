@@ -47,6 +47,12 @@ export class WorkAreaState {
         this.openTest(testId);
     };
 
+    forgetRun = (testId: string, runId: string): void => {
+        const runs = this.additionalRuns[testId];
+        if (!runs?.includes(runId)) return;
+        this.additionalRuns[testId] = runs.filter((id) => id !== runId);
+    };
+
     closeRun = (testId: string, runId: string): void => {
         const remaining = (this.additionalRuns[testId] ?? []).filter((id) => id !== runId);
         if (remaining.length === 0) {
