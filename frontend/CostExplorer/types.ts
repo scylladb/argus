@@ -74,6 +74,7 @@ export interface CoverageCounts {
     complete: number;
     partial: number;
     none: number;
+    estimate_only: { count: number; spend: number };
 }
 
 export interface TierSplit {

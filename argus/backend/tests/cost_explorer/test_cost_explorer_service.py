@@ -57,7 +57,24 @@ async def test_spend_sums_priced_runs_and_counts_the_rest(explorer, plugin):
     assert result["tiles"]["runs"] == 4
     assert result["tiles"]["priced_runs"] == 3
     assert result["tiles"]["weekly_run_rate"] == pytest.approx(24.0 / (30 / 7))
-    assert result["coverage"] == {"complete": 3, "partial": 0, "none": 1}
+    assert result["coverage"] == {"complete": 3, "partial": 0, "none": 1, "estimate_only": {"count": 0, "spend": 0.0}}
+
+
+async def test_estimate_only_runs_add_nothing_but_are_counted(explorer, plugin):
+    release_id = uuid.uuid4()
+    await seed(plugin, START + timedelta(days=1), release_id, actual_cost=12.0)
+    await seed(plugin, START + timedelta(days=2), release_id, actual_cost=800.0, estimated_cost=800.0,
+               item_count=0, coverage="none")
+    await seed(plugin, START + timedelta(days=3), release_id, actual_cost=None, estimated_cost=50.0)
+
+    result = await explorer.explore(query(plugin, release_ids=frozenset([release_id])))
+
+    assert result["tiles"]["spend"] == pytest.approx(12.0)
+    assert result["tiles"]["priced_runs"] == 1
+    assert [run["spend"] for run in result["top_runs"]] == [12.0]
+    assert result["releases"][0]["priced_runs"] == 1
+    assert result["coverage"] == {"complete": 1, "partial": 0, "none": 2,
+                                  "estimate_only": {"count": 2, "spend": pytest.approx(850.0)}}
 
 
 async def test_previous_window_feeds_only_the_trend(explorer, plugin):

@@ -171,8 +171,12 @@ class CostExplorerService:
         return keys
 
     @staticmethod
-    def spend_of(row: RunCostRollup, tiers: frozenset[str]) -> float | None:
-        if row.actual_cost is None:
+    def priced(row: RunCostRollup) -> bool:
+        return bool(row.item_count) and row.actual_cost is not None
+
+    @classmethod
+    def spend_of(cls, row: RunCostRollup, tiers: frozenset[str]) -> float | None:
+        if not cls.priced(row):
             return None
         if not tiers:
             return row.actual_cost
@@ -193,7 +197,7 @@ class CostExplorerService:
             "leaked_spend": math.fsum(row.leaked_cost for row in current),
             "leaked_count": sum(row.leaked_count for row in current),
             "runs": len(current),
-            "priced_runs": sum(1 for row in current if row.actual_cost is not None),
+            "priced_runs": sum(1 for row in current if self.priced(row)),
         }
 
     def _series(self, current, query: CostQuery, start: datetime, end: datetime) -> dict:
@@ -253,11 +257,13 @@ class CostExplorerService:
             "coverage": row.coverage, "spot_terminated": row.spot_terminated,
         } for spend, row in priced[:TOP_RUNS]]
 
-    @staticmethod
-    def _coverage(current) -> dict:
+    @classmethod
+    def _coverage(cls, current) -> dict:
         counts = {"complete": 0, "partial": 0, "none": 0}
         for row in current:
             counts[row.coverage] = counts.get(row.coverage, 0) + 1
+        estimated = [row for row in current if not cls.priced(row) and row.estimated_cost is not None]
+        counts["estimate_only"] = {"count": len(estimated), "spend": math.fsum(row.estimated_cost for row in estimated)}
         return counts
 
     @staticmethod

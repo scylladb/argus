@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { integer, share } from "./format";
+    import { integer, share, usd } from "./format";
     import type { CoverageCounts } from "./types";
 
     interface Props {
@@ -40,10 +40,14 @@
                 </dt>
                 <dd class="col-5 text-end mb-0 tabular">{integer(segment.count)} <span class="text-body-secondary">· {share(segment.count, runs)}</span></dd>
             {/each}
+            {#if coverage.estimate_only.count > 0}
+                <dt class="col-7 fw-normal text-body-secondary ps-4">Estimate only</dt>
+                <dd class="col-5 text-end mb-0 tabular text-body-secondary">{integer(coverage.estimate_only.count)} · {usd(coverage.estimate_only.spend)}</dd>
+            {/if}
         </dl>
     {/if}
     <div class="small text-body-secondary mt-auto pt-3">
-        A run is partial when a terminated resource reported no cost.
+        A run is partial when a terminated resource reported no cost. An estimate is not counted as spend.
     </div>
 </div>
 

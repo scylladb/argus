@@ -306,7 +306,7 @@ Aggregates the cost of every run in a time window from the rollup
                   "test": "longevity-100gb-4h", "status": "failed", "start_time": "...", "end_time": "...",
                   "backend": "aws", "region": "eu-west-1", "spend": 812.4, "coverage": "partial",
                   "spot_terminated": false}],
-    "coverage": {"complete": 1002, "partial": 180, "none": 102},
+    "coverage": {"complete": 1002, "partial": 180, "none": 102, "estimate_only": {"count": 40, "spend": 9100.0}},
     "tiers": {"spot": {"spend": 24286.0, "items": 5100}, "on_demand": {"spend": 94120.0, "items": 6200},
               "untiered": {"spend": 0.0, "items": 0}},
     "spot_terminations": {"count": 14, "spot_runs": 420, "rate": 0.033, "spend": 1900.0,
@@ -320,9 +320,11 @@ Aggregates the cost of every run in a time window from the rollup
 backend list have the same length. `span` is the first and the last run
 start of the selected releases over their whole history, `null` when no
 release is selected or none has a run yet; the page uses it to move the
-window onto a release whose runs lie outside it. A run without a cost figure counts in
-`runs` and in `coverage.none` and adds nothing to a sum. A release or a group
-the run does not have is named `Unassigned`.
+window onto a release whose runs lie outside it. A run that reported no cost
+item counts in `runs` and in `coverage.none` and adds nothing to a sum, even
+when it carries an estimate; `coverage.estimate_only` counts those runs and
+sums their estimates. A release or a group the run does not have is named
+`Unassigned`.
 
 ```http
 GET /api/v1/health/summary
