@@ -30,6 +30,8 @@ LOGGER = logging.getLogger(__name__)
 JENKINS_LOOKUP_TIMEOUT_SECONDS = 5
 
 DEFAULT_STATS_PER_PARTITION_LIMIT = 15
+ROLLUP_COLUMNS = ("build_id", "start_time", "id", "release_id", "group_id", "test_id", "status", "end_time",
+                  "build_number")
 
 
 class PluginModelBase(Document):
@@ -62,6 +64,13 @@ class PluginModelBase(Document):
     @classmethod
     def _stats_columns(cls) -> tuple[str, ...]:
         raise NotImplementedError()
+
+    @classmethod
+    def cost_rollup_columns(cls) -> tuple[str, ...]:
+        return ROLLUP_COLUMNS
+
+    async def cost_rollup_fields(self, item_names: set[str]) -> dict:
+        return {}
 
     async def assign_categories(self):
         key = self.build_id

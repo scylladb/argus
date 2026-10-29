@@ -13,7 +13,7 @@ from coodie.aio import Document, execute_raw
 
 from argus.backend.models.run_config import RunConfigParamByRun
 from argus.backend.models.web import ArgusRelease, ArgusTest, ReleaseDistinctVersions, ReleaseDistinctImages
-from argus.backend.plugins.core import PluginModelBase
+from argus.backend.plugins.core import ROLLUP_COLUMNS, PluginModelBase
 from argus.backend.plugins.sct.resource_setup import (
     RESOURCE_DERIVED_DB_NODE_BACKENDS,
     XCLOUD_BACKEND,
@@ -33,6 +33,7 @@ from argus.backend.util.common import chunk, get_build_number, select_rows
 from argus.common.enums import ResourceState
 
 LOGGER = logging.getLogger(__name__)
+SPOT_TERMINATION_EVENT = "spotterminationevent"
 SCT_REGION_PROPERTY_MAP = {
     "aws": "region_name",
     "aws-siren": "region_name",
@@ -235,6 +236,27 @@ class SCTTestRun(PluginModelBase):
         return ("id", "test_id", "group_id", "release_id", "status", "start_time", "build_job_url", "build_id",
                 "nemesis_stats", "assignee", "end_time", "investigation_status", "heartbeat", "build_number",
                 "scylla_version", "cloud_setup")
+
+    @classmethod
+    def cost_rollup_columns(cls) -> tuple[str, ...]:
+        return ROLLUP_COLUMNS + ("cloud_setup", "sct_runner_host", "region_name")
+
+    async def cost_rollup_fields(self, item_names: set[str]) -> dict:
+        resources, critical_events = await asyncio.gather(
+            SCTResource.find(run_id=self.id).only("name", "resource_type").all(),
+            SCTEvent.find(run_id=self.id, severity=SCTEventSeverity.CRITICAL.value)
+            .only("event_type").values_list("event_type").all(),
+        )
+        nodes = {res.name for res in resources if res.resource_type != "sct-runner" and "sct-runner" not in res.name}
+        backend = (self.cloud_setup.backend if self.cloud_setup else None) \
+            or (self.sct_runner_host.provider if self.sct_runner_host else None)
+        return {
+            "backend": backend,
+            "region": self.region_name[0] if self.region_name else None,
+            "spot_terminated": any((kind or "").lower() == SPOT_TERMINATION_EVENT for (kind,) in critical_events),
+            "resource_count": len(nodes),
+            "priced_count": len(nodes & item_names),
+        }
 
     @classmethod
     async def load_test_run(cls, run_id: UUID) -> 'SCTTestRun':

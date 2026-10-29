@@ -1,13 +1,20 @@
+import asyncio
 import logging
 import math
 from uuid import UUID
 
+from cassandra import DriverException
+from cassandra.cluster import NoHostAvailable
 from coodie.cql_builder import build_update, parse_filter_kwargs, parse_update_kwargs
 from coodie.aio import AsyncBatchQuery
 from pydantic import BaseModel, Field
 
 from argus.backend.error_handlers import DataValidationError
 from argus.backend.models.run_cost import RunCost
+from argus.backend.models.run_cost_rollup import RunCostRollup
+from argus.backend.plugins.core import PluginModelBase
+from argus.backend.plugins.loader import AVAILABLE_PLUGINS
+from argus.backend.service.cost_rollup_service import CostRollupService
 
 LOGGER = logging.getLogger(__name__)
 
@@ -39,6 +46,7 @@ class RunCostService:
 
     async def set_estimated_cost(self, run_id: UUID, value: float) -> dict:
         await RunCost.find(run_id=run_id).update(estimated_cost=value)
+        await self._refresh_rollup_guarded(run_id)
         return {"run_id": str(run_id), "estimated_cost": value}
 
     async def submit_cost_items(self, run_id: UUID, items: list[CostItemRequest]) -> dict:
@@ -52,6 +60,7 @@ class RunCostService:
                 batch.add(*self._item_write(run_id, item))
 
         actual_cost = await self.recompute_actual_cost(run_id)
+        await self._refresh_rollup_guarded(run_id)
         return {"run_id": str(run_id), "submitted": len(items), "actual_cost": actual_cost}
 
     @staticmethod
@@ -111,3 +120,24 @@ class RunCostService:
             ],
             "by_category": by_category,
         }
+
+    @staticmethod
+    async def _find_run(run_id: UUID) -> PluginModelBase | None:
+        found = await asyncio.gather(*(
+            plugin.model.find(id=run_id).only(*plugin.model.cost_rollup_columns()).first()
+            for plugin in AVAILABLE_PLUGINS.values()
+        ))
+        return next((run for run in found if run), None)
+
+    async def refresh_rollup(self, run_id: UUID) -> RunCostRollup | None:
+        run = await self._find_run(run_id)
+        if run is None:
+            LOGGER.debug("No run %s in any plugin, the cost rollup waits for the run", run_id)
+            return None
+        return await CostRollupService().refresh(run)
+
+    async def _refresh_rollup_guarded(self, run_id: UUID) -> None:
+        try:
+            await self.refresh_rollup(run_id)
+        except (DriverException, NoHostAvailable):
+            LOGGER.exception("Could not refresh the cost rollup of run %s, the cost is stored", run_id)
