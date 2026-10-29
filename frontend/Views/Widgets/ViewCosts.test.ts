@@ -20,7 +20,7 @@ const RESPONSE = {
     tiles: { spend: 4321, previous_spend: 4000, weekly_run_rate: 2160.5, errored_spend: 100, leaked_spend: 0, leaked_count: 0,
              runs: 12, priced_runs: 12 },
     series: { buckets: ["2026-10-15"], backends: { aws: [4321] } },
-    releases: [], top_runs: [], coverage: { complete: 12, partial: 0, none: 0 },
+    releases: [], top_runs: [], coverage: { complete: 12, partial: 0, none: 0, estimate_only: { count: 0, spend: 0 } },
     tiers: { spot: { spend: 0, items: 0 }, on_demand: { spend: 0, items: 0 }, untiered: { spend: 0, items: 0 } },
     spot_terminations: { count: 0, spot_runs: 0, rate: 0, spend: 0, by_location: [] }
 };

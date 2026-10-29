@@ -29,7 +29,7 @@ const RESPONSE = {
     series: { buckets: ["2026-10-01", "2026-10-02"], backends: { aws: [1, 2], gce: [0, 3] } },
     releases: [],
     top_runs: [],
-    coverage: { complete: 9, partial: 0, none: 1 },
+    coverage: { complete: 9, partial: 0, none: 1, estimate_only: { count: 0, spend: 0 } },
     tiers: { spot: { spend: 0, items: 0 }, on_demand: { spend: 0, items: 0 }, untiered: { spend: 0, items: 0 } },
     spot_terminations: { count: 0, spot_runs: 0, rate: 0, spend: 0, by_location: [] }
 };

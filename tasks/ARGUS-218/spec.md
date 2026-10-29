@@ -196,7 +196,7 @@ beyond. Both return the same envelope, in the standard response shape:
                "release": "2026.1", "group": "longevity", "test": "longevity-100gb-4h",
                "status": "failed", "start_time": "...", "end_time": "...", "backend": "aws",
                "region": "eu-west-1", "spend": 812.4, "coverage": "partial", "spot_terminated": false}],
- "coverage": {"complete": 1002, "partial": 180, "none": 102},
+ "coverage": {"complete": 1002, "partial": 180, "none": 102, "estimate_only": {"count": 40, "spend": 9100.0}},
  "tiers": {"spot": {"spend": 24286.0, "items": 5100}, "on_demand": {"spend": 94120.0, "items": 6200},
            "untiered": {"spend": 0.0, "items": 0}},
  "spot_terminations": {"count": 14, "spot_runs": 420, "rate": 0.033, "spend": 1900.0,
