@@ -189,6 +189,7 @@
         if (!target || !release || target.kind === "release") return;
         deleting = true;
         try {
+            if (target.kind === "group") await sidebar.loadTests(target.item);
             await fetchJson(`/api/v1/${target.kind}/${target.item.id}`, { method: "DELETE" });
             for (const testId of removedTests(target)) {
                 if (openSet.has(testId)) onToggleTest(testId);
