@@ -84,13 +84,23 @@ Severity | Timestamp | Type | Node | Nemesis | Repeats | Message
 
 | Risk | Response |
 |---|---|
-| A script reads `.message` from the JSON and gets nothing for an event with a summary | The help text of `run events` names `--raw`. The script adds `--raw`, or reads `.summary // .message` |
+| A script reads `.message` from the JSON and gets nothing for an event with a summary. Zeus `runtime/agents/past-runs.md` runs `test` and `split` on `.message`, and jq stops with a type error. The SCT `perf-weekly-status-report` skill looks for `CapacityReservationError` in `message` | A caller that matches on the original text adds `--raw`. The help text of `run events` names `--raw` |
+| A CLI built before this change rejects `--raw` as an unknown flag | A caller adds `--raw` after the hosts that run it have the new CLI |
 | The summary hides a detail that the triage needs | The caller runs the command again with `--raw` |
 
 ## Deferred work
 
 The Zeus `triage.md` in scylladb/qatools reads `summary` first and `message`
 second. That change ships in qatools after this CLI is released.
+
+The callers that match on the original text add `--raw` after this CLI is
+released:
+
+- scylladb/zeus: `runtime/agents/past-runs.md`, and the event fields in
+  `runtime/.opencode/skills/sct/SKILL.md` and `references/argus-api.md`.
+- scylladb/scylla-cluster-tests: `skills/perf-weekly-status-report/`, in
+  `SKILL.md`, `workflows/generate-report.md` and
+  `references/argus-data-format.md`.
 
 ## Decisions
 
@@ -101,3 +111,6 @@ second. That change ships in qatools after this CLI is released.
   Two columns show the same event twice. (spec)
 - The choice of text happens at output time, not at fetch time, so the cache
   holds the full event for both modes. (spec)
+- The default JSON keeps the summary-first shape. The callers that need the
+  original text change to `--raw`, because the token savings are the purpose
+  of the task. (review)
