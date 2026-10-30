@@ -55,9 +55,9 @@ stays in every plan built from a spec.
 - `deduplicateEvents` followed by the default JSON: an orphan duplicate with
   no summary is promoted, and the output shows its message.
 
-- [ ] Write the failing tests.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Run `make fmt`, `make lint` and `go test -race ./...` in `cli/`, and
+- [x] Write the failing tests.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Run `make fmt`, `make lint` and `go test -race ./...` in `cli/`, and
       `uv run pre-commit run --all-files` at the root.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Commit, with the boxes of this task checked.

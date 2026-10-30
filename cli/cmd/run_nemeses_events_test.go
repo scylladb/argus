@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/scylladb/argus/cli/internal/models"
@@ -191,5 +192,30 @@ func TestDeduplicateEvents(t *testing.T) {
 				tt.wantChecks(t, result)
 			}
 		})
+	}
+}
+
+func TestPromotedDuplicateShowsMessage(t *testing.T) {
+	events := deduplicateEvents([]models.SCTEvent{
+		{EventID: "d2", Ts: "2024-01-01T02:00:00Z", DuplicateID: "gone", Message: "second message"},
+		{EventID: "d1", Ts: "2024-01-01T01:00:00Z", DuplicateID: "gone", Message: "first message"},
+	})
+
+	raw, err := json.Marshal(models.SCTEventsResponse{RunID: "run-1", Events: events})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got []map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d events, want 1", len(got))
+	}
+	if got[0]["message"] != "first message" {
+		t.Errorf("message = %v, want %q", got[0]["message"], "first message")
+	}
+	if _, ok := got[0]["summary"]; ok {
+		t.Errorf("promoted duplicate has a summary key: %v", got[0]["summary"])
 	}
 }
