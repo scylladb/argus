@@ -800,13 +800,14 @@ func (e SCTEvent) DisplayText(raw bool) string {
 	return e.Summary
 }
 
-// sctEventOutput is the JSON shape of one event in the command output. Its
-// Message and Summary shadow the fields of the embedded SCTEvent, and exactly
-// one of them is set.
+// sctEventOutput is the JSON shape of one event in the command output.
+// Message holds the selected text, and Summarized marks it as the summary.
+// Summary shadows the field of the embedded SCTEvent and stays nil, so the
+// output has no summary key.
 type sctEventOutput struct {
 	SCTEvent
-	Message *string `json:"message,omitempty"`
-	Summary *string `json:"summary,omitempty"`
+	Summary    *string `json:"summary,omitempty"`
+	Summarized bool    `json:"summarized,omitempty"`
 }
 
 // Headers implements output.Tabular for SCTEventsResponse.
@@ -844,17 +845,13 @@ func truncateEventText(s string) string {
 }
 
 // MarshalJSON implements json.Marshaler so that the JSON outputter serialises
-// the event list directly. Each event carries its summary, or its message when
-// Raw is set or the event has no summary.
+// the event list directly. The message of each event holds its summary, or its
+// original message when Raw is set or the event has no summary.
 func (r SCTEventsResponse) MarshalJSON() ([]byte, error) {
 	out := make([]sctEventOutput, len(r.Events))
 	for i, e := range r.Events {
-		out[i] = sctEventOutput{SCTEvent: e}
-		if r.Raw || e.Summary == "" {
-			out[i].Message = &e.Message
-		} else {
-			out[i].Summary = &e.Summary
-		}
+		out[i] = sctEventOutput{SCTEvent: e, Summarized: !r.Raw && e.Summary != ""}
+		out[i].Message = e.DisplayText(r.Raw)
 	}
 	return json.Marshal(out)
 }
