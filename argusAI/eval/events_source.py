@@ -123,7 +123,7 @@ class EventFetcher:
         return data if isinstance(data, list) else []
 
     def events_for_run(self, run_id: str) -> list[EventSample]:
-        rows = self._run(["run", "events", "--run-id", run_id, "--limit", str(self.per_severity_limit)])
+        rows = self._run(["run", "events", "--run-id", run_id, "--limit", str(self.per_severity_limit), "--raw"])
         samples: list[EventSample] = []
         for row in rows:
             severity = row.get("severity", "")

@@ -50,15 +50,18 @@ func TestSCTEventsResponseJSONPrefersSummary(t *testing.T) {
 	})
 	require.Len(t, got, 3)
 
-	assert.Equal(t, "short text", got[0]["summary"])
-	assert.NotContains(t, got[0], "message")
+	assert.Equal(t, "short text", got[0]["message"])
+	assert.Equal(t, true, got[0]["summarized"])
+	assert.NotContains(t, got[0], "summary")
 	assert.Equal(t, "e1", got[0]["event_id"])
 
 	assert.Equal(t, "full text", got[1]["message"])
 	assert.NotContains(t, got[1], "summary")
+	assert.NotContains(t, got[1], "summarized")
 
-	assert.Contains(t, got[2], "message")
+	assert.Equal(t, "", got[2]["message"])
 	assert.NotContains(t, got[2], "summary")
+	assert.NotContains(t, got[2], "summarized")
 }
 
 func TestSCTEventsResponseJSONRaw(t *testing.T) {
@@ -74,6 +77,7 @@ func TestSCTEventsResponseJSONRaw(t *testing.T) {
 	for _, e := range got {
 		assert.Equal(t, "full text", e["message"])
 		assert.NotContains(t, e, "summary")
+		assert.NotContains(t, e, "summarized")
 	}
 }
 
