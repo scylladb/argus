@@ -31,11 +31,12 @@ stays in every plan built from a spec.
 - `func (e SCTEvent) DisplayText(raw bool) string`: returns `e.Message` when
   `raw` is true or `e.Summary` is empty, else `e.Summary`.
 - `sctEventOutput`, an unexported type that embeds `SCTEvent` and adds
-  `Message *string` and `Summary *string`, both with `omitempty`. The outer
-  fields shadow the embedded ones in `encoding/json`. `MarshalJSON` sets
-  exactly one of the two pointers for each event, so an event with an empty
-  message still has the `message` key. The tags of `SCTEvent` stay the same,
-  so the cache format stays the same.
+  `Summary *string` with `omitempty` and `Summarized bool` with `omitempty`.
+  The outer `Summary` shadows the embedded one in `encoding/json` and stays
+  nil, so the output has no `summary` key. `MarshalJSON` sets `Message` to
+  `DisplayText(r.Raw)` and `Summarized` to true when that text is the
+  summary. The tags of `SCTEvent` stay the same, so the cache format stays
+  the same.
 - `Headers` returns one text column, `Message`. `Rows` fills it with
   `truncateEventText(e.DisplayText(r.Raw))`.
 - `runEventsCmd` gets the flag `--raw` (bool, default `false`, help text
@@ -46,14 +47,21 @@ stays in every plan built from a spec.
 
 **Tests** (replace `TestSCTEventsResponseJSONSummary` and
 `TestSCTEventsResponseRowsSummary`, which assert the old two-column shape):
-- JSON, default: an event with a summary has `summary` and no `message`. An
-  event with a null summary has `message` and no `summary`. An event with an
-  empty summary and an empty message has the `message` key.
-- JSON, `Raw`: every event has `message` and no `summary`.
+- JSON, default: an event with a summary has the summary in `message`,
+  `"summarized": true` and no `summary`. An event with a null summary has
+  its message and no `summarized`. An event with an empty summary and an
+  empty message has the `message` key.
+- JSON, `Raw`: every event has its original `message`, no `summary` and no
+  `summarized`.
 - Rows, default and `Raw`: seven columns, the last one holds the selected
   text. A text longer than 200 bytes ends with `...`.
 - `deduplicateEvents` followed by the default JSON: an orphan duplicate with
   no summary is promoted, and the output shows its message.
+- `RunE` of `runEventsCmd` against a stub server, with and without `--raw`:
+  the output shows the summary or the original message.
+
+**Eval harness:** `argusAI/eval/events_source.py` adds `--raw` to the
+`run events` call in `events_for_run`.
 
 - [x] Write the failing tests.
 - [x] Run them and confirm the failure.
