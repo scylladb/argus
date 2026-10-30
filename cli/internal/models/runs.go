@@ -784,14 +784,34 @@ func (f FetchResultsResponse) Tables() []output.NamedTable {
 
 // SCTEventsResponse is the response payload for the SCT events endpoint.
 // Events is the list of individual SCT events returned by the server.
+// Raw selects the original message of each event over its summary.
 type SCTEventsResponse struct {
 	RunID  string     `json:"run_id"`
 	Events []SCTEvent `json:"response"`
+	Raw    bool       `json:"-"`
+}
+
+// DisplayText returns the summary of the event, or its message when raw is
+// set or the event has no summary.
+func (e SCTEvent) DisplayText(raw bool) string {
+	if raw || e.Summary == "" {
+		return e.Message
+	}
+	return e.Summary
+}
+
+// sctEventOutput is the JSON shape of one event in the command output. Its
+// Message and Summary shadow the fields of the embedded SCTEvent, and exactly
+// one of them is set.
+type sctEventOutput struct {
+	SCTEvent
+	Message *string `json:"message,omitempty"`
+	Summary *string `json:"summary,omitempty"`
 }
 
 // Headers implements output.Tabular for SCTEventsResponse.
 func (SCTEventsResponse) Headers() []string {
-	return []string{"Severity", "Timestamp", "Type", "Node", "Nemesis", "Repeats", "Message", "Summary"}
+	return []string{"Severity", "Timestamp", "Type", "Node", "Nemesis", "Repeats", "Message"}
 }
 
 // Rows implements output.Tabular for SCTEventsResponse.
@@ -809,8 +829,7 @@ func (r SCTEventsResponse) Rows() [][]string {
 			e.Node,
 			e.NemesisName,
 			repeats,
-			truncateEventText(e.Message),
-			truncateEventText(e.Summary),
+			truncateEventText(e.DisplayText(r.Raw)),
 		})
 	}
 	return rows
@@ -825,9 +844,19 @@ func truncateEventText(s string) string {
 }
 
 // MarshalJSON implements json.Marshaler so that the JSON outputter serialises
-// the event list directly.
+// the event list directly. Each event carries its summary, or its message when
+// Raw is set or the event has no summary.
 func (r SCTEventsResponse) MarshalJSON() ([]byte, error) {
-	return json.Marshal(r.Events)
+	out := make([]sctEventOutput, len(r.Events))
+	for i, e := range r.Events {
+		out[i] = sctEventOutput{SCTEvent: e}
+		if r.Raw || e.Summary == "" {
+			out[i].Message = &e.Message
+		} else {
+			out[i].Summary = &e.Summary
+		}
+	}
+	return json.Marshal(out)
 }
 
 // ---------------------------------------------------------------------------
