@@ -4,7 +4,8 @@ import uuid
 from dataclasses import asdict
 
 import pytest
-from argus.backend.tests.conftest import g, get_fake_test_run
+from argus.backend.tests.conftest import g
+from argus.backend.tests.util import get_fake_test_run
 
 from coodie.exceptions import DocumentNotFound
 

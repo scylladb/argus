@@ -9,7 +9,7 @@ from cassandra.cluster import NoHostAvailable
 from argus.backend.models.run_cost_rollup import UNASSIGNED_RELEASE
 from argus.backend.service.cost_rollup_service import CostRollupService
 from argus.backend.service.run_cost_service import CostItemRequest, RunCostService
-from argus.backend.tests.conftest import get_fake_test_run
+from argus.backend.tests.util import get_fake_test_run
 from argus.backend.tests.cost_rollup.helpers import rollup_rows, submitted_run
 from argus.common.enums import TestStatus
 

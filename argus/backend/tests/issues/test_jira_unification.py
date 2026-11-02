@@ -17,7 +17,7 @@ from argus.backend.models.jira import JiraIssue
 from argus.backend.service.jira_service import JiraService, JiraServiceException
 from argus.backend.service.stats import fetch_issues
 from argus.backend.service.views_widgets.graphed_stats import GraphedStatsService
-from argus.backend.tests.conftest import get_fake_test_run
+from argus.backend.tests.util import get_fake_test_run
 
 
 @pytest.fixture

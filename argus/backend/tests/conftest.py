@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from argus.backend.service.results_service import ResultsService
 from argus.backend.service.release_manager import ReleaseManagerService
 from argus.backend.service.client_service import ClientService
-from argus.backend.plugins.sct.testrun import SCTTestRunSubmissionRequest
 from argus.backend.models.web import ArgusTest, ArgusGroup, ArgusRelease, User, UserRoles
 from argus.backend.db import ScyllaCluster
 from argus.backend.cli import sync_models
@@ -404,34 +403,6 @@ def results_service(argus_db):
 @fixture(scope='session')
 def issue_service(argus_db) -> IssueService:
     return IssueService(True)
-
-
-def get_fake_test_run(
-        test: ArgusTest,
-        schema_version: str = "1.0.0",
-        job_url: str = "http://example.com/job/42",
-        started_by: str = "default_user",
-        commit_id: str = "default_commit_id",
-        sct_config: dict | None = None,
-        origin_url: str | None = None,
-        branch_name: str | None = "main",
-        runner_public_ip: str | None = None,
-        runner_private_ip: str | None = None
-) -> tuple[str, SCTTestRunSubmissionRequest]:
-    run_id = str(uuid.uuid4())
-    return "scylla-cluster-tests", SCTTestRunSubmissionRequest(
-        schema_version=schema_version,
-        run_id=run_id,
-        job_name=test.build_system_id,
-        job_url=job_url,
-        started_by=started_by,
-        commit_id=commit_id,
-        sct_config=sct_config,
-        origin_url=origin_url,
-        branch_name=branch_name,
-        runner_public_ip=runner_public_ip,
-        runner_private_ip=runner_private_ip
-    )
 
 
 @fixture(scope='session')
