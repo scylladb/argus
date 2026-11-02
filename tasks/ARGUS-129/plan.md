@@ -60,9 +60,10 @@ with `delete_group`, `delete_test`, `delete_run`, and the private
 `plugin.model.find(build_id=...)` for every plugin with
 `find(test_id=...)`, keyed by run id. `_delete_run_rows` removes the
 comments, the events, the issue links, the run configuration rows and the
-`RunConfigParam` rows they name, the pytest rows, the generic
-result rows of the run under each metadata name, the four embedding tables,
-then calls `plugin.model.delete_run_data(run.id)` and deletes the run.
+`RunConfigParam` rows they name, the pytest rows with their user fields,
+the generic result rows and best rows of the run under each metadata name
+and the four embedding tables, then calls `plugin.model.delete_run_data(run.id)`
+and deletes the run.
 `_delete_test_results` removes the generic result metadata, data and best
 partitions and the graph views of the test. `delete_test` then calls
 `ReleaseManagerService.delete_test`; `delete_group` cascades through the

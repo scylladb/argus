@@ -687,9 +687,10 @@ Removes one run of the test. The call answers the error envelope when the
 run belongs to another test.
 
 A removed run takes its comments, events, issue links, configuration,
-pytest results, generic result rows and the plugin's own rows with it. Its
-cost rows stay. A removed test also takes its generic result metadata, best
-results and graph views.
+pytest results with their user fields, generic result rows, the best
+results it holds and the plugin's own rows with it. Its cost rows stay. A
+removed test also takes its generic result metadata, best results and graph
+views.
 
 ```json
 {"status": "ok", "response": {"deleted": "a7b1c2d3-0000-4000-8000-000000000412"}}
