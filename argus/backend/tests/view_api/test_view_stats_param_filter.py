@@ -5,7 +5,7 @@ from dataclasses import asdict
 
 import pytest
 
-from argus.backend.tests.conftest import get_fake_test_run
+from argus.backend.tests.util import get_fake_test_run
 from argus.backend.util.encoders import ArgusJSONEncoder
 
 PARAM = "sct_config.unified_package"

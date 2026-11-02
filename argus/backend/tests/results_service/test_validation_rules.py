@@ -6,7 +6,8 @@ from uuid import UUID
 import pytest
 
 from argus.backend.error_handlers import DataValidationError
-from argus.backend.tests.conftest import get_fake_test_run, fake_test
+from argus.backend.tests.conftest import fake_test
+from argus.backend.tests.util import get_fake_test_run
 from argus.client.generic_result import ColumnMetadata, ResultType, ValidationRule, Status, StaticGenericResultTable
 
 LOGGER = logging.getLogger(__name__)

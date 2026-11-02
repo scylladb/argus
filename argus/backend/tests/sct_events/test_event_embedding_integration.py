@@ -14,7 +14,7 @@ from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTUnp
 from argus.backend.service.client_service import ClientService
 from argus.backend.plugins.sct.service import SCTService
 from argus.backend.service.testrun import TestRunService
-from argus.backend.tests.conftest import get_fake_test_run
+from argus.backend.tests.util import get_fake_test_run
 from argus.common.sct_types import RawEventPayload
 from argusAI.event_similarity_processor_v2 import EventSimilarityProcessorV2
 
