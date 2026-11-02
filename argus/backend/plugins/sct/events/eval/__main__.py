@@ -1,6 +1,6 @@
 """CLI: run the evaluation sweep and render the report.
 
-    python -m argusAI.eval --config argusAI/eval/config.example.yaml
+    python -m argus.backend.plugins.sct.events.eval --config argus/backend/plugins/sct/events/eval/config.example.yaml
 
 Sub-modes:
     --fetch-only     collect events into out/events.json and stop (no API calls)
@@ -67,7 +67,7 @@ def _setup_logging(verbose: bool) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m argusAI.eval", description=__doc__)
+    parser = argparse.ArgumentParser(prog="python -m argus.backend.plugins.sct.events.eval", description=__doc__)
     parser.add_argument("--config", required=True, help="path to eval YAML config")
     parser.add_argument("--fetch-only", action="store_true", help="only collect events, no API calls")
     parser.add_argument("--report-only", action="store_true", help="only re-render report from results.json")

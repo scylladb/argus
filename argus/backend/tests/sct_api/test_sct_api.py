@@ -904,6 +904,26 @@ def test_get_similar_events_empty_for_fresh_run(api_client, sct_run_id):
     assert body["response"] == []
 
 
+def test_similar_events_realtime_finds_the_same_error_in_another_run(api_client, fake_test, sct_run_id):
+    other_run_id = _submit_sct_run(api_client, fake_test)
+    ts = clamp_ts_to_milliseconds(datetime.datetime.now(tz=datetime.UTC).timestamp())
+    message = f"Reactor stalled for 512 ms on shard 3, marker {uuid4().hex}"
+    _submit_event(api_client, other_run_id, "ERROR", message, ts)
+    _submit_event(api_client, sct_run_id, "ERROR", message, ts)
+
+    query = {"severity": "ERROR", "ts": datetime.datetime.fromtimestamp(ts, tz=datetime.UTC).isoformat(), "limit": 10}
+    similar_run_ids: list[str] = []
+    deadline = time.monotonic() + 60
+    while other_run_id not in similar_run_ids and time.monotonic() < deadline:
+        resp = api_client.post(f"{API_PREFIX}/{sct_run_id}/event/similar", json=query)
+        assert resp.status_code == 200, resp.text
+        similar_run_ids = [event["run_id"] for event in resp.json()["response"]]
+        time.sleep(1)
+
+    assert other_run_id in similar_run_ids
+    assert sct_run_id not in similar_run_ids
+
+
 def test_similar_runs_info_for_run_without_issues(api_client, sct_run_id):
     """Without any IssueLink rows the endpoint still returns a populated entry
     (build_id, start_time, version) for every requested run id."""

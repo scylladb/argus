@@ -42,8 +42,8 @@ class EvalConfig:
     max_events: int | None = 30
     events_file: Path | None = None  # reuse a saved events.json instead of refetching
     similarity_dedup: bool = False  # collapse semantically-similar events (mirrors production)
-    similarity_threshold: float = 0.05  # cosine distance; matches the worker
-    min_event_tokens: int = 150  # skip shorter events; matches the worker's EVENT_SUMMARIZATION_MIN_TOKENS
+    similarity_threshold: float = 0.05  # cosine distance; matches the processor
+    min_event_tokens: int = 150  # skip shorter events; matches the processor's EVENT_SUMMARIZATION_MIN_TOKENS
 
     # --- how to summarize ---
     models: list[ModelSpec] = field(default_factory=list)
@@ -63,7 +63,7 @@ class EvalConfig:
     # --- infra ---
     argus_cli: str | None = None
     no_cache: bool = False
-    output_dir: Path = Path("argusAI/eval/out")
+    output_dir: Path = Path("argus/backend/plugins/sct/events/eval/out")
     pricing: dict[str, dict] = field(default_factory=dict)
 
     @property
@@ -126,7 +126,7 @@ class EvalConfig:
             max_concurrency=int(raw.get("max_concurrency", 4)),
             argus_cli=raw.get("argus_cli"),
             no_cache=bool(raw.get("no_cache", False)),
-            output_dir=Path(raw.get("output_dir", "argusAI/eval/out")),
+            output_dir=Path(raw.get("output_dir", "argus/backend/plugins/sct/events/eval/out")),
             pricing=dict(raw.get("pricing", {})),
         )
         if not cfg.models:

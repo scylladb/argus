@@ -5,7 +5,9 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from argusAI.prompts import PRODUCTION_PROMPT_NAME, load_prompt
+import anthropic
+
+from argus.backend.plugins.sct.events.prompts import PRODUCTION_PROMPT_NAME, load_prompt
 
 LOGGER = logging.getLogger(__name__)
 
@@ -44,14 +46,6 @@ class Summarizer:
     ):
         if not api_key:
             raise SummarizerError("Summarizer requires an API key")
-        try:
-            import anthropic  # noqa: PLC0415 - lazy: anthropic is an optional ('ai' / 'ai-eval') dependency
-        except ImportError as exc:  # pragma: no cover - dependency guard
-            raise SummarizerError(
-                "The 'anthropic' package is required for summarization. Install it via the 'ai' "
-                "optional dependency group (production worker) or 'ai-eval' (evaluation harness)."
-            ) from exc
-
         client_kwargs: dict[str, Any] = {
             "api_key": api_key,
             "timeout": timeout,

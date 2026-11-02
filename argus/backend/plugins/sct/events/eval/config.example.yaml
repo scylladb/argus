@@ -16,16 +16,16 @@ max_events: 25              # cap the unique-event set so a sweep stays cheap
 
 # Collapse semantically-similar events the way production does (sanitize -> BGE embed ->
 # cosine distance < threshold), instead of only exact-string dedup. Gives the true canonical
-# set production would summarize. Needs the 'ai-eval' extra (onnxruntime); downloads the BGE model.
+# set production would summarize. Downloads the BGE model on first use.
 similarity_dedup: false
-similarity_threshold: 0.05  # cosine distance; matches the worker (0.05 ≈ 95% similar)
+similarity_threshold: 0.05  # cosine distance; matches the processor (0.05 ≈ 95% similar)
 
-# Skip events shorter than this many tokens, like the worker's EVENT_SUMMARIZATION_MIN_TOKENS.
+# Skip events shorter than this many tokens, like the processor's EVENT_SUMMARIZATION_MIN_TOKENS.
 # Set 0 to score every event.
 min_event_tokens: 150
 
 # Reuse a previously fetched set instead of hitting Argus again (from a --fetch-only run):
-# events_file: argusAI/eval/out/events.json
+# events_file: argus/backend/plugins/sct/events/eval/out/events.json
 
 # --- Models to compare -------------------------------------------------------
 # `params` are passed straight through to the Messages API call, so each model gets the knobs
@@ -40,9 +40,9 @@ models:
     label: sonnet-5-no-thinking
     params: { thinking: { type: disabled } }
 
-# --- Prompts to sweep (file stems from argusAI/prompts/vN_*.md) ---------------
+# --- Prompts to sweep (file stems from argus/backend/plugins/sct/events/prompts/vN_*.md) ---------------
 # List several to A/B them on the same events; one is enough once a winner is picked.
-# Add a new argusAI/prompts/vN_*.md file to introduce a new candidate.
+# Add a new argus/backend/plugins/sct/events/prompts/vN_*.md file to introduce a new candidate.
 prompts:
   - v3_compact        # production: labeled triage card, collapses backtrace and traceback glue
   - v1_surgical       # verbatim-leaning, high coverage
@@ -60,7 +60,7 @@ request_timeout: 90
 max_concurrency: 4           # bounded, to respect rate limits
 # argus_cli: /Users/you/bin/argus   # defaults to PATH, then ~/bin/argus
 no_cache: false
-output_dir: argusAI/eval/out
+output_dir: argus/backend/plugins/sct/events/eval/out
 
 # --- Pricing (USD per 1M tokens) — override the placeholders with real numbers -
 # Unknown models cost $0 and are flagged in the report.

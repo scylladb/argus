@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from argusAI.utils.summarizer import Summarizer, SummarizerError
+from argus.backend.plugins.sct.events.summarizer import Summarizer, SummarizerError
 
 
 def _response(text="short summary", stop_reason="end_turn", **usage):

@@ -7,8 +7,8 @@ name: Release on PyPI and GitHub
 #   - the argus-alm and pytest-argus-reporter wheels, published to PyPI as
 #     before and attached to the release;
 #   - one .tar.zst bundle per architecture, with a sha256 beside each. A
-#     bundle carries the web application, the argusAI worker, the built
-#     frontend, its own CPython and every locked dependency. The target host
+#     bundle carries the web application, the built frontend, its own
+#     CPython and every locked dependency. The target host
 #     needs glibc 2.34 or later and nothing else. roles/argus in
 #     scylladb/qatools downloads, verifies and installs it.
 #
@@ -185,7 +185,7 @@ jobs:
               -v "${RUNNER_TEMP}/verify:/opt/argus" \
               -w "/opt/argus/argus-${VERSION}" \
               "${{ matrix.image }}" \
-              sh -c 'bin/argus-cli --help >/dev/null && ./python/bin/python3.13 -c "import argus_backend, argusAI.event_similarity_processor_v2, argus.backend.service.health.__main__, qatools_health" && echo "runs from /opt/argus: ok"'
+              sh -c 'bin/argus-cli --help >/dev/null && ./python/bin/python3.13 -c "import argus_backend, argus.backend.plugins.sct.events.processor, argus.backend.service.health.__main__, qatools_health" && echo "runs from /opt/argus: ok"'
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
