@@ -1,10 +1,12 @@
 import asyncio
 import datetime
 import logging
+import time
 from uuid import UUID, uuid4
 
 import pytest
 from click.testing import CliRunner
+from starlette.testclient import TestClient
 
 from argus.backend.cli import process_event_queue_command
 
@@ -12,6 +14,7 @@ from argus.backend.plugins.sct.events import summary_dispatcher as sd
 from argus.backend.plugins.sct.events.processor import get_event_processor
 from argus.backend.plugins.sct.events.summarizer import SummarizationResult
 from argus.backend.plugins.sct.events.summary_dispatcher import SummaryDispatcher
+from argus.backend.tests.conftest import StubEmbeddingModel
 from argus.backend.tests.sct_events.helpers import queued, stored_embedding
 from argus.common.utils import clamp_ts_to_milliseconds
 
@@ -142,3 +145,17 @@ def test_the_sweep_command_processes_a_row_a_failed_task_left(api_client, sct_ru
     assert result.exit_code == 0, result.output
     assert asyncio.run(stored_embedding(UUID(sct_run_id), "ERROR", _dt(ts))) is not None
     assert asyncio.run(queued(UUID(sct_run_id))) == []
+
+
+def test_the_app_builds_the_processor_and_loads_the_model_at_startup(asgi_app, monkeypatch):
+    loads = []
+    monkeypatch.setattr(StubEmbeddingModel, "load", lambda self: loads.append(self))
+    get_event_processor.cache_clear()
+
+    with TestClient(asgi_app):
+        deadline = time.monotonic() + 10
+        while not loads and time.monotonic() < deadline:
+            time.sleep(0.05)
+
+    assert get_event_processor.cache_info().currsize == 1
+    assert loads == [get_event_processor()._embedder.model]

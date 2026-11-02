@@ -75,6 +75,12 @@ class EventProcessor:
                         )
         await self._dispatcher.summarize(unique)
 
+    async def load_model(self) -> None:
+        try:
+            await asyncio.get_running_loop().run_in_executor(self._executor, self._embedder.load)
+        except Exception:  # noqa: BLE001 - events stay queued until a later load succeeds
+            LOGGER.exception("Could not load the embedding model; queued events wait for the next attempt")
+
     async def sweep(self, min_age: timedelta) -> int:
         cutoff = datetime.now(tz=UTC) - min_age
         stale = [
@@ -135,3 +141,10 @@ class EventProcessor:
 @cache
 def get_event_processor() -> EventProcessor:
     return EventProcessor(EventEmbedder(), SummaryDispatcher(Config.load_yaml_config()))
+
+
+async def start_event_processor() -> asyncio.Task:
+    """Build the processor when a worker starts, and load the model on the embedding thread
+    without holding the start: events submitted meanwhile wait behind the load."""
+    processor = await asyncio.to_thread(get_event_processor)
+    return asyncio.create_task(processor.load_model())

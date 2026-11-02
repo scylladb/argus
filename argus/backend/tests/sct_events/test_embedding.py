@@ -169,6 +169,28 @@ def test_retries_a_failed_request_then_succeeds(model_dir, archive, requests_moc
     assert sleeps == [1, 2]
 
 
+def test_a_failed_load_waits_out_the_cool_down_before_the_next_attempt(model_dir, archive, requests_mock, sleeps,
+                                                                      monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(embedding.time, "monotonic", lambda: clock[0])
+    requests_mock.get(BgeSmallEnEmbeddingModel.MODEL_DOWNLOAD_URL, content=b"not the model")
+    model = BgeSmallEnEmbeddingModel()
+
+    with pytest.raises(EmbeddingModelError):
+        model(["two words"])
+    clock[0] += BgeSmallEnEmbeddingModel.RETRY_AFTER - 1
+    with pytest.raises(EmbeddingModelError):
+        model(["two words"])
+
+    assert requests_mock.call_count == 3
+
+    requests_mock.get(BgeSmallEnEmbeddingModel.MODEL_DOWNLOAD_URL, content=archive)
+    clock[0] += 1
+
+    assert len(model(["two words"])) == 1
+    assert requests_mock.call_count == 4
+
+
 def test_a_failed_download_leaves_an_archive_another_process_published(model_dir, archive, requests_mock, sleeps):
     def publish_then_serve_garbage(request, context):
         model_dir.mkdir(parents=True, exist_ok=True)

@@ -314,6 +314,9 @@ class StubEmbeddingModel:
     """Stands in for the BGE model: the same text gives the same unit vector, different texts
     give vectors far apart, and nothing is downloaded."""
 
+    def load(self) -> None:
+        pass
+
     def __call__(self, texts: list[str]) -> list[np.ndarray]:
         vectors = []
         for text in texts:

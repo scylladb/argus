@@ -38,8 +38,9 @@ async def _submit(sct_service: SCTService, run_id: UUID, severity: str, message:
 
 
 async def test_error_and_critical_events_get_embeddings_in_their_tables(processor, sct_service, run_id):
-    error = await _submit(sct_service, run_id, "ERROR", STALL)
-    critical = await _submit(sct_service, run_id, "CRITICAL", "Scylla process aborted on node-2")
+    now = datetime.now(tz=UTC).timestamp()
+    error = await _submit(sct_service, run_id, "ERROR", STALL, now)
+    critical = await _submit(sct_service, run_id, "CRITICAL", "Scylla process aborted on node-2", now + 1)
 
     await processor.process([error, critical])
 

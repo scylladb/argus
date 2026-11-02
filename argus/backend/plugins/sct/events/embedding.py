@@ -51,18 +51,33 @@ class BgeSmallEnEmbeddingModel:
     MAX_TOKENS: int = 256
     BATCH_SIZE: int = 32
     DOWNLOAD_ATTEMPTS: int = 3
+    RETRY_AFTER: float = 300.0
 
     def __init__(self) -> None:
         self._tokenizer: Tokenizer | None = None
         self._session: ort.InferenceSession | None = None
+        self._failed_at: float | None = None
 
     def __call__(self, texts: list[str]) -> list[np.ndarray]:
-        if self._session is None:
-            self._load()
+        self.load()
         vectors = []
         for start in range(0, len(texts), self.BATCH_SIZE):
             vectors.extend(self._embed_batch(texts[start : start + self.BATCH_SIZE]))
         return vectors
+
+    def load(self) -> None:
+        """Load the model once. After a failure, raise at once until RETRY_AFTER has passed, so a
+        missing model does not cost every event a full download attempt."""
+        if self._session is not None:
+            return
+        if self._failed_at is not None and time.monotonic() - self._failed_at < self.RETRY_AFTER:
+            raise EmbeddingModelError(f"{self.MODEL_NAME} is unavailable after a failed load; retrying later")
+        try:
+            self._load()
+        except Exception:
+            self._failed_at = time.monotonic()
+            raise
+        self._failed_at = None
 
     def _load(self) -> None:
         model_dir = self.DOWNLOAD_PATH / self.EXTRACTED_FOLDER_NAME
@@ -149,6 +164,9 @@ class EventEmbedder:
     def __init__(self):
         self.sanitizer = MessageSanitizer()
         self.model = BgeSmallEnEmbeddingModel()
+
+    def load(self) -> None:
+        self.model.load()
 
     def embed(self, message: str) -> np.ndarray:
         sanitized = self.sanitizer.sanitize(message)
