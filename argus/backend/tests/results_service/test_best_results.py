@@ -7,7 +7,8 @@ import pytest
 
 from argus.backend.error_handlers import DataValidationError
 from argus.backend.plugins.sct.testrun import SCTTestRun
-from argus.backend.tests.conftest import get_fake_test_run, fake_test
+from argus.backend.tests.conftest import fake_test
+from argus.backend.tests.util import get_fake_test_run
 from argus.common.enums import TestInvestigationStatus
 from argus.client.generic_result import ColumnMetadata, ResultType, ValidationRule, Status, StaticGenericResultTable
 

@@ -31,7 +31,8 @@ from argus.backend.models.web import (
     ReleaseStatsSnapshot,
 )
 from argus.backend.service.stats import snapshot_filter_key, ReleaseStatsCollector
-from argus.backend.tests.conftest import g, get_fake_test_run
+from argus.backend.tests.conftest import g
+from argus.backend.tests.util import get_fake_test_run
 from argus.common.enums import TestStatus
 
 
