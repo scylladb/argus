@@ -1,10 +1,10 @@
-"""Semantic (embedding) deduplication for the eval, mirroring the production worker.
+"""Semantic (embedding) deduplication for the eval, mirroring the production processor.
 
 The harness's default collection dedups by exact message string, but production
-(event_similarity_processor_v2) dedups by *similarity*: it embeds the sanitized message
+(the SCT event processor) dedups by *similarity*: it embeds the sanitized message
 with BGE-small-en and treats two events as the same when their cosine distance is < 0.05
 (i.e. > 0.95 similarity). This module runs that same pipeline — via the shared
-``EventEmbedder`` the worker uses — over a collected set, so the eval measures the true
+``EventEmbedder`` the processor uses — over a collected set, so the eval measures the true
 canonical set production would summarize.
 
 Collapsed events are merged into the canonical's ``repeats`` count (as production folds
@@ -17,13 +17,13 @@ import logging
 
 from numpy import array
 
-from argusAI.utils.embedding import EventEmbedder, cosine
+from argus.backend.plugins.sct.events.embedding import EventEmbedder, cosine
 
 from .events_source import EventSample
 
 LOGGER = logging.getLogger(__name__)
 
-# Production's duplicate threshold (event_similarity_processor_v2.py): cosine distance
+# Production's duplicate threshold (processor.py): cosine distance
 # below this means "same event". Distance is 1 - cosine similarity, so 0.05 ≈ 95% similar.
 DEFAULT_DISTANCE_THRESHOLD = 0.05
 
@@ -32,12 +32,12 @@ def deduplicate_by_similarity(
     events: list[EventSample], threshold: float = DEFAULT_DISTANCE_THRESHOLD
 ) -> list[EventSample]:
     """Collapse semantically-similar events into their first-seen canonical, using the same
-    sanitize→embed pipeline as the worker. Returns only the canonicals, each with absorbed
+    sanitize→embed pipeline as the processor. Returns only the canonicals, each with absorbed
     duplicates added to its ``repeats``."""
     if len(events) < 2:
         return events
 
-    embeddings = [array(v, dtype=float) for v in EventEmbedder(write_log=False).embed_many([e.message for e in events])]
+    embeddings = [array(v, dtype=float) for v in EventEmbedder().embed_many([e.message for e in events])]
 
     canonicals: list[int] = []  # indices of kept events
     collapsed = 0

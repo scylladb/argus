@@ -7,13 +7,14 @@ no model is needed on disk.
 import hashlib
 import io
 import tarfile
+from pathlib import Path
 
 import numpy as np
 import pytest
 import requests
 
-from argusAI.utils import embedding
-from argusAI.utils.embedding import BgeSmallEnEmbeddingModel, EmbeddingModelError, cosine
+from argus.backend.plugins.sct.events import embedding
+from argus.backend.plugins.sct.events.embedding import BgeSmallEnEmbeddingModel, EmbeddingModelError, cosine
 
 SEQUENCE_LENGTH = 4
 # One row per token position. Positions 2 and 3 are padding in a two-word text and must not count.
@@ -166,6 +167,57 @@ def test_retries_a_failed_request_then_succeeds(model_dir, archive, requests_moc
     assert len(vectors) == 1
     assert requests_mock.call_count == 3
     assert sleeps == [1, 2]
+
+
+def test_a_failed_download_leaves_an_archive_another_process_published(model_dir, archive, requests_mock, sleeps):
+    def publish_then_serve_garbage(request, context):
+        model_dir.mkdir(parents=True, exist_ok=True)
+        (model_dir / "onnx.tar.gz").write_bytes(archive)
+        return b"not the model"
+
+    requests_mock.get(BgeSmallEnEmbeddingModel.MODEL_DOWNLOAD_URL, content=publish_then_serve_garbage)
+
+    with pytest.raises(EmbeddingModelError):
+        BgeSmallEnEmbeddingModel()._download(model_dir / "onnx.tar.gz")
+
+    assert (model_dir / "onnx.tar.gz").read_bytes() == archive
+    assert [path.name for path in model_dir.iterdir()] == ["onnx.tar.gz"]
+
+
+def test_a_failed_extraction_publishes_no_model_directory(model_dir, archive, monkeypatch):
+    model_dir.mkdir()
+    (model_dir / "onnx.tar.gz").write_bytes(archive)
+
+    def extract_one_file_then_fail(self, path, *args, **kwargs):
+        (Path(path) / "onnx").mkdir(parents=True, exist_ok=True)
+        (Path(path) / "onnx" / "model.onnx").touch()
+        raise OSError("disk full")
+
+    monkeypatch.setattr(tarfile.TarFile, "extractall", extract_one_file_then_fail)
+
+    with pytest.raises(OSError):
+        BgeSmallEnEmbeddingModel()(["two words"])
+
+    assert [path.name for path in model_dir.iterdir()] == ["onnx.tar.gz"]
+
+
+def test_extraction_keeps_the_model_another_process_published_first(model_dir, archive, monkeypatch):
+    model_dir.mkdir()
+    (model_dir / "onnx.tar.gz").write_bytes(archive)
+    extractall = tarfile.TarFile.extractall
+
+    def publish_a_rival_copy_then_extract(self, path, *args, **kwargs):
+        (model_dir / "onnx").mkdir()
+        (model_dir / "onnx" / "model.onnx").write_text("rival")
+        (model_dir / "onnx" / "tokenizer.json").write_text("rival")
+        return extractall(self, path, *args, **kwargs)
+
+    monkeypatch.setattr(tarfile.TarFile, "extractall", publish_a_rival_copy_then_extract)
+
+    BgeSmallEnEmbeddingModel()(["two words"])
+
+    assert (model_dir / "onnx" / "model.onnx").read_text() == "rival"
+    assert sorted(path.name for path in model_dir.iterdir()) == ["onnx", "onnx.tar.gz"]
 
 
 def test_cosine_is_zero_for_parallel_and_one_for_orthogonal_vectors():

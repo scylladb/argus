@@ -1,20 +1,15 @@
-"""Prometheus metrics for the event-summarization worker.
+"""Prometheus metrics for event summarization.
 
-The similarity worker runs as its own process (not under uWSGI), so it exposes its own
-scrape endpoint via prometheus_client instead of the Flask exporter. Series are labeled by
-`model` so production behaviour lines up directly against the offline eval sweep in
-argusAI/eval: input/output token sizes, compression ratio, latency and volume are the same
-axes the harness reports, letting you check whether a model that won on the eval set behaves
-the same on live traffic (and re-baseline when the model or prompt changes).
+The series reach the backend's /metrics endpoint. They are labeled by `model` so production
+behaviour lines up directly against the offline eval sweep in `eval/`: input/output token
+sizes, compression ratio, latency and volume are the same axes the harness reports, letting
+you check whether a model that won on the eval set behaves the same on live traffic (and
+re-baseline when the model or prompt changes).
 """
 
 from __future__ import annotations
 
-import logging
-
-from prometheus_client import Counter, Histogram, start_http_server
-
-LOGGER = logging.getLogger(__name__)
+from prometheus_client import Counter, Histogram
 
 _NS = "argus_event_summarization"
 
@@ -94,13 +89,3 @@ def record_success(
     LAG.labels(model).observe(lag_seconds)
     if cached_tokens:
         CACHED_PROMPT_TOKENS.labels(model).inc(cached_tokens)
-
-
-def start_metrics_server(port: int) -> None:
-    """Serve the default registry on `port` for Prometheus to scrape. Failures are logged
-    and swallowed — metrics exposure must never take down the summarization worker."""
-    try:
-        start_http_server(port)
-        LOGGER.info("Event summarization metrics exposed on :%d/metrics", port)
-    except Exception as exc:  # noqa: BLE001 - metrics must never break the worker
-        LOGGER.warning("Could not start summarization metrics server on :%d: %s", port, exc)

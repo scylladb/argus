@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 from pydantic import Field
 from coodie import Ascii, ClusteringKey, Double, Frozen, Indexed, PrimaryKey
 from coodie.exceptions import DocumentNotFound
-from coodie.aio import Document, execute_raw
+from coodie.aio import Document
 
 from argus.backend.models.run_config import RunConfigParamByRun
 from argus.backend.models.web import ArgusRelease, ArgusTest, ReleaseDistinctVersions, ReleaseDistinctImages
@@ -102,7 +102,7 @@ class SCTEvent(Document):
     event_type: Optional[str] = None
     message: str
     duplicate_id: Optional[UUID] = None
-    summary: Optional[str] = None  # LLM-generated summary; null until/unless summarized (see argusAI)
+    summary: Optional[str] = None  # LLM-generated summary; null until/unless summarized (see events/)
 
     # DB Log columns
     node: Optional[str] = None
@@ -122,10 +122,11 @@ class SCTEvent(Document):
 
 
 class SCTUnprocessedEvent(Document):
-    """Table to track events that need embedding generation."""
+    """ERROR and CRITICAL events the event processor has not handled yet."""
     run_id: Annotated[UUID, PrimaryKey()]
     severity: Annotated[str, ClusteringKey(clustering_key_index=0)]
     ts: Annotated[datetime, ClusteringKey(order="DESC", clustering_key_index=1)]
+    queued_at: Optional[datetime] = None
 
     class Settings:
         name = "sct_unprocessed_events"
@@ -427,25 +428,15 @@ class SCTTestRun(PluginModelBase):
     async def get_events_limited(cls, run_id: UUID, before: datetime | None = None, after: datetime | None = None,
                                  severities: list[SCTEventSeverity] = None,
                                  per_partition_limit: int = 100) -> list[dict]:
-        query = f"SELECT * FROM {SCTEvent._get_keyspace()}.{SCTEvent.table_name()} WHERE run_id = ? AND severity IN ?"
-        params = [run_id]
-        if severities:
-            severity_filter = [s.value for s in severities]
-        else:
-            severity_filter = [s.value for s in list(SCTEventSeverity)]
-        params.append(severity_filter)
+        severity_filter = [s.value for s in (severities or SCTEventSeverity)]
+        query = SCTEvent.find(run_id=run_id, severity__in=severity_filter)
         if before:
-            query += " AND ts <= ?"
-            params.append(before)
+            query = query.filter(ts__lte=before)
         if after:
-            query += " AND ts >= ?"
-            params.append(after)
-        query += " PER PARTITION LIMIT ?"
-        params.append(per_partition_limit)
+            query = query.filter(ts__gte=after)
+        events = await query.per_partition_limit(per_partition_limit).all()
 
-        result = await execute_raw(query, params)
-
-        return sorted(result, key=lambda evt: evt["ts"])
+        return sorted((event.model_dump() for event in events), key=lambda evt: evt["ts"])
 
     async def get_all_events(self):
         return await SCTEvent.find(run_id=self.id, severity__in=[s.value for s in list(SCTEventSeverity)]).all()

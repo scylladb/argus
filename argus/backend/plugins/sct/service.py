@@ -15,13 +15,13 @@ from xml.etree import ElementTree
 from cassandra import DriverException
 from cassandra.cluster import NoHostAvailable
 from cassandra.util import uuid_from_time
-from coodie.aio import execute_raw
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
 from argus.backend.models.web import ArgusEventTypes, CriticalEventEmbeddings, ErrorEventEmbeddings, User
 from argus.backend.models.argus_ai import SCTErrorEventEmbedding, SCTCriticalEventEmbedding
+from argus.backend.plugins.sct.events.processor import QueuedEvent
 from argus.backend.plugins.sct.testrun import (
     SPOT_TERMINATION_EVENT,
     SCTEvent,
@@ -45,7 +45,6 @@ from argus.backend.plugins.sct.udt import (
 from argus.backend.service.cost_rollup_service import CostRollupService
 from argus.backend.service.event_service import EventService
 from argus.backend.util.common import chunk, gather_limited
-from argus.backend.util.config import Config
 from argus.common.enums import NemesisStatus, ResourceState, TestStatus
 from argus.common.utils import clamp_ts_to_milliseconds
 
@@ -535,16 +534,17 @@ class SCTService:
         return "updated"
 
     @classmethod
-    async def submit_events(cls, run_id: UUID, raw_events: list[RawEventPayload]) -> bool:
-        async def submit_one(raw_event: RawEventPayload) -> CoredumpLink | Exception | None:
+    async def submit_events(cls, run_id: UUID, raw_events: list[RawEventPayload]) -> list[QueuedEvent]:
+        async def submit_one(raw_event: RawEventPayload) -> tuple[CoredumpLink | None, QueuedEvent | None] | Exception:
             try:
                 return await cls.submit_event(run_id=run_id, raw_event=raw_event)
             except Exception as exc:  # noqa: BLE001 - re-raised below once the stored links are written
                 return exc
 
         outcomes = await gather_limited(submit_one(raw_event) for raw_event in raw_events)
-        coredump_links = [outcome for outcome in outcomes if isinstance(outcome, dict)]
         failures = [outcome for outcome in outcomes if isinstance(outcome, Exception)]
+        submitted = [outcome for outcome in outcomes if not isinstance(outcome, Exception)]
+        coredump_links = [link for link, _ in submitted if link]
         if coredump_links:
             try:
                 run: SCTTestRun = await SCTTestRun.get(id=run_id)
@@ -554,10 +554,12 @@ class SCTService:
                 LOGGER.warning("Unable to attach coredump links to run %s.", run_id, exc_info=True)
         if failures:
             raise failures[0]
-        return True
+        return [queued for _, queued in submitted if queued]
 
     @classmethod
-    async def submit_event(cls, run_id: UUID, raw_event: RawEventPayload) -> CoredumpLink | None:
+    async def submit_event(
+        cls, run_id: UUID, raw_event: RawEventPayload
+    ) -> tuple[CoredumpLink | None, QueuedEvent | None]:
         req = EventSubmitRequest(**raw_event)
 
         event = SCTEvent.model_construct()
@@ -591,21 +593,22 @@ class SCTService:
                 "Unable to parse event for coredump links.", exc_info=True)
         if (event.event_type or "").lower() == SPOT_TERMINATION_EVENT:
             await cls._refresh_cost_rollup(run_id)
-        # Add to unprocessed events queue for ERROR and CRITICAL events
-        if event.severity in (SCTEventSeverity.ERROR.value, SCTEventSeverity.CRITICAL.value):
-            try:
-                unprocessed_event = SCTUnprocessedEvent.model_construct()
-                unprocessed_event.run_id = event.run_id
-                unprocessed_event.severity = event.severity
-                unprocessed_event.ts = event.ts
-                await unprocessed_event.save()
-                LOGGER.debug(f"Added event to unprocessed queue: run_id={
-                             run_id}, severity={event.severity}, ts={event.ts}")
-            except Exception as e:
-                LOGGER.error(f"Failed to add event to unprocessed queue: {
-                             e}", exc_info=True)
+        if event.severity not in (SCTEventSeverity.ERROR.value, SCTEventSeverity.CRITICAL.value):
+            return coredump_link, None
+        try:
+            unprocessed_event = SCTUnprocessedEvent.model_construct()
+            unprocessed_event.run_id = event.run_id
+            unprocessed_event.severity = event.severity
+            unprocessed_event.ts = event.ts
+            unprocessed_event.queued_at = datetime.now(tz=UTC)
+            await unprocessed_event.save()
+            LOGGER.debug(f"Added event to unprocessed queue: run_id={
+                         run_id}, severity={event.severity}, ts={event.ts}")
+        except Exception as e:
+            LOGGER.error(f"Failed to add event to unprocessed queue: {
+                         e}", exc_info=True)
 
-        return coredump_link
+        return coredump_link, QueuedEvent(run_id=event.run_id, severity=event.severity, ts=event.ts)
 
     @staticmethod
     async def get_events(run_id: UUID, limit: int, severities: list[str], before: str | None,
@@ -756,32 +759,26 @@ class SCTService:
                                run_id}, severity={severity}, ts={event_ts}")
                 return []
 
-            query_embedding = query_embedding_result.embedding
-
-            table_name = embedding_model.table_name()
-            keyspace = embedding_model.Settings.keyspace or Config.load_yaml_config()["SCYLLA_KEYSPACE_NAME"]
-
-            query = f"""
-                SELECT run_id, ts
-                FROM {keyspace}.{table_name}
-                ORDER BY embedding ANN OF ?
-                LIMIT ?
-            """
-
-            result_rows = await execute_raw(query, [query_embedding, limit + 1])
+            result_rows = await (
+                embedding_model.find()
+                .order_by_ann("embedding", query_embedding_result.embedding)
+                .limit(limit + 1)
+                .only("run_id", "ts")
+                .all()
+            )
 
             similar_events = []
             visited_run_ids = {str(run_id)}  # Skip current run_id
             for row in result_rows:
-                if str(row['run_id']) in visited_run_ids:
+                if str(row.run_id) in visited_run_ids:
                     continue
 
                 similar_events.append({
-                    "run_id": str(row["run_id"]),
+                    "run_id": str(row.run_id),
                     "severity": severity,
-                    "ts": row["ts"],
+                    "ts": row.ts,
                 })
-                visited_run_ids.add(str(row['run_id']))
+                visited_run_ids.add(str(row.run_id))
 
             return similar_events
 

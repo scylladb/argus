@@ -2,7 +2,7 @@
 
 The unit of work is one (event, model, prompt) triple. All triples are independent, so
 they run on a bounded thread pool (``max_concurrency``) — the same rate-limit guard the
-production worker uses. A failed triple is recorded with its error and never aborts the
+production processor uses. A failed triple is recorded with its error and never aborts the
 sweep, so one flaky model or one oversized event can't sink a whole run.
 """
 
@@ -16,9 +16,10 @@ from pathlib import Path
 
 import tiktoken
 
-from argusAI.utils.summarizer import Summarizer, SummarizerError
+from argus.backend.plugins.sct.events.summarizer import Summarizer, SummarizerError
 
 from .config import EvalConfig, ModelSpec
+from .dedup import deduplicate_by_similarity
 from .events_source import EventFetcher, EventSample, load_events, save_events
 from .judge import Judge
 from .pricing import PricingBook
@@ -32,7 +33,7 @@ _ENCODER = tiktoken.get_encoding("o200k_base")
 def _count_tokens(model: str, text: str) -> int:
     """Approximate token count with one local encoder for every model. Claude's tokenizer is not
     public, so absolute counts differ from billing, but event and summary are measured with the
-    same yardstick, which keeps the compression ratio meaningful. The worker's min-token gate
+    same yardstick, which keeps the compression ratio meaningful. The processor's min-token gate
     uses the same encoder."""
     del model  # one shared encoder; kept in the signature so callers stay model-aware
     if not text:
@@ -72,7 +73,7 @@ class EvalHarness:
         return events
 
     def _drop_short(self, events: list[EventSample]) -> list[EventSample]:
-        """Apply the worker's min-token gate so the sweep scores only events production would summarize."""
+        """Apply the processor's min-token gate so the sweep scores only events production would summarize."""
         if not self.cfg.min_event_tokens:
             return events
         model = self.cfg.models[0].name
@@ -90,8 +91,6 @@ class EvalHarness:
         """Collapse semantically-similar events (mirrors production) when enabled."""
         if not self.cfg.similarity_dedup:
             return events
-        from .dedup import deduplicate_by_similarity  # noqa: PLC0415 - lazy: pulls in onnxruntime, an optional ('ai-eval') dep
-
         return deduplicate_by_similarity(events, self.cfg.similarity_threshold)
 
     # -- one cell -----------------------------------------------------------

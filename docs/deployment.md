@@ -5,8 +5,12 @@ repository: `make argus INVENTORY=<env>` in
 [scylladb/qatools](https://github.com/scylladb/qatools), see `docs/argus.md`
 there. It installs the bundle under `/opt/argus`, renders the configuration
 from the inventory, runs the schema sync, and manages nginx, the service, the
-argusAI worker, the maintenance timers and log rotation. Nothing is built on a
-host.
+maintenance timers and log rotation. Nothing is built on a host.
+
+The backend embeds and summarizes SCT events itself, so no separate worker
+runs. The `argus-cli process-event-queue` timer picks up the events a gunicorn
+worker did not finish; `argus/backend/plugins/sct/events/README.md` describes
+the flow.
 
 The nginx virtual host is `roles/argus/templates/argus.nginx.conf.j2` there.
 It carries the static-asset cache headers that `tasks/ARGUS-245/rca.md`

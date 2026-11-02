@@ -9,8 +9,8 @@ pipelines that use long-running resources.
 
 ### Python 3.14
 
-- **Usage**: about 283 files. The web backend, the client SDK, the AI workers
-  and the maintenance scripts.
+- **Usage**: about 283 files. The web backend, the client SDK and the
+  maintenance scripts.
 - **Floor**: `pyproject.toml` sets `requires-python = ">=3.10"` and Ruff sets
   `target-version = "py310"`. All three CI workflows pin 3.14.
 - **Style**: 4-space indentation and a 120-character line width.
@@ -154,9 +154,9 @@ TypeScript 5.x covers 19 modules. `tsconfig.json` extends
 | `PyJWT[crypto] >= 2.10.0` | Token authentication. |
 | `zstandard`, `lz4` | Artifact compression. |
 
-Optional extra `ai`: `anthropic >= 1.4.0`, `tiktoken >= 0.7.0`, and
-`onnxruntime`, `tokenizers` and `numpy` for the embedding model. The extra
-`ai-eval` adds the evaluation harness inputs.
+The `web-backend` extra also carries the SCT event processing:
+`anthropic >= 1.4.0` and `tiktoken >= 0.7.0` for summaries, and `onnxruntime`,
+`tokenizers` and `numpy` for the embedding model.
 
 ## Version Management
 

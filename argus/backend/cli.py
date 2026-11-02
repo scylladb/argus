@@ -5,14 +5,17 @@ Run from the repository root:
     uv run python -m argus.backend.cli sync-models
     uv run python -m argus.backend.cli refresh-issues
     uv run python -m argus.backend.cli scan-jenkins
+    uv run python -m argus.backend.cli process-event-queue
 """
 import asyncio
 import logging
+from datetime import timedelta
 
 import click
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.plugins.loader import all_plugin_models, all_plugin_types
+from argus.backend.plugins.sct.events.processor import get_event_processor
 from argus.backend.service.build_system_monitor import JenkinsMonitor
 from argus.backend.service.github_service import GithubService
 from argus.backend.service.jira_service import JiraService
@@ -87,6 +90,14 @@ def scan_jenkins_command():
         monitor.report_progress(force=True)
         status.finish()
     click.echo("Done.")
+
+
+@cli.command("process-event-queue")
+@click.option("--min-age", default=600, show_default=True, type=click.IntRange(min=0),
+              help="Seconds a queued event waits for its background task before the sweep takes it.")
+def process_event_queue_command(min_age: int):
+    processed = asyncio.run(get_event_processor().sweep(timedelta(seconds=min_age)))
+    click.echo(f"Processed {processed} queued events.")
 
 
 if __name__ == "__main__":
