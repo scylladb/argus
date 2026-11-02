@@ -225,7 +225,7 @@ stays in every plan built from a spec.
 - Modify: `argus_web.example.yaml` (summarization comment, metrics port)
 
 - [x] `git grep -n argusAI` prints only task artifacts and archived plans.
-- [ ] Build the bundle locally and run its verify block.
+- [x] Build the bundle locally and run its verify block.
 - [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
 - [x] Commit, with the boxes of this task checked.
 
@@ -245,14 +245,32 @@ stays in every plan built from a spec.
 
 ## Task 9 — Checks outside the suite
 
-- [x] Parity: replay `eval/baseline/events.json` as one run through the old
-      in-memory rule (from `git show master:argusAI/event_similarity_processor_v2.py`)
-      and through `EventProcessor` with the real model; the `duplicate_id`
+- [x] Parity: embed `eval/baseline/events.json` with the master sanitizer
+      and embedder and with the moved ones on the real model, and apply the
+      duplicate rule to both as one run; the vectors and the duplicate
       assignments match. Scratch script, not committed.
-- [ ] Dev stack: submit ERROR/CRITICAL events through the SCT client API,
-      see embeddings, duplicates, the similar-events view and a summary;
-      break the model path and see the submit still answer ok and the row
-      stay; drain it with `argus-cli process-event-queue --min-age 0`.
+- [x] Dev stack: submit ERROR/CRITICAL events through the SCT client API,
+      see embeddings, duplicates and the similar-events view; drain a
+      left-behind and a legacy queue row with `argus-cli process-event-queue`.
+- [ ] Dev stack: a live summary, and a broken model path on the running
+      server.
 - [x] Measure the worker start time and RSS with the model loaded.
 - [ ] Draft the scylladb/qatools change: drop the ArgusAI unit from
       `roles/argus`, add the `process-event-queue` timer.
+
+## Task 10 — Review fixes
+
+**Files:**
+- Modify: `argus_backend.py` (lifespan), `argus/backend/plugins/sct/events/processor.py`
+  (`load_model`, `start_event_processor`), `argus/backend/plugins/sct/events/embedding.py`
+  (`load`, `RETRY_AFTER`)
+- Test: `argus/backend/tests/sct_events/test_event_processor.py`, `test_embedding.py`,
+  `test_event_ingestion.py`
+
+- [x] Give the ERROR and CRITICAL events of the table test distinct timestamps.
+- [x] Write the failing tests: a failed load waits out the cool-down; the app
+      builds the processor and loads the model at startup.
+- [x] Build the processor in the app lifespan and start the model load on the
+      embedding thread; block load attempts for `RETRY_AFTER` after a failure.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
