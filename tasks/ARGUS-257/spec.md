@@ -169,13 +169,16 @@ def get_event_processor() -> EventProcessor: ...   # one per process
 
 # argus/backend/plugins/sct/events/embedding.py
 class EventEmbedder:
-    def embed(self, message: str, run_id: UUID = ...) -> list[float]: ...
-    def embed_many(self, messages: list[str], run_id: UUID = ...) -> list: ...
+    def embed(self, message: str) -> np.ndarray: ...
+    def embed_many(self, messages: list[str]) -> list[np.ndarray]: ...
 
 
 # argus/backend/plugins/sct/service.py
 class SCTService:
     async def submit_events(cls, run_id: UUID, raw_events: list[RawEventPayload]) -> list[QueuedEvent]: ...
+    async def submit_event(
+        cls, run_id: UUID, raw_event: RawEventPayload
+    ) -> tuple[CoredumpLink | None, QueuedEvent | None]: ...
 ```
 
 The eval harness runs as `python -m argus.backend.plugins.sct.events.eval`.
@@ -184,8 +187,8 @@ The eval harness runs as `python -m argus.backend.plugins.sct.events.eval`.
 
 | Risk | Response |
 |---|---|
-| Four workers each hold an onnxruntime session | Lazy load, capped intra-op threads; check worker memory on staging before production |
-| Two workers handle near-identical events of one run at once, and both store them as unique | A lock per run inside a worker; across workers the window is the inference time of one event. Accepted |
+| Four workers each hold an onnxruntime session, about 200 MiB each | Lazy load, capped intra-op threads; check worker memory on staging before production |
+| Two gunicorn workers handle near-identical events of one run at once, and both store them as unique, so the second misses its duplicate mark | A lock per run keeps one run serial inside a worker, and the events of one submission go through one worker in order. The client gets its answer before the processing, so its next submission can land on another worker while the first is still processing; a repeat split across those two submissions can miss its mark. Each embedding takes about 100 ms. Accepted |
 | A summary in flight is lost on a worker restart | The summary is best effort, as before |
 | The `onnxruntime` and `anthropic` imports slow every worker start | Measured at build; accepted when it stays under a second |
 | The deploy removes the unit before the timer exists | Deploy the qatools change in the same window; the first sweep drains what the old service left |
@@ -210,3 +213,10 @@ The eval harness runs as `python -m argus.backend.plugins.sct.events.eval`.
 - The raw CQL of the moved code and of the SCT plugin's event and similarity
   reads moves to coodie. (spec)
 - The sanitizer stops writing its message log to the working directory. (spec)
+- The sanitizer and the embedder drop their `run_id` argument, which only fed
+  that log. (build)
+- The moved package falls under the `exclude = ["argus/"]` of Ruff like the
+  rest of the backend. (build)
+- The gunicorn worker count stays at four and the race across workers stays
+  an accepted risk: the count sets the processes of the whole web
+  application, not of the event processing alone. (build)

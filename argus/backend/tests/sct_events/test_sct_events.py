@@ -5,11 +5,14 @@ import logging
 from time import sleep
 from uuid import UUID
 
-from coodie.aio import execute_raw
 from starlette.testclient import TestClient
 
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest
-from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity, SCTTestRun
+from argus.backend.plugins.sct.events import summary_dispatcher
+from argus.backend.plugins.sct.events.embedding import EventEmbedder
+from argus.backend.plugins.sct.events.processor import EventProcessor
+from argus.backend.plugins.sct.events.summarizer import SummarizationResult
+from argus.backend.plugins.sct.testrun import SCTEventSeverity, SCTTestRun
 from argus.backend.service.client_service import ClientService
 from argus.backend.plugins.sct.service import SCTService
 from argus.backend.service.testrun import TestRunService
@@ -45,7 +48,7 @@ async def test_submit_event(client_service: ClientService, sct_service: SCTServi
     assert len(all_events) == 1, "Event not found"
 
 
-async def test_get_events_includes_summary_field(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest):
+async def test_get_events_includes_summary_field(client_service: ClientService, sct_service: SCTService, testrun_service: TestRunService, fake_test: ArgusTest, monkeypatch):
     run_type, run_req = get_fake_test_run(fake_test)
     await client_service.submit_run(run_type, asdict(run_req))
     run: SCTTestRun = await testrun_service.get_run(run_type, UUID(run_req.run_id))
@@ -65,7 +68,7 @@ async def test_get_events_includes_summary_field(client_service: ClientService, 
         "target_node": None,
         "ts": datetime.now(tz=UTC).timestamp()
     }
-    _ = await sct_service.submit_event(run.id, event_data)
+    _, queued_event = await sct_service.submit_event(run.id, event_data)
 
     # A freshly submitted event has no summary yet: the field is present and null,
     # and consumers fall back to the original message (goal 4).
@@ -75,13 +78,23 @@ async def test_get_events_includes_summary_field(client_service: ClientService, 
     assert before[0]["summary"] is None, "un-summarized event must report summary=null"
     assert before[0]["message"] == message
 
-    # Simulate the argusAI worker writing a summary back with its exact raw-CQL upsert.
-    evt = before[0]
     summary = "ERROR on sstable corruption (offset 42)"
-    await execute_raw(
-        f"UPDATE {SCTEvent._get_keyspace()}.{SCTEvent.table_name()} SET summary = ? WHERE run_id = ? AND severity = ? AND ts = ?",
-        [summary, evt["run_id"], evt["severity"], evt["ts"]],
-    )
+
+    class FakeSummarizer:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def summarize(self, model, message, prompt=None, **kwargs):
+            return SummarizationResult(summary=summary, model=model, prompt_tokens=10, completion_tokens=5,
+                                       cached_tokens=0, latency_ms=1.0)
+
+    monkeypatch.setattr(summary_dispatcher, "Summarizer", FakeSummarizer)
+    dispatcher = summary_dispatcher.SummaryDispatcher({
+        "EVENT_SUMMARIZATION_ENABLED": True,
+        "ANTHROPIC_API_KEY": "test-key",
+        "EVENT_SUMMARIZATION_MIN_TOKENS": 0,
+    })
+    await EventProcessor(EventEmbedder(), dispatcher).process([queued_event])
 
     # Serving now carries the summary, and the original message is intact (additive, goal 3).
     after = await run.get_events_limited(run.id, severities=[SCTEventSeverity.ERROR])

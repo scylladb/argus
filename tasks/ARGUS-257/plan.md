@@ -52,15 +52,15 @@ stays in every plan built from a spec.
   `tiktoken` move to `web-backend`; the `ai` and `ai-eval` extras go.
   `test.yml` drops `--extra ai`.
 
-- [ ] Write the failing tests: two processes' worth of `_extract_archive()`
+- [x] Write the failing tests: two processes' worth of `_extract_archive()`
       calls into the same directory leave one intact model directory; a
       download that fails the SHA-256 leaves no archive behind.
-- [ ] Run them and confirm the failure.
-- [ ] Move the files, fix the imports, make the changes above, `uv lock`.
-- [ ] Run the moved embedding and summarizer tests and the eval import
+- [x] Run them and confirm the failure.
+- [x] Move the files, fix the imports, make the changes above, `uv lock`.
+- [x] Run the moved embedding and summarizer tests and the eval import
       (`uv run python -m argus.backend.plugins.sct.events.eval --help`).
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 2 — Port the SCT event reads to coodie
 
@@ -78,14 +78,14 @@ stays in every plan built from a spec.
   .limit(limit + 1).only("run_id", "ts").all()`; attribute access on the rows;
   the `Config` keyspace lookup and both `execute_raw` imports go.
 
-- [ ] Write the failing test: two runs submit the same ERROR message through
+- [x] Write the failing test: two runs submit the same ERROR message through
       the API; `POST /{run_id}/event/similar` for one returns the other run
       (poll until the vector store indexes, as the conftest does).
 - [ ] Run it and confirm the failure (no embedding until Task 5; the test
       lands red here and turns green there).
-- [ ] Port both reads. The existing `get_events_limited` tests stay green.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Port both reads. The existing `get_events_limited` tests stay green.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 3 — Async summary dispatcher
 
@@ -107,14 +107,14 @@ stays in every plan built from a spec.
   `_pending -= 1` in `finally`.
 - `UniqueEvent`: frozen dataclass `run_id, severity, ts, message`.
 
-- [ ] Rewrite the dispatcher tests for the async API with a fake summarizer
+- [x] Rewrite the dispatcher tests for the async API with a fake summarizer
       and the real database: the summary lands on the event, disabled and
       keyless stay inert, an error leaves the summary null, the min-token
       gate, the backlog drop, the counters.
-- [ ] Run them and confirm the failure.
-- [ ] Rewrite the dispatcher.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Rewrite the dispatcher.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 4 — Event processor and the queue column
 
@@ -149,17 +149,17 @@ stays in every plan built from a spec.
 - `get_event_processor()`: `functools.cache`d; builds the dispatcher from
   `Config.load_yaml_config()`.
 
-- [ ] Write the failing tests with a deterministic stub model (a vector
+- [x] Write the failing tests with a deterministic stub model (a vector
       seeded from the SHA-256 of the sanitized text): ERROR and CRITICAL go
       to their tables; a repeated message in one run gets `duplicate_id` and
       no embedding; the same message in another run is unique; an empty
       message dequeues; a failing embedder keeps the row; the sweep takes a
       row without `queued_at` and an old one and skips a fresh one;
       reprocessing a stored event does not mark it a duplicate of itself.
-- [ ] Run them and confirm the failure.
-- [ ] Write the processor and the column.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write the processor and the column.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 5 — Run the processor from the submit route
 
@@ -182,17 +182,17 @@ stays in every plan built from a spec.
   (session, autouse), because every ERROR or CRITICAL submit through the API
   now reaches the processor.
 
-- [ ] Write the failing tests through `api_client`: a submitted ERROR event
+- [x] Write the failing tests through `api_client`: a submitted ERROR event
       has its embedding and no queue row after the response; a repeated
       message gets `duplicate_id`; WARNING events touch neither the queue nor
       the tables; the submit answers ok and the row stays when the stub model
       raises; with summarization enabled and a fake summarizer the event
       carries a summary. `test_get_events_includes_summary_field` gets its
       summary this way instead of a raw `UPDATE`.
-- [ ] Run them and confirm the failure.
-- [ ] Wire the route and the service.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Wire the route and the service.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 6 — The sweep command
 
@@ -205,12 +205,12 @@ stays in every plan built from a spec.
   `asyncio.run(get_event_processor().sweep(timedelta(seconds=min_age)))`,
   echoes the count. The module docstring lists the command.
 
-- [ ] Write the failing test: `CliRunner` with `--min-age 0` processes a
+- [x] Write the failing test: `CliRunner` with `--min-age 0` processes a
       queued row (logging disabled, as the client suite does).
-- [ ] Run it and confirm the failure.
-- [ ] Add the command.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run it and confirm the failure.
+- [x] Add the command.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 7 — Remove the worker and its deployment hooks
 
@@ -224,10 +224,10 @@ stays in every plan built from a spec.
 - Modify: `.github/workflows/release.yml` (smoke import, header comment)
 - Modify: `argus_web.example.yaml` (summarization comment, metrics port)
 
-- [ ] `git grep -n argusAI` prints only task artifacts and archived plans.
+- [x] `git grep -n argusAI` prints only task artifacts and archived plans.
 - [ ] Build the bundle locally and run its verify block.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 8 — Docs
 
@@ -240,12 +240,12 @@ stays in every plan built from a spec.
 - Modify: `argus/backend/plugins/sct/testrun.py` (the `summary` comment),
   `dev-db/seed_data.py` (docstring)
 
-- [ ] The docs describe one backend service, the timer, and no ArgusAI unit.
-- [ ] Commit, with the boxes of this task checked.
+- [x] The docs describe one backend service, the timer, and no ArgusAI unit.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 9 — Checks outside the suite
 
-- [ ] Parity: replay `eval/baseline/events.json` as one run through the old
+- [x] Parity: replay `eval/baseline/events.json` as one run through the old
       in-memory rule (from `git show master:argusAI/event_similarity_processor_v2.py`)
       and through `EventProcessor` with the real model; the `duplicate_id`
       assignments match. Scratch script, not committed.
@@ -253,6 +253,6 @@ stays in every plan built from a spec.
       see embeddings, duplicates, the similar-events view and a summary;
       break the model path and see the submit still answer ok and the row
       stay; drain it with `argus-cli process-event-queue --min-age 0`.
-- [ ] Measure the worker start time and RSS with the model loaded.
+- [x] Measure the worker start time and RSS with the model loaded.
 - [ ] Draft the scylladb/qatools change: drop the ArgusAI unit from
       `roles/argus`, add the `process-event-queue` timer.

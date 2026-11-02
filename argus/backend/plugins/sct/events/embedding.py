@@ -1,19 +1,20 @@
 import hashlib
 import logging
+import os
+import shutil
 import tarfile
+import tempfile
 import time
 from pathlib import Path
-from uuid import UUID
 
 import numpy as np
 import onnxruntime as ort
 import requests
 from tokenizers import Tokenizer
 
-from argusAI.utils.event_message_sanitizer import MessageSanitizer
+from argus.backend.plugins.sct.events.sanitizer import MessageSanitizer
 
 LOGGER = logging.getLogger(__name__)
-_ZERO_UUID = UUID(int=0)
 
 
 class EmbeddingModelError(Exception):
@@ -65,7 +66,7 @@ class BgeSmallEnEmbeddingModel:
 
     def _load(self) -> None:
         model_dir = self.DOWNLOAD_PATH / self.EXTRACTED_FOLDER_NAME
-        if not ((model_dir / "model.onnx").exists() and (model_dir / "tokenizer.json").exists()):
+        if not self._is_extracted():
             self._extract_archive()
 
         tokenizer = Tokenizer.from_file(str(model_dir / "tokenizer.json"))
@@ -74,34 +75,52 @@ class BgeSmallEnEmbeddingModel:
 
         options = ort.SessionOptions()
         options.log_severity_level = 3
+        options.intra_op_num_threads = 1
+        options.inter_op_num_threads = 1
         options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         self._session = ort.InferenceSession(
             str(model_dir / "model.onnx"), sess_options=options, providers=["CPUExecutionProvider"]
         )
         self._tokenizer = tokenizer
 
+    def _is_extracted(self) -> bool:
+        model_dir = self.DOWNLOAD_PATH / self.EXTRACTED_FOLDER_NAME
+        return (model_dir / "model.onnx").exists() and (model_dir / "tokenizer.json").exists()
+
     def _extract_archive(self) -> None:
         archive = self.DOWNLOAD_PATH / self.ARCHIVE_FILENAME
         if not (archive.exists() and _sha256(archive) == self._MODEL_SHA256):
             self._download(archive)
-        with tarfile.open(archive, "r:gz") as tar:
-            tar.extractall(self.DOWNLOAD_PATH, filter="data")
+        staging = Path(tempfile.mkdtemp(dir=self.DOWNLOAD_PATH, prefix=".extract-"))
+        try:
+            with tarfile.open(archive, "r:gz") as tar:
+                tar.extractall(staging, filter="data")
+            try:
+                os.rename(staging / self.EXTRACTED_FOLDER_NAME, self.DOWNLOAD_PATH / self.EXTRACTED_FOLDER_NAME)
+            except OSError:
+                if not self._is_extracted():
+                    raise
+                LOGGER.info("Another process extracted %s first", self.MODEL_NAME)
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
 
     def _download(self, archive: Path) -> None:
         archive.parent.mkdir(parents=True, exist_ok=True)
+        partial = archive.with_name(f"{archive.name}.{os.getpid()}.part")
         for attempt in range(1, self.DOWNLOAD_ATTEMPTS + 1):
             try:
                 with requests.get(self.MODEL_DOWNLOAD_URL, stream=True, timeout=60) as response:
                     response.raise_for_status()
-                    with archive.open("wb") as file:
+                    with partial.open("wb") as file:
                         for chunk in response.iter_content(chunk_size=1 << 20):
                             file.write(chunk)
-                if _sha256(archive) == self._MODEL_SHA256:
+                if _sha256(partial) == self._MODEL_SHA256:
+                    os.replace(partial, archive)
                     return
-                failure = EmbeddingModelError(f"{archive} does not match the expected SHA-256")
+                failure = EmbeddingModelError(f"{self.MODEL_DOWNLOAD_URL} does not match the expected SHA-256")
             except requests.RequestException as exc:
                 failure = exc
-            archive.unlink(missing_ok=True)
+            partial.unlink(missing_ok=True)
             LOGGER.warning("Model download attempt %d/%d failed: %s", attempt, self.DOWNLOAD_ATTEMPTS, failure)
             if attempt < self.DOWNLOAD_ATTEMPTS:
                 time.sleep(2 ** (attempt - 1))
@@ -124,15 +143,15 @@ class BgeSmallEnEmbeddingModel:
 
 class EventEmbedder:
     """The single place that turns an event message into an embedding: sanitize (strip
-    run-specific noise) then embed with BGE-small-en. Shared by the similarity worker and
+    run-specific noise) then embed with BGE-small-en. Shared by the event processor and
     the eval's similarity dedup so both produce identical vectors from identical inputs."""
 
-    def __init__(self, write_log: bool = True):
-        self.sanitizer = MessageSanitizer(write_log=write_log)
+    def __init__(self):
+        self.sanitizer = MessageSanitizer()
         self.model = BgeSmallEnEmbeddingModel()
 
-    def embed(self, message: str, run_id: UUID = _ZERO_UUID) -> list[float]:
-        sanitized = self.sanitizer.sanitize(run_id, message)
+    def embed(self, message: str) -> np.ndarray:
+        sanitized = self.sanitizer.sanitize(message)
         if not sanitized or not sanitized.strip():
             raise ValueError("Sanitized message is empty")
         vectors = self.model([sanitized])
@@ -140,6 +159,6 @@ class EventEmbedder:
             raise ValueError("Embedding generation returned empty result")
         return vectors[0]
 
-    def embed_many(self, messages: list[str], run_id: UUID = _ZERO_UUID) -> list:
-        sanitized = [self.sanitizer.sanitize(run_id, m) for m in messages]
+    def embed_many(self, messages: list[str]) -> list[np.ndarray]:
+        sanitized = [self.sanitizer.sanitize(m) for m in messages]
         return self.model(sanitized)

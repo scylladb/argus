@@ -17,13 +17,13 @@ Coding standards, conventions, and best practices organized by domain.
 Located in `docs/project/`
 
 ### Vision (`project/vision.md`)
-What Argus is and who uses it: a test tracking system for automated pipelines that hold long-running resources. Covers the current state (Python 3.14 with FastAPI on ScyllaDB, a Svelte 5 frontend, a Go CLI, Python AI workers), the purpose, the five test sources that report through the plugin layer, the three consumers, and where to read the current direction.
+What Argus is and who uses it: a test tracking system for automated pipelines that hold long-running resources. Covers the current state (Python 3.14 with FastAPI on ScyllaDB, a Svelte 5 frontend, a Go CLI), the purpose, the five test sources that report through the plugin layer, the three consumers, and where to read the current direction.
 
 ### Tech Stack (`project/tech-stack.md`)
 Languages (Python 3.14, TypeScript and JavaScript, Go), backend and frontend frameworks, testing frameworks, ScyllaDB with the coodie document mapper, build tools and package management, containers, CI, hosting, linting and formatting, type checking, key dependencies, version management.
 
 ### Architecture (`project/architecture.md`)
-Layered web application with a plugin layer for test sources. Covers the web backend layers, the plugin contract, the frontend, the command line tool, the AI workers, the client library, data flow, data model rules, external integrations, configuration and deployment.
+Layered web application with a plugin layer for test sources. Covers the web backend layers, the plugin contract, the frontend, the command line tool, the SCT event processing, the client library, data flow, data model rules, external integrations, configuration and deployment.
 
 ### Roadmap (`project/roadmap.md`)
 The current priorities, and the known debt: lint coverage, the Python version floor, the Docker requirement in the test suite, the legacy Svelte imports, an unreferenced bundle, and hand-written API documentation.
@@ -59,7 +59,7 @@ Let the code speak, comment sparingly, no change-history comments.
 Layer ownership for a new file, the documents to update on an architecture change, the commitlint rules enforced at `commit-msg` (type enum, required scope, header and body limits), pull request format with the `closes <KEY>` or `refs <KEY>` last line, the `ai-assisted` label, SHA-pinned actions, committed lockfiles in all three ecosystems, uv as the only Python tool runner, secrets in gitignored config files, and non-blocking review feedback tracked as a follow-up issue.
 
 #### Error Handling (`standards/global/error-handling.md`)
-Typed exceptions (`APIException`, `DataValidationError`, `<Domain>Error`) with `raise ... from`, no blind except, raising instead of returning an error dictionary, handling at the boundary, failing fast because the database enforces nothing, graceful degradation when Jira, GitHub, Jenkins or the AI worker fails, retry with backoff, and resource cleanup.
+Typed exceptions (`APIException`, `DataValidationError`, `<Domain>Error`) with `raise ... from`, no blind except, raising instead of returning an error dictionary, handling at the boundary, failing fast because the database enforces nothing, graceful degradation when Jira, GitHub, Jenkins or the event processing fails, retry with backoff, and resource cleanup.
 
 #### Minimal Implementation (`standards/global/minimal-implementation.md`)
 Build what you need, clear purpose, delete exploration artifacts, no future stubs, no speculative abstractions, review before commit, unused code is debt.

@@ -15,8 +15,8 @@ import json
 import logging
 from typing import Any
 
-from argusAI.prompts import JUDGE_PROMPT_NAME, load_prompt
-from argusAI.utils.summarizer import Summarizer, SummarizerError
+from argus.backend.plugins.sct.events.prompts import JUDGE_PROMPT_NAME, load_prompt
+from argus.backend.plugins.sct.events.summarizer import Summarizer, SummarizerError
 
 from .results import JudgeScore
 

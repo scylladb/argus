@@ -1,20 +1,14 @@
-import os
 import re
-from datetime import datetime
-
 from typing import Pattern, List, Callable
-from uuid import UUID
 
 
 class MessageSanitizer:
     """
     A class used to sanitize event messages by removing or replacing sensitive information
     such as IP addresses, URLs, file paths, and other identifiable data.
-
-    Sanitized messages are written to a file for further analysis.
     """
 
-    def __init__(self, write_log: bool = True):
+    def __init__(self):
         self.event_pattern: Pattern = re.compile(r"Severity\.(ERROR|CRITICAL|WARNING|INFO)\)")
         self.event_id_pattern: Pattern = re.compile(
             r"(?:event_id=)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
@@ -108,19 +102,11 @@ class MessageSanitizer:
             self.remove_special_chars,
             self.normalize_whitespace,
         ]
-        self.sanitized_messages_fp = None
-        if write_log:
-            os.makedirs("logs", exist_ok=True)
-            self.sanitized_messages_fp = open(
-                "logs/sanitized_messages_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".log", "w"
-            )
 
-    def sanitize(self, run_id: UUID, message: str) -> str:
+    def sanitize(self, message: str) -> str:
         result = message
         for sanitizer in self.sanitizers:
             result = sanitizer(result)
-        if self.sanitized_messages_fp is not None:
-            self.sanitized_messages_fp.write(f"{run_id}: {result}\n")
         return result
 
     def remove_preface(self, text: str) -> str:

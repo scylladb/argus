@@ -11,7 +11,7 @@ so a syntax feature newer than 3.10 reads as an error to the linter.
 
 ### Ruff Reach
 `pyproject.toml` sets `exclude = ["argus/"]` with `force-exclude = true`. Ruff
-therefore checks the scripts, the AI workers and the root modules, and skips the
+therefore checks the scripts and the root modules, and skips the
 whole `argus/` package. A change under `argus/` passes the hook without a lint
 pass, so read it with more care.
 
