@@ -8,8 +8,8 @@ run selector, a test from the workspace sidebar, or a group from the
 workspace sidebar. Three new API routes carry the removals. A cleanup
 service checks the flag, removes the rows that belong to the entity, and
 cascades: a group takes its tests, a test takes its runs, a run takes its
-comments, events, issue links, configuration, cost, results and the rows
-the plugin keeps for it. A confirmation modal guards each removal, and the
+comments, events, issue links, configuration, results and the rows the
+plugin keeps for it. A confirmation modal guards each removal, and the
 group and test removals ask for the name of the entity.
 
 ## Constraints
@@ -59,7 +59,7 @@ sequenceDiagram
     end
     loop each test of the group, or the one test
         loop each run of the test, or the one run
-            C->>DB: delete comments, events, issue links, config, cost, results, embeddings
+            C->>DB: delete comments, events, issue links, config, results, embeddings
             C->>P: delete_run_data(run_id)
             P->>DB: delete the plugin's rows
             C->>DB: delete the run row
@@ -89,8 +89,9 @@ deduplicated by run id. A run submitted before its test existed has no
 | A cleanup write fails midway | The exception propagates. The rows written so far stay deleted. A second request removes the rest |
 | The user is not logged in | 403 from `api_current_user`, as every API route |
 
-Rows the removal leaves behind, by decision: notifications, which are
-partitioned by receiver and carry no index; GitHub and Jira issue rows whose
+Rows the removal leaves behind, by decision: the cost rows and the cost
+rollup of a run, which the spend history keeps whatever becomes of the run;
+notifications, which are partitioned by receiver and carry no index; GitHub and Jira issue rows whose
 last link went, which the issue list no longer reaches; the distinct
 version and image indexes of the release; the references that user views
 and release plans hold, which the view refresh drops after an hour; and the

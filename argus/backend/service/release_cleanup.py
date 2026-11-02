@@ -16,7 +16,6 @@ from argus.backend.models.result import (
     ArgusGraphView,
 )
 from argus.backend.models.run_config import RunConfigParam, RunConfigParamByRun, RunConfiguration
-from argus.backend.models.run_cost import RunCost
 from argus.backend.models.web import (
     ArgusEvent,
     ArgusGroup,
@@ -35,7 +34,6 @@ LOGGER = logging.getLogger(__name__)
 RUN_PARTITION_TABLES = (
     RunConfiguration,
     RunConfigParamByRun,
-    RunCost,
     IssueLink,
     SCTErrorEventEmbedding,
     SCTCriticalEventEmbedding,

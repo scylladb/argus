@@ -58,8 +58,8 @@ async def delete_test(self, test_id: UUID) -> bool:
   name of the entity.
 - A removed test takes its runs with it. A removed group takes its tests and
   their runs with it. A removed run takes the rows that belong to it: its
-  comments, events, issue links, configuration, cost, results and the
-  plugin's own event and resource rows.
+  comments, events, issue links, configuration, results and the plugin's
+  own event and resource rows. The cost rows of a run stay.
 - A release without the mark shows no removal controls, and its API refuses
   a removal.
 - The admin panel keeps its current behavior.

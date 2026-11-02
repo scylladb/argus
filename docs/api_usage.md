@@ -686,10 +686,10 @@ DELETE /api/v1/test/{test_id}/run/{run_id}
 Removes one run of the test. The call answers the error envelope when the
 run belongs to another test.
 
-A removed run takes its comments, events, issue links, configuration, cost,
-pytest results, generic result rows and the plugin's own rows with it. A
-removed test also takes its generic result metadata, best results and graph
-views.
+A removed run takes its comments, events, issue links, configuration,
+pytest results, generic result rows and the plugin's own rows with it. Its
+cost rows stay. A removed test also takes its generic result metadata, best
+results and graph views.
 
 ```json
 {"status": "ok", "response": {"deleted": "a7b1c2d3-0000-4000-8000-000000000412"}}
