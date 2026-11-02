@@ -31,9 +31,14 @@ Components, all under `argus/backend/plugins/sct/events/`:
 
 - **Sanitizer**: strips run-specific noise from a message. Unchanged rules.
 - **Embedder**: BGE-small-en through onnxruntime, 384 dimensions, unchanged
-  model, archive and SHA-256. One model per process, loaded on first use,
-  inference on a single dedicated thread. The download and the extraction
-  write to a temporary path and rename it into place.
+  model, archive and SHA-256. One model per process, loaded on a single
+  dedicated thread that also runs the inference. The download and the
+  extraction write to a temporary path and rename it into place. After a
+  failed load, the next attempt waits five minutes.
+- **Startup**: each worker builds its processor when it starts and starts the
+  model load at once, downloading the model when the host has none. The
+  worker does not wait for the load; events submitted meanwhile queue behind
+  it on the embedding thread.
 - **Processor**: the per-event pipeline below. One instance per process.
 - **Summary dispatcher**: bounded, best-effort Claude summaries of unique
   events, on the event loop with the blocking API call in a thread.
@@ -72,7 +77,7 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     T[Maintenance timer] --> S[argus-cli process-event-queue]
-    S -->|page through| Q[(sct_unprocessed_events)]
+    S -->|read| Q[(sct_unprocessed_events)]
     Q -->|queued_at null or older than min age| P[Processor]
     Q -->|newer| K[Skip: a background task owns it]
 ```
@@ -97,7 +102,7 @@ unique event stores its embedding and gets a summary.
 | Any failure in the background task | Logged; the client already has its answer |
 | The message is empty, or empty after sanitizing | Logged, queue row deleted, no embedding |
 | The event row is missing | Logged, queue row deleted |
-| The model cannot load or download, or a database call fails | Logged, queue row kept for the sweep |
+| The model cannot load or download, or a database call fails | Logged, queue row kept for the sweep; the next load attempt waits five minutes |
 | The worker dies before the task ends | Queue row kept for the sweep |
 | Summarization disabled or no API key | No summary; the rest runs |
 | The summary backlog is full | The summary is dropped and counted |
@@ -220,3 +225,11 @@ The eval harness runs as `python -m argus.backend.plugins.sct.events.eval`.
 - The gunicorn worker count stays at four and the race across workers stays
   an accepted risk: the count sets the processes of the whole web
   application, not of the event processing alone. (build)
+- The processor is built and the model load starts when a worker starts, so
+  no request pays for it and the summary keys are read at worker start. The
+  start does not wait for the download: gunicorn kills a worker that has not
+  finished starting within its 120 s timeout. (review)
+- A failed model load blocks further attempts for five minutes, so an
+  unreachable model does not cost each queued event a full download. (review)
+- The sweep reads the queue in one pass; the queue holds only unfinished
+  events. (review)
