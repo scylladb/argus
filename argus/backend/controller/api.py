@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
@@ -15,6 +14,7 @@ from argus.backend.controller import (
     health_api,
     notification_api,
     planner_api,
+    results_api,
     run_config_api,
     team,
     testrun_api,
@@ -24,7 +24,6 @@ from argus.backend.error_handlers import APIException
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, User
 from argus.backend.rendering import url_for
 from argus.backend.service.argus_service import ArgusService, ScheduleUpdateRequest
-from argus.backend.service.results_service import ResultsService
 from argus.backend.service.stats import ReleaseStatsCollector, summarize_release_stats
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import DEFAULT_API_TOKEN_DURATION, UserService, api_current_user
@@ -43,24 +42,11 @@ router.include_router(planner_api.router)
 router.include_router(team.router)
 router.include_router(view_api.router)
 router.include_router(run_config_api.router)
+router.include_router(results_api.router)
 
 
 class SetTestPluginRequest(BaseModel):
     plugin_name: str
-
-
-class CreateGraphViewRequest(BaseModel):
-    testId: UUID
-    name: str
-    description: str
-
-
-class UpdateGraphViewRequest(BaseModel):
-    testId: UUID
-    id: UUID
-    name: str
-    description: str
-    graphs: dict[str, str]
 
 
 class ScheduleCommentUpdateRequest(BaseModel):
@@ -377,55 +363,6 @@ async def test_info(test_id: UUID = Query(..., alias="testId"),
     return APIResponse({
         "status": "ok",
         "response": info
-    })
-
-
-@router.get("/test-results", name="api.test_results")
-@router.head("/test-results", name="api.test_results")
-async def test_results(asgi_request: Request, test_id: UUID = Query(..., alias="testId"),
-                 start_date: Annotated[datetime | None, NoneIfEmpty, Query(alias="startDate")] = None,
-                 end_date: Annotated[datetime | None, NoneIfEmpty, Query(alias="endDate")] = None,
-                 table_names: list[str] = Query(default=[], alias="tableNames[]"),
-                 user: User = Depends(api_current_user)):
-    start_date = start_date.astimezone(timezone.utc) if start_date else None
-    end_date = end_date.astimezone(timezone.utc) if end_date else None
-
-    service = ResultsService()
-    if asgi_request.method == "HEAD":
-        exists = await service.is_results_exist(test_id=test_id)
-        return Response(status_code=200 if exists else 404)
-
-    graphs, ticks, releases_filters = await service.get_test_graphs(
-        test_id=test_id, start_date=start_date, end_date=end_date, table_names=table_names)
-    graph_views = await service.get_argus_graph_views(test_id=test_id)
-
-    return APIResponse({
-        "status": "ok",
-        "response": {"graphs": graphs, "ticks": ticks, "releases_filters": releases_filters,
-                     "graph_views": graph_views}
-    })
-
-
-@router.post("/create-graph-view", name="api.create_graph_view")
-async def create_graph_view(payload: CreateGraphViewRequest, user: User = Depends(api_current_user)):
-    service = ResultsService()
-    graph_view = await service.create_argus_graph_view(
-        test_id=payload.testId, name=payload.name, description=payload.description)
-    return APIResponse({
-        "status": "ok",
-        "response": graph_view
-    })
-
-
-@router.post("/update-graph-view", name="api.update_graph_view")
-async def update_graph_view(payload: UpdateGraphViewRequest, user: User = Depends(api_current_user)):
-    service = ResultsService()
-    graph_view = await service.update_argus_graph_view(
-        test_id=payload.testId, view_id=payload.id, name=payload.name,
-        description=payload.description, graphs=payload.graphs)
-    return APIResponse({
-        "status": "ok",
-        "response": graph_view
     })
 
 
