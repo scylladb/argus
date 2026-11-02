@@ -8,7 +8,7 @@ from argus.backend.models.argus_ai import (
     SCTErrorEventEmbedding,
 )
 from argus.backend.models.github_issue import IssueLink
-from argus.backend.models.pytest import PytestResultTable, PytestResultTableOld
+from argus.backend.models.pytest import PytestResultTable, PytestResultTableOld, PytestUserField
 from argus.backend.models.result import (
     ArgusBestResultData,
     ArgusGenericResultData,
@@ -40,7 +40,6 @@ RUN_PARTITION_TABLES = (
     ErrorEventEmbeddings,
     CriticalEventEmbeddings,
 )
-RUN_INDEXED_TABLES = (PytestResultTable, PytestResultTableOld)
 RUN_KEY_COLUMNS = ("build_id", "start_time", "id", "test_id", "release_id")
 
 
@@ -111,9 +110,11 @@ class ReleaseCleanupService:
             await comment.delete()
         for event in await ArgusEvent.find(run_id=run.id).all():
             await event.delete()
-        for table in RUN_INDEXED_TABLES:
-            for row in await table.find(run_id=run.id).all():
-                await row.delete()
+        for result in await PytestResultTable.find(run_id=run.id).all():
+            await PytestUserField.find(name=result.name, id=result.id).delete()
+            await result.delete()
+        for result in await PytestResultTableOld.find(run_id=run.id).all():
+            await result.delete()
         for param in await RunConfigParamByRun.find(run_id=run.id).all():
             if param.value is not None:
                 await RunConfigParam.find(name=param.name, value=param.value, run_id=str(run.id)).delete()
@@ -122,6 +123,9 @@ class ReleaseCleanupService:
         if run.test_id:
             for meta in await ArgusGenericResultMetadata.find(test_id=run.test_id).all():
                 await ArgusGenericResultData.find(test_id=run.test_id, name=meta.name, run_id=run.id).delete()
+                for best in await ArgusBestResultData.find(test_id=run.test_id, name=meta.name).all():
+                    if best.run_id == run.id:
+                        await best.delete()
         await model.delete_run_data(run.id)
         await run.delete()
 

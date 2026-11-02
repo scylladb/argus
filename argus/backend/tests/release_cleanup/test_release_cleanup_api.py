@@ -11,8 +11,10 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from argus.backend.error_handlers import DataValidationError
+from argus.backend.service.views_widgets.pytest import PytestViewService
 from argus.backend.tests.util import client_post
-from argus.client.generic_result import ColumnMetadata, ResultType, Status, StaticGenericResultTable
+from argus.client.generic_result import ColumnMetadata, ResultType, Status, StaticGenericResultTable, ValidationRule
 
 ADMIN_PREFIX = "/admin/api/v1"
 API_PREFIX = "/api/v1"
@@ -25,6 +27,7 @@ class CleanupResultTable(StaticGenericResultTable):
         description = "Cleanup Table Description"
         sut_package_name = "cleanup_package"
         Columns = [ColumnMetadata(name="metric", unit="ms", type=ResultType.FLOAT, higher_is_better=False)]
+        ValidationRules = {"metric": ValidationRule(best_pct=10)}
 
 
 @pytest.fixture
@@ -134,10 +137,10 @@ def _entity_exists(api_client, kind, entity_id) -> bool:
     return resp.json()["status"] == "ok"
 
 
-async def _submit_results(client_service, run_id):
+async def _submit_results(client_service, run_id, value=1.5):
     table = CleanupResultTable()
     table.sut_timestamp = 123
-    table.add_result(column="metric", row="row1", value=1.5, status=Status.UNSET)
+    table.add_result(column="metric", row="row1", value=value, status=Status.UNSET)
     response = await client_service.submit_results(SCT, UUID(run_id), table.as_dict())
     assert response["status"] == "ok", response
 
@@ -146,6 +149,34 @@ def _result_tables(api_client, test, run_id) -> list:
     resp = api_client.get(f"{API_PREFIX}/run/{test.id}/{run_id}/fetch_results")
     assert resp.json()["status"] == "ok", resp.text
     return resp.json()["tables"]
+
+
+def _metric_status(api_client, test, run_id) -> str:
+    tables = _result_tables(api_client, test, run_id)
+    return tables[0]["Cleanup Table"]["table_data"]["row1"]["metric"]["status"]
+
+
+def _submit_pytest_result(api_client, run_id) -> dict:
+    now = time.time()
+    payload = {
+        "name": f"cleanup.py::test_{uuid4().hex}",
+        "timestamp": now,
+        "session_timestamp": now,
+        "test_type": "pytest",
+        "run_id": run_id,
+        "status": "passed",
+        "markers": [],
+        "user_fields": {"SCYLLA_MODE": "release"},
+    }
+    resp = api_client.post(f"{API_PREFIX}/client/testrun/pytest/result/submit", json=payload)
+    assert resp.json()["status"] == "ok", resp.text
+    return resp.json()["response"]
+
+
+def _pytest_results(api_client, run_id) -> list:
+    resp = api_client.get(f"{API_PREFIX}/run/{run_id}/pytest/results")
+    assert resp.json()["status"] == "ok", resp.text
+    return resp.json()["response"]
 
 
 def _sct_event_count(api_client, run_id) -> int:
@@ -291,3 +322,36 @@ async def test_delete_test_removes_its_result_tables(api_client, client_service,
 
     assert resp.json()["status"] == "ok", resp.text
     assert api_client.head(f"{API_PREFIX}/test-results?testId={cleanup_test.id}").status_code == 404
+
+
+async def test_delete_run_drops_its_best_result_as_the_baseline(api_client, client_service, cleanup_release,
+                                                                 cleanup_test):
+    _mark_editable(api_client, cleanup_release)
+    outlier_run_id = _submit_sct_run(api_client, cleanup_test)
+    await _submit_results(client_service, outlier_run_id, value=1.0)
+    slower_run_id = _submit_sct_run(api_client, cleanup_test, build_number=2)
+    with pytest.raises(DataValidationError):
+        await _submit_results(client_service, slower_run_id, value=2.0)
+
+    resp = api_client.delete(f"{API_PREFIX}/test/{cleanup_test.id}/run/{outlier_run_id}")
+
+    assert resp.json()["status"] == "ok", resp.text
+    later_run_id = _submit_sct_run(api_client, cleanup_test, build_number=3)
+    await _submit_results(client_service, later_run_id, value=2.0)
+    assert _metric_status(api_client, cleanup_test, later_run_id) == "PASS"
+
+
+async def test_delete_run_removes_its_pytest_results_and_user_fields(api_client, cleanup_release,
+                                                                      generic_cleanup_test):
+    _mark_editable(api_client, cleanup_release)
+    run_id = _submit_generic_run(api_client, generic_cleanup_test)
+    result = _submit_pytest_result(api_client, run_id)
+    assert len(_pytest_results(api_client, run_id)) == 1
+    assert await PytestViewService().get_user_fields_for_result(result["name"], result["id"]) == {
+        "SCYLLA_MODE": "release"}
+
+    resp = api_client.delete(f"{API_PREFIX}/test/{generic_cleanup_test.id}/run/{run_id}")
+
+    assert resp.json()["status"] == "ok", resp.text
+    assert _pytest_results(api_client, run_id) == []
+    assert await PytestViewService().get_user_fields_for_result(result["name"], result["id"]) == {}

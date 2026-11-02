@@ -193,7 +193,7 @@ interface Props {
 |---|---|
 | The Jenkins monitor or a replay recreates a removed job | Accepted. The job comes back with new runs only, and the user removes it again |
 | Two users remove the same entity at once | Accepted. The second request fails on a missing document, and nothing is left half removed that a third request cannot finish |
-| A removed run keeps a best-result row that points at it | Accepted. The best result table is per test and name, and the row does not name a run the reader opens |
+| A removed run was the best result of its test | The removal drops the best rows that name the run, and the previous best becomes the baseline of the next submission |
 
 ## Deferred work
 
