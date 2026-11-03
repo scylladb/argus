@@ -41,8 +41,9 @@ stays in every plan built from a spec.
   `column IN (...)`, at most 90 run and column keys per query.
 - `get_release_result_tables(release)`: one entry per table name with
   `description`, the merged `columns`, and the `tests` count.
-- `get_release_results(...)`: `since` defaults to now minus
-  `RELEASE_RESULTS_WINDOW`. Runs are selected by `start_time` in the window.
+- `get_release_results(...)`: `since` defaults to `until` minus
+  `RELEASE_RESULTS_WINDOW`, or to now minus `RELEASE_RESULTS_WINDOW` when
+  `until` is not set. Runs are selected by `start_time` in the window.
   Cells are filtered by status and by `sut_timestamp`, then
   grouped by table, test, and run, in the shape of the spec `Outputs`.
 
