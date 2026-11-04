@@ -93,16 +93,18 @@ class JenkinsService:
         choice parameters default to empty rather than their first option."""
         default_params = next((prop for prop in job_info["property"] if prop.get(
             "_class", "") == "hudson.model.ParametersDefinitionProperty"), {}).get("parameterDefinitions", {})
-        return [{"name": param["name"],
+        return [{"_class": param.get("_class", ""),
+                 "name": param["name"],
                  "value": "" if param["name"] in self.OPTIONAL_CHOICE_PARAMETERS
                  else param.get("defaultParameterValue", {}).get("value", "")}
                 for param in default_params if param["name"] != self.RESERVED_PARAMETER_NAME]
 
     async def retrieve_job_parameters(self, build_id: str, build_number: int | None,
                                 from_defaults: bool = False) -> list[Parameter]:
-        """Return a job's parameters. When from_defaults is False the values are
-        seeded from a past build instead: the given build_number, or the last
-        build when build_number is falsy (the rebuild/clone behaviour).
+        """Return a job's parameters with their default values. When from_defaults
+        is False the values that a past build recorded replace the defaults: the
+        given build_number, or the last build when build_number is falsy (the
+        rebuild/clone behaviour).
         Default values:
         Cli: True
         Frontend: False
@@ -135,12 +137,14 @@ class JenkinsService:
                     raise JenkinsServiceError("#noBuildsAvailable")
             else:
                 build_info = await asyncio.to_thread(self._jenkins.get_build_info, name=build_id, number=build_number)
-            params = next((a for a in build_info["actions"] if a.get(
-                "_class", "#NONE") == "hudson.model.ParametersAction"), None)
-            if params:
-                params = [param for param in params["parameters"] if param["name"] != self.RESERVED_PARAMETER_NAME]
-            else:
-                params = self._default_params_from_job_info(job_info)
+            action = next((a for a in build_info["actions"] if a.get(
+                "_class", "#NONE") == "hudson.model.ParametersAction"), {})
+            # A build records only the parameters that its trigger passed. Jenkins takes the others
+            # from the job defaults, so the defaults fill the gaps and the recorded values win.
+            defaults = {param["name"]: param for param in self._default_params_from_job_info(job_info)}
+            recorded = {param["name"]: param for param in action.get("parameters", [])
+                        if param["name"] != self.RESERVED_PARAMETER_NAME}
+            params = list((defaults | recorded).values())
         self._apply_choice_defaults(params, choices, descriptions)
 
         return params
@@ -204,6 +208,9 @@ class JenkinsService:
             for family, keys in SCT_VERSION_SOURCE_FAMILIES.items()
             if any(str(params.get(key) or "").strip() for key in keys)
         ]
+        # A rolling upgrade installs new_scylla_repo on top of the image, so the image is its base OS.
+        if "rolling_upgrade" in set_families and "scylla_image" in set_families:
+            set_families.remove("scylla_image")
         if not set_families:
             options = ", ".join(
                 key for keys in SCT_VERSION_SOURCE_FAMILIES.values() for key in keys

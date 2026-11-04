@@ -176,6 +176,14 @@ def test_validate_sct_version_source_accepts_image_variant():
     JenkinsService.validate_sct_version_source({"gce_image_db": "https://www.googleapis.com/compute/v1/x"})
 
 
+def test_validate_sct_version_source_accepts_rolling_upgrade_on_an_image():
+    # A rolling upgrade job sets the base OS image and the repository to upgrade to.
+    JenkinsService.validate_sct_version_source({
+        "gce_image_db": "https://www.googleapis.com/compute/v1/projects/debian-cloud/global/images/family/debian-13",
+        "new_scylla_repo": "https://downloads.scylladb.com/unstable/scylla/master/deb/unified/latest/scylla.list",
+    })
+
+
 def test_validate_sct_version_source_rejects_none_set():
     with pytest.raises(DataValidationError):
         JenkinsService.validate_sct_version_source({"scylla_version": "", "scylla_repo": "  "})
@@ -276,3 +284,45 @@ async def test_retrieve_job_parameters_rebuild_specific_build():
     # A specific build number also uses the build's parameters.
     params = await _params_service().retrieve_job_parameters("job", 3, from_defaults=False)
     assert _params_by_name(params)["scylla_version"]["value"] == "5.4:latest"
+
+
+async def test_retrieve_job_parameters_rebuild_adds_parameters_the_build_did_not_record():
+    # A trigger passes only some parameters, so the build records only those.
+    # The job defaults fill the others, and the order follows the job definitions.
+    job_info = {
+        "nextBuildNumber": 6,
+        "property": [
+            {
+                "_class": "hudson.model.ParametersDefinitionProperty",
+                "parameterDefinitions": [
+                    {"_class": "hudson.model.StringParameterDefinition", "name": "scylla_version",
+                     "defaultParameterValue": {"value": "master:latest"}},
+                    {"_class": "hudson.model.TextParameterDefinition", "name": "extra_environment_variables",
+                     "defaultParameterValue": {"value": "SCT_FORCE_RUN_IOTUNE=true"}},
+                    {"_class": "hudson.model.StringParameterDefinition", "name": "requested_by_user",
+                     "defaultParameterValue": {"value": "seed"}},
+                ],
+            }
+        ],
+    }
+    build_info = {
+        "actions": [
+            {
+                "_class": "hudson.model.ParametersAction",
+                "parameters": [
+                    {"_class": "hudson.model.StringParameterValue", "name": "scylla_version", "value": "5.4:latest"},
+                    {"_class": "hudson.model.StringParameterValue", "name": "region", "value": "eu-west-1"},
+                ],
+            }
+        ],
+    }
+    fake = _FakeJenkins(job_info=job_info, job_config=CONFIG_NO_CHOICES, build_info=build_info)
+
+    params = await _service_with(fake).retrieve_job_parameters("job", 5, from_defaults=False)
+
+    assert [p["name"] for p in params] == ["scylla_version", "extra_environment_variables", "region"]
+    by_name = _params_by_name(params)
+    assert by_name["scylla_version"]["value"] == "5.4:latest"
+    assert by_name["extra_environment_variables"]["value"] == "SCT_FORCE_RUN_IOTUNE=true"
+    assert by_name["extra_environment_variables"]["_class"] == "hudson.model.TextParameterDefinition"
+    assert by_name["region"]["value"] == "eu-west-1"
