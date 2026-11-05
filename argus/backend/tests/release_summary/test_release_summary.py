@@ -270,3 +270,26 @@ async def test_each_issue_carries_the_issue_and_its_links_in_scope(release_manag
     assert [link["run_id"] for link in rc1_issue["issue"]["links"]] == [str(rc1)]
     assert sorted(link["run_id"] for link in family_issue["issue"]["links"]) == sorted([str(rc1), str(rc2)])
     assert family_issue["issue"]["links"][0]["user_id"] == str(logged_in_user.id)
+
+
+async def test_each_test_counts_the_issues_and_comments_of_its_run(release_manager_service, client_service,
+                                                                  testrun_service, logged_in_user, asgi_app):
+    seeded = await seed_release(release_manager_service, test_count=2)
+    discussed, quiet = seeded.tests
+    issues = mocked_issue_service()
+    old_run = await submit_run(client_service, discussed, "2031.1.0~rc1", "failed")
+    await testrun_service.post_run_comment(discussed.id, old_run, "an older run", {}, [], logged_in_user)
+    run = await submit_run(client_service, discussed, "2031.1.0~rc2", "failed")
+    await link_jira(issues, new_jira_key(), discussed, run, logged_in_user)
+    await link_jira(issues, new_jira_key() + "1", discussed, run, logged_in_user)
+    for message in ("OOM again", "same as last week"):
+        await testrun_service.post_run_comment(discussed.id, run, message, {}, [], logged_in_user)
+    await submit_run(client_service, quiet, "2031.1.0~rc2", "passed")
+
+    rows = by_version(await ReleaseSummaryService().get(seeded.release.id), "2031.1.0")
+
+    entries = {entry["test_id"]: entry for entry in rows["2031.1.0~rc2"]["tests"]}
+    assert (entries[str(discussed.id)]["issues"], entries[str(discussed.id)]["comments"]) == (2, 2)
+    assert (entries[str(quiet.id)]["issues"], entries[str(quiet.id)]["comments"]) == (0, 0)
+    older = {entry["test_id"]: entry for entry in rows["2031.1.0~rc1"]["tests"]}
+    assert (older[str(discussed.id)]["issues"], older[str(discussed.id)]["comments"]) == (0, 1)

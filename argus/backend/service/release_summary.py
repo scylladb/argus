@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal, TypedDict
@@ -17,7 +17,7 @@ from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.release_summary import ROLLUP_VERSION, ReleaseSummary
-from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest
+from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, ArgusTestRunComment
 from argus.backend.plugins.loader import all_plugin_models
 from argus.backend.service.views import UserViewService
 from argus.backend.util.common import chunk, gather_limited, select_rows
@@ -62,6 +62,8 @@ class TestEntry(TypedDict):
     build_id: str | None
     build_number: int | None
     version: str | None
+    issues: int
+    comments: int
 
 
 class IssueEntry(TypedDict):
@@ -106,6 +108,8 @@ class ReleaseData:
     jira: dict[UUID, JiraIssue] = field(default_factory=dict)
     github: dict[UUID, GithubIssue] = field(default_factory=dict)
     first_runs: dict[UUID, UUID] = field(default_factory=dict)
+    comment_counts: dict[UUID, int] = field(default_factory=dict)
+    issue_counts: dict[UUID, int] = field(default_factory=dict)
 
 
 def count(tests: list[TestEntry], issues: list[IssueEntry]) -> Counts:
@@ -212,6 +216,8 @@ class SummaryBuilder:
             build_id=run.build_id if run else None,
             build_number=run.build_number if run else None,
             version=str(run.version) if run else None,
+            issues=self.data.issue_counts.get(run.id, 0) if run else 0,
+            comments=self.data.comment_counts.get(run.id, 0) if run else 0,
         )
 
     def _test_entries(self, results: dict[UUID, SummaryRun], planned: set[UUID]) -> list[TestEntry]:
@@ -389,12 +395,13 @@ class ReleaseSummaryService:
     async def _load(release: ArgusRelease) -> ReleaseData:
         release_id = release.id
         pattern = version_pattern(release.valid_version_regex)
-        run_rows, tests, groups, plans, links = await asyncio.gather(
+        run_rows, tests, groups, plans, links, comment_rows = await asyncio.gather(
             asyncio.gather(*(model.get_summary_rows_for_release(release_id) for model in all_plugin_models())),
             ArgusTest.find(release_id=release_id).all(),
             ArgusGroup.find(release_id=release_id).all(),
             ArgusReleasePlan.find(release_id=release_id).all(),
             IssueLink.find(release_id=release_id).all(),
+            select_rows(ArgusTestRunComment.find(release_id=release_id), "test_run_id"),
         )
         runs = []
         for row in (row for rows in run_rows for row in rows):
@@ -410,6 +417,11 @@ class ReleaseSummaryService:
                            groups={group.id: group for group in groups}, links=list(links),
                            plans=[plan for plan in plans
                                   if not pattern or (plan.target_version and pattern.search(plan.target_version))])
+        data.comment_counts = dict(Counter(row["test_run_id"] for row in comment_rows))
+        issues_by_run: dict[UUID, set[UUID]] = defaultdict(set)
+        for link in links:
+            issues_by_run[link.run_id].add(link.issue_id)
+        data.issue_counts = {run_id: len(issue_ids) for run_id, issue_ids in issues_by_run.items()}
         issue_ids = list({link.issue_id for link in links})
         issue_links = await gather_limited((IssueLink.find(issue_id=issue_id).all() for issue_id in issue_ids),
                                            limit=FIRST_LINK_READS)

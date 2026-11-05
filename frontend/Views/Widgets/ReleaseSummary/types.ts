@@ -22,6 +22,8 @@ export interface SummaryTest {
     build_id: string | null;
     build_number: number | null;
     version: string | null;
+    issues?: number;
+    comments?: number;
 }
 
 export interface SummaryIssue {
