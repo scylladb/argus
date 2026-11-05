@@ -12,6 +12,8 @@ import {
     filterNotInvestigated,
     createScreenshotUrl,
     buildCleanResourcesCommand,
+    buildMonitorCommands,
+    isMonitorResource,
 } from "./RunUtils.js";
 
 const samplePackages = [
@@ -204,5 +206,47 @@ describe("buildCleanResourcesCommand", () => {
     it("omits the env-var prefix for an unknown backend", () => {
         const cmd = buildCleanResourcesCommand("unknown-backend", ["region-1"], "run-1");
         expect(cmd).toBe("hydra clean-resources --backend unknown-backend --test-id run-1");
+    });
+});
+
+describe("buildMonitorCommands", () => {
+    const monitor = { name: "sct-monitor-node-6c1f8a2b-0-1" };
+    const commands = (runningMonitor, runFinished) =>
+        buildMonitorCommands("t-1", runningMonitor, runFinished).map((entry) => [entry.label, ...entry.commands]);
+    const restore = ["Restore monitor", "hydra investigate show-monitor t-1", "uv run sct.py investigate show-monitor t-1"];
+
+    it("tunnels to Grafana and Prometheus of a running monitor", () => {
+        expect(commands(monitor, false)).toEqual([
+            [
+                "Grafana",
+                "hydra tunnel -t t-1 -p 3000 sct-monitor-node-6c1f8a2b-0-1",
+                "uv run sct.py tunnel -t t-1 -p 3000 sct-monitor-node-6c1f8a2b-0-1",
+            ],
+            [
+                "Prometheus",
+                "hydra tunnel -t t-1 -p 9090 sct-monitor-node-6c1f8a2b-0-1",
+                "uv run sct.py tunnel -t t-1 -p 9090 sct-monitor-node-6c1f8a2b-0-1",
+            ],
+        ]);
+    });
+
+    it("restores the monitor of a finished run whose monitor is terminated", () => {
+        expect(commands(undefined, true)).toEqual([restore]);
+    });
+
+    it("offers both the tunnel and the restore while a finished run keeps its monitor up", () => {
+        expect(commands(monitor, true).map(([label]) => label)).toEqual(["Grafana", "Prometheus", "Restore monitor"]);
+    });
+
+    it("offers nothing for a run in progress without a running monitor", () => {
+        expect(commands(undefined, false)).toEqual([]);
+    });
+});
+
+describe("isMonitorResource", () => {
+    it("accepts the monitor type or an older monitor name", () => {
+        expect(isMonitorResource({ name: "x", resource_type: "monitor" })).toBe(true);
+        expect(isMonitorResource({ name: "sct-monitor-node-a-0-1" })).toBe(true);
+        expect(isMonitorResource({ name: "sct-db-node-a-0-1", resource_type: "db-node" })).toBe(false);
     });
 });
