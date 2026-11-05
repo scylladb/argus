@@ -385,6 +385,163 @@ stays in every plan built from a spec.
 - [x] Run the verify sequence and `sync-models` on the dev cluster.
 - [x] Committed in `feature(chat-mode): add the shared chat of releases and views`, with its frontend in `feature(frontend): add the chat modal and the chat admin panel`.
 
+## Task 14 — Start parameters: seeds, wizard rules, adjusting a card
+
+**Files:**
+- Create: `argus/backend/service/chat/sct_params.py`: the wizard's rules from `frontend/TestRun/Jenkins/SCTParameterWizard.svelte`. It holds the backends and their region parameter and values, the `provision_type` and `post_behavior_*` values, the version-source families with their formats, and the `email_recipients` default. It exposes `normalize_sct(params, overrides)`, `check_sct(params)` (with BYO through `GithubService.validate_repo`) and `sct_fields(params, job)`.
+- Modify: `argus/backend/service/chat/actions.py`:
+  - `_check_start` takes the seed, the shared overrides and each test's own overrides.
+  - `propose_start` takes `per_test`.
+  - New `adjust_start(entity, card, user, changes)`, written with an LWT on `pending`.
+- Modify: `argus/backend/service/chat/tools.py`: `get_job_params`, `adjust_run_params`; `execute_tests` and `execute_plan_tests` gain `seed`, `build_number` and `per_test`, and `execute_plan_tests` gains `dry_run`.
+- Modify: `argus/backend/service/chat/service.py` (`adjust`), `controller/chat_api.py` (`POST /actions/{node}/params`).
+- Test: `argus/backend/tests/chat/test_run_params.py`
+
+- [ ] Write the failing tests:
+  - A `defaults` seed differs from `last_build`, and a build number reads that build.
+  - Overriding `scylla_version` blanks a stale `scylla_repo`.
+  - A new backend fills its region.
+  - An unsupported region, a malformed AMI, or a BYO repository that GitHub does not know is rejected with the reason.
+  - Per-test overrides win over the shared ones.
+  - `get_job_params` groups an SCT job's parameters and lists their allowed values.
+  - `dry_run` lists tests and makes no card.
+  - `adjust_run_params` rewrites the latest pending card, and is refused on a confirmed one.
+  - The params route re-validates choices.
+- [ ] Run them and confirm the failures.
+- [ ] Write the code.
+- [ ] Run the verify sequence.
+
+## Task 15 — Plan labels and plan edits
+
+**Files:**
+- Create: `argus/backend/service/chat/plans.py`, with `plan_labels` and `build_plan_diff`. It ports `BuildUpdateRequest`, `applyOptionsDiff`, the participants rule and the empty-plan check from `cli/internal/services/planner.go`.
+- Modify: `argus/backend/service/chat/tools.py` (`get_plan_labels`, `edit_plan`), `actions.py` (executing `edit_plan` with the `last_updated` check), `prompt.py` (`_result_text`).
+- Test: `argus/backend/tests/chat/test_plan_edits.py`
+
+- [ ] Write the failing tests:
+  - Labels per entity, with disabled entities marked.
+  - Adding and removing labels gives the final set, and an emptied set removes the options.
+  - Assigning a test adds it.
+  - The participants are the final assignees minus the owner.
+  - A user is found by username or by full name.
+  - An edit that empties the plan is refused.
+  - Confirming applies the diff through `update_plan`.
+  - A plan changed after the proposal fails the card.
+- [ ] Run them and confirm the failures.
+- [ ] Write the code.
+- [ ] Run the verify sequence.
+- [ ] Commit tasks 14–15: `feature(chat-mode): adjust run parameters and edit plans from the chat`.
+
+## Task 16 — Skills and the system prompt
+
+**Files:**
+- Modify: `argus/backend/models/chat.py` (`ChatSkill`, with the template as static columns).
+- Create: `argus/backend/service/chat/skills.py` (`SkillService`, template validation).
+- Modify: `prompt.py` (`build_system_prompt` takes the template and the skills), `agent.py`, `tools.py` (`load_skill`), `prompts/system.md` (`{skills}`), `controller/admin_api.py`.
+- Test: `argus/backend/tests/chat/test_skills.py`
+
+- [ ] Write the failing tests:
+  - An `always` skill joins the prompt.
+  - An `on_demand` skill is listed, and `load_skill` returns it.
+  - `load_skill` is offered only when such a skill exists.
+  - An unknown placeholder, a missing required one, or a stray brace is refused.
+  - A template without `{skills}` gets them appended.
+  - Reset restores the default.
+  - The routes are admin-only.
+- [ ] Run them and confirm the failures.
+- [ ] Write the code.
+- [ ] Run the verify sequence.
+- [ ] Commit `feature(chat-mode): add skills and system prompt editing`.
+
+## Task 17 — MCP servers
+
+**Files:**
+- Modify: `pyproject.toml` and `uv.lock` (`mcp` in the `web-backend` extra; check its bounds against `starlette` 1.6.0 and the `httpx` marker), `argus/backend/models/chat.py` (`ChatMcpServer`).
+- Create: `argus/backend/service/chat/mcp.py`, with `McpServerService`, the `McpClient` seam, `make_mcp_client` and `mcp_tools`.
+- Modify: `tools.py` (the registry takes the per-answer MCP tools; a raw schema skips the Pydantic arguments model), `agent.py`, `actions.py` (`mcp_call`), `prompt.py` (one tool rule; `_result_text`), `controller/admin_api.py`.
+- Test: `argus/backend/tests/chat/test_mcp.py`
+
+- [ ] Write the failing tests:
+  - A probe stores the catalog, new tools start `off`, and a later probe keeps the modes.
+  - Headers are never returned.
+  - Names are sanitised and unique.
+  - A `direct` tool returns text, and an error result is marked as an error.
+  - A `confirm` tool makes a card, and confirming it calls the tool once.
+  - A disabled server offers no tools.
+  - An adapter test runs against an in-process FastMCP server over the SDK's memory transport.
+- [ ] Run them and confirm the failures.
+- [ ] Write the code.
+- [ ] Run the verify sequence.
+- [ ] Commit `feature(chat-mode): connect MCP servers to the chat`.
+
+## Task 18 — Auto mode
+
+**Files:**
+- Modify: `argus/backend/models/chat.py` (`ChatHistory.auto`), `service.py` (`send` and `regenerate` take `auto`), `agent.py` (claim and execute a pending card inside an auto answer, then return the outcome as the tool result), `actions.py` (`claim` records `auto`), `prompt.py` (the auto tool rule), `controller/chat_api.py`.
+- Test: `argus/backend/tests/chat/test_auto_mode.py`
+
+- [ ] Write the failing tests:
+  - An auto question's card is confirmed as the asker and executed once, and the model sees the outcome.
+  - A question without auto leaves its card pending.
+  - A manual confirm of an auto card is refused.
+- [ ] Run them and confirm the failures.
+- [ ] Write the code.
+- [ ] Run the verify sequence.
+- [ ] Commit `feature(chat-mode): confirm cards automatically in auto mode`.
+
+## Task 19 — Frontend: cards and Auto mode
+
+**Files:**
+- Modify: `frontend/Chat/ChatActionCard.svelte`:
+  - The start card's "Edit parameters" mode, with the fields grouped as the wizard groups them and selects for the allowed values.
+  - The `edit_plan` and `mcp_call` cards.
+  - The "Confirmed automatically" label.
+- Modify: `ChatComposer.svelte` (the Auto mode checkbox, kept in `sessionStorage`), `ChatModal.svelte`, `types.ts`.
+- Test: `ChatActionCard.test.ts`, `ChatComposer.test.ts`
+
+- [ ] Write the failing tests:
+  - Editing a parameter posts the overrides, and a rejection shows its reason.
+  - The plan card lists its changes.
+  - The MCP card shows the arguments and then the result.
+  - The auto label shows.
+  - The Auto checkbox is sent with the question.
+- [ ] Run them and confirm the failures.
+- [ ] Write the code.
+- [ ] Run `yarn test` and `yarn build`.
+- [ ] Commit `feature(frontend): edit run parameters and plans in chat cards, and auto mode`.
+
+## Task 20 — Frontend: MCP servers, prompt and skills in the Admin Panel
+
+**Files:**
+- Modify: `frontend/AdminPanel/ChatConfigManager.svelte`, which becomes three tabs: Models, MCP servers, Prompt & skills.
+- Create: `ChatMcpManager.svelte`, `ChatPromptManager.svelte`.
+- Test: `ChatMcpManager.test.ts`, `ChatPromptManager.test.ts`
+
+- [ ] Write the failing tests:
+  - Probing lists the tools, and changing a mode posts it.
+  - Header values are never shown.
+  - A template error from the server shows, and Reset restores the default.
+  - A skill's mode is saved.
+- [ ] Run them and confirm the failures.
+- [ ] Write the code.
+- [ ] Run `yarn test` and `yarn build`.
+- [ ] Commit `feature(frontend): manage MCP servers, skills and the system prompt`.
+
+## Task 21 — Docs and the live check
+
+- [ ] `docs/release_chat.md` covers adjusting a start, plan edits, Auto mode, MCP servers, skills and the system prompt. `docs/api_usage.md` gets the new routes; `docs/project/architecture.md` the MCP client and the skills.
+- [ ] `sync-models` on the dev cluster.
+- [ ] Live check on the dev server:
+  - A plan edit applied on a dev plan.
+  - A start card adjusted by the model and in the card, then dismissed.
+  - A local FastMCP server in the scratchpad: probe it, set the modes, run its read tool directly, and run its write tool through a card.
+  - An `always` skill and an `on_demand` skill, each seen in an answer.
+  - The system prompt edited, then reset.
+  - Auto mode confirming the MCP write tool or the plan edit.
+  - Screenshots at two widths.
+- [ ] The full verify sequence.
+- [ ] Commit `docs(chat-mode): describe MCP servers, skills, run parameters and plan edits`.
+
 ## Task 9 — Full verify and the live check
 
 - [x] `uv run pre-commit run --all-files`, `uv run pytest`, `yarn test`, `yarn build`.
