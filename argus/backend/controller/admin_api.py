@@ -7,6 +7,7 @@ from fastapi import APIRouter, Body, Depends, Query
 from pydantic import BaseModel, Field
 
 from argus.backend.models.web import User, UserRoles
+from argus.backend.service.chat.config import ChatConfigService, DefaultModel
 from argus.backend.service.release_manager import ReleaseManagerService
 from argus.backend.service.tunnel_service import TunnelService
 from argus.backend.service.user import UserService, require_roles
@@ -482,3 +483,63 @@ async def delete_ssh_key(key_id: UUID, user: User = Depends(admin_user)):
             "deleted": True,
         },
     })
+
+
+class ChatConnectionRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9._-]+$")
+    endpoint: str = Field(min_length=1)
+    token: str | None = None
+
+
+class ChatToolTestRequest(BaseModel):
+    model: str = Field(min_length=1)
+
+
+class ChatDefaultRequest(BaseModel):
+    connection: str = Field(min_length=1)
+    model: str = Field(min_length=1)
+    context_window: int = Field(gt=0)
+    tools: bool
+    vision: bool = False
+
+
+@router.get("/chat/connections", name="admin.admin_api.chat_connections")
+async def chat_connections(user: User = Depends(admin_user)):
+    connections, default = await ChatConfigService().connections()
+    return APIResponse({
+        "status": "ok",
+        "response": {
+            "connections": [asdict(connection) for connection in connections],
+            "default": asdict(default) if default else None,
+        },
+    })
+
+
+@router.post("/chat/connection", name="admin.admin_api.chat_save_connection")
+async def chat_save_connection(payload: ChatConnectionRequest, user: User = Depends(admin_user)):
+    connection = await ChatConfigService().save_connection(payload.name, payload.endpoint, payload.token, user)
+    return APIResponse({"status": "ok", "response": asdict(connection)})
+
+
+@router.delete("/chat/connection/{name}", name="admin.admin_api.chat_delete_connection")
+async def chat_delete_connection(name: str, user: User = Depends(admin_user)):
+    await ChatConfigService().delete_connection(name)
+    return APIResponse({"status": "ok", "response": {"deleted": name}})
+
+
+@router.get("/chat/connection/{name}/models", name="admin.admin_api.chat_probe_models")
+async def chat_probe_models(name: str, user: User = Depends(admin_user)):
+    models = await ChatConfigService().probe(name)
+    return APIResponse({"status": "ok", "response": [asdict(model) for model in models]})
+
+
+@router.post("/chat/connection/{name}/test_tools", name="admin.admin_api.chat_test_tools")
+async def chat_test_tools(name: str, payload: ChatToolTestRequest, user: User = Depends(admin_user)):
+    result = await ChatConfigService().test_tools(name, payload.model)
+    return APIResponse({"status": "ok", "response": asdict(result)})
+
+
+@router.post("/chat/default", name="admin.admin_api.chat_set_default")
+async def chat_set_default(payload: ChatDefaultRequest, user: User = Depends(admin_user)):
+    default = await ChatConfigService().set_default(DefaultModel(**payload.model_dump()), user)
+    return APIResponse({"status": "ok", "response": asdict(default)})
