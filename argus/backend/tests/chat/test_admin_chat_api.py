@@ -2,19 +2,10 @@ import pytest
 from starlette.testclient import TestClient
 
 from argus.backend.service.chat.llm import ProbedModel
-from argus.backend.tests.conftest import g
 
 pytestmark = [pytest.mark.docker_required, pytest.mark.usefixtures("clean_chat_config")]
 
 API = "/admin/api/v1/chat"
-
-
-@pytest.fixture
-def normal_user_identity():
-    previous_roles = list(g.user.roles)
-    g.user.roles = ["ROLE_USER"]
-    yield
-    g.user.roles = previous_roles
 
 
 def ok(response) -> dict | list:
