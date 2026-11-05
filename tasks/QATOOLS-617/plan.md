@@ -453,12 +453,12 @@ stays in every plan built from a spec.
 ## Task 17 — MCP servers
 
 **Files:**
-- Modify: `pyproject.toml` and `uv.lock` (`mcp` in the `web-backend` extra; check its bounds against `starlette` 1.6.0 and the `httpx` marker), `argus/backend/models/chat.py` (`ChatMcpServer`).
+- Modify: `pyproject.toml` and `uv.lock` (`mcp` in the `web-backend` extra; mcp 2.x runs on `httpx2` and leaves `starlette` as it is), `argus/backend/models/chat.py` (`ChatMcpServer`).
 - Create: `argus/backend/service/chat/mcp.py`, with `McpServerService`, the `McpClient` seam, `make_mcp_client` and `mcp_tools`.
 - Modify: `tools.py` (the registry takes the per-answer MCP tools; a raw schema skips the Pydantic arguments model), `agent.py`, `actions.py` (`mcp_call`), `prompt.py` (one tool rule; `_result_text`), `controller/admin_api.py`.
 - Test: `argus/backend/tests/chat/test_mcp.py`
 
-- [ ] Write the failing tests:
+- [x] Write the tests:
   - A probe stores the catalog, new tools start `off`, and a later probe keeps the modes.
   - Headers are never returned.
   - Names are sanitised and unique.
@@ -466,10 +466,9 @@ stays in every plan built from a spec.
   - A `confirm` tool makes a card, and confirming it calls the tool once.
   - A disabled server offers no tools.
   - An adapter test runs against an in-process FastMCP server over the SDK's memory transport.
-- [ ] Run them and confirm the failures.
-- [ ] Write the code.
-- [ ] Run the verify sequence.
-- [ ] Commit `feature(chat-mode): connect MCP servers to the chat`.
+- [x] Write the code.
+- [x] Run the verify sequence.
+- [x] Commit `feature(chat-mode): connect MCP servers to the chat`.
 
 ## Task 18 — Auto mode
 

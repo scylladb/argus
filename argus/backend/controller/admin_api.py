@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.chat.config import ChatConfigService, DefaultModel
 from argus.backend.service.chat.identity import PICTURE_LIMIT, ChatIdentityService, identity_json
+from argus.backend.service.chat.mcp import McpServerService
 from argus.backend.service.chat.skills import SkillService, template_json
 from argus.backend.service.release_manager import ReleaseManagerService
 from argus.backend.service.tunnel_service import TunnelService
@@ -483,6 +484,18 @@ class ChatActiveIdentityRequest(BaseModel):
     connection: str | None = None
 
 
+class ChatMcpServerRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=32)
+    url: str = Field(min_length=1)
+    transport: str = "streamable_http"
+    headers: dict[str, str] | None = None
+    enabled: bool = True
+
+
+class ChatMcpModesRequest(BaseModel):
+    modes: dict[str, str]
+
+
 class ChatTemplateRequest(BaseModel):
     template: str = Field(min_length=1)
 
@@ -600,3 +613,33 @@ async def chat_save_skill(payload: ChatSkillRequest, user: User = Depends(admin_
 async def chat_delete_skill(name: str, user: User = Depends(admin_user)):
     await SkillService().delete_skill(name)
     return APIResponse({"status": "ok", "response": {"deleted": name}})
+
+
+@router.get("/chat/mcp", name="admin.admin_api.chat_mcp_servers")
+async def chat_mcp_servers(user: User = Depends(admin_user)):
+    servers = await McpServerService().servers()
+    return APIResponse({"status": "ok", "response": [asdict(server) for server in servers]})
+
+
+@router.post("/chat/mcp/server", name="admin.admin_api.chat_save_mcp_server")
+async def chat_save_mcp_server(payload: ChatMcpServerRequest, user: User = Depends(admin_user)):
+    server = await McpServerService().save(payload.name, payload.url, payload.transport, payload.headers,
+                                           payload.enabled, user)
+    return APIResponse({"status": "ok", "response": asdict(server)})
+
+
+@router.delete("/chat/mcp/server/{name}", name="admin.admin_api.chat_delete_mcp_server")
+async def chat_delete_mcp_server(name: str, user: User = Depends(admin_user)):
+    await McpServerService().delete(name)
+    return APIResponse({"status": "ok", "response": {"deleted": name}})
+
+
+@router.post("/chat/mcp/server/{name}/probe", name="admin.admin_api.chat_probe_mcp_server")
+async def chat_probe_mcp_server(name: str, user: User = Depends(admin_user)):
+    return APIResponse({"status": "ok", "response": asdict(await McpServerService().probe(name))})
+
+
+@router.post("/chat/mcp/server/{name}/tools", name="admin.admin_api.chat_mcp_tool_modes")
+async def chat_mcp_tool_modes(name: str, payload: ChatMcpModesRequest, user: User = Depends(admin_user)):
+    return APIResponse({"status": "ok", "response": asdict(await McpServerService().set_modes(name,
+                                                                                               payload.modes))})
