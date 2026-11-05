@@ -11,6 +11,8 @@ from argus.backend.service.chat.llm import ChatMessage, ToolCall
 
 TEMPLATE = (Path(__file__).parent / "prompts" / "system.md").read_text(encoding="utf-8")
 TOOL_RESULT_LIMIT = 6000
+AUTO_COMPACT_SHARE = 0.9
+COMPACT_WARNING_SHARE = 0.75
 FAILED_TEST_LIMIT = 40
 OPEN_ISSUE_LIMIT = 30
 FAILED_STATUSES = ("failed", "test_error", "error", "aborted")
@@ -184,10 +186,16 @@ def node_user_ids(path: list[ChatHistory]) -> set[UUID]:
     return ids
 
 
+def newest_summary(path: list[ChatHistory]) -> int:
+    """The index of the newest finished compaction on the path, or -1; a failed or stopped one is ignored."""
+    return max((index for index, node in enumerate(path)
+                if node.role == "summary" and node.status == "done" and node.content), default=-1)
+
+
 def to_messages(path: list[ChatHistory], users: Mapping[UUID, User]) -> list[ChatMessage]:
     """The model's view of the active path. A leading system message carries the
     newest compaction summary; the caller merges it into its system prompt."""
-    start = max((index for index, node in enumerate(path) if node.role == "summary"), default=-1)
+    start = newest_summary(path)
     messages: list[ChatMessage] = []
     if start >= 0:
         messages.append(ChatMessage("system", f"Summary of the earlier conversation:\n{path[start].content}"))
@@ -228,7 +236,13 @@ def context_stats(path: list[ChatHistory], window: int) -> dict:
         last_prompt = path[last].prompt_tokens
         base = last_prompt + (path[last].completion_tokens or 0)
     estimated = sum(estimate_tokens(node.content) for node in path[last + 1:])
-    compacted = max((index for index, node in enumerate(path) if node.role == "summary"), default=-1)
+    compacted = newest_summary(path)
     since = sum(1 for node in path[compacted + 1:] if node.role in ("user", "assistant"))
     return {"window": window, "used": base + estimated, "last_prompt_tokens": last_prompt,
-            "estimated_tokens": estimated, "messages_since_compaction": since}
+            "estimated_tokens": estimated, "messages_since_compaction": since,
+            "warn_at": int(window * COMPACT_WARNING_SHARE), "compact_at": int(window * AUTO_COMPACT_SHARE)}
+
+
+def needs_compaction(path: list[ChatHistory], window: int) -> bool:
+    stats = context_stats(path, window)
+    return stats["messages_since_compaction"] > 0 and stats["used"] >= stats["compact_at"]

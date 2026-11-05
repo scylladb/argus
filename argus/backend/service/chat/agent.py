@@ -172,13 +172,15 @@ class ChatAgent:
         snapshot = [{"memory_id": memory["id"], "revision": memory["revision"]} for memory in memories]
         return system, messages, snapshot
 
-    async def answer(self, assistant: ChatHistory) -> None:
+    async def answer(self, assistant: ChatHistory, compact_first: ChatHistory | None = None) -> None:
         self.busy_node = assistant.node
         self.auto = bool(assistant.auto)
         current = assistant
 
         async def work(streamed: Streamed) -> None:
             nonlocal current
+            if compact_first is not None:
+                await self._compact_first(compact_first)
             _, nodes = await self.history.read()
             setup = await SkillService().prompt_setup()
             self.box = Toolbox(hidden=frozenset() if setup.on_demand else frozenset({"load_skill"}),
@@ -259,20 +261,32 @@ class ChatAgent:
         return to_json({"status": "confirmed automatically (Auto mode) and done", "kind": action["kind"],
                         "outcome": results_text(action["kind"], action["results"])})
 
+    async def _summarize(self, summary: ChatHistory, streamed: Streamed) -> None:
+        _, nodes = await self.history.read()
+        path = active_path(nodes, summary.parent)
+        users = await load_users(node_user_ids(path), self.user)
+        messages = to_messages(path, users)
+        instruction = COMPACT_INSTRUCTION
+        if messages and messages[0].role == "system":
+            instruction = f"{instruction}\n\n{messages.pop(0).content}"
+        messages = [ChatMessage("system", instruction), *messages,
+                    ChatMessage("user", "Summarize the conversation so far.")]
+        await self._stream(summary, messages, None, streamed)
+        await self._finish(summary, "done", streamed)
+
     async def compact(self, summary: ChatHistory) -> None:
         self.busy_node = summary.node
+        await self._guard(lambda: summary, lambda streamed: self._summarize(summary, streamed))
 
-        async def work(streamed: Streamed) -> None:
-            _, nodes = await self.history.read()
-            path = active_path(nodes, summary.parent)
-            users = await load_users(node_user_ids(path), self.user)
-            messages = to_messages(path, users)
-            instruction = COMPACT_INSTRUCTION
-            if messages and messages[0].role == "system":
-                instruction = f"{instruction}\n\n{messages.pop(0).content}"
-            messages = [ChatMessage("system", instruction), *messages,
-                        ChatMessage("user", "Summarize the conversation so far.")]
-            await self._stream(summary, messages, None, streamed)
-            await self._finish(summary, "done", streamed)
-
-        await self._guard(lambda: summary, work)
+    async def _compact_first(self, summary: ChatHistory) -> None:
+        """The automatic compaction before an answer: a failure is recorded on the summary, which the prompt then
+        ignores, and the answer goes ahead."""
+        streamed = Streamed()
+        try:
+            await self._summarize(summary, streamed)
+        except (StopRequested, asyncio.CancelledError):
+            await self._finish(summary, "stopped", streamed)
+            raise
+        except Exception as exception:  # noqa: BLE001 - the answer still runs on the uncompacted conversation
+            LOGGER.warning("The automatic compaction of %s failed", self.entity.id, exc_info=True)
+            await self._finish(summary, "error", streamed, error=f"{exception.__class__.__name__}: {exception}")

@@ -125,4 +125,4 @@ def test_context_stats_start_from_the_last_usage():
     stats = context_stats([question, answer, follow_up], 8000)
 
     assert stats == {"window": 8000, "used": 1300, "last_prompt_tokens": 1000, "estimated_tokens": 100,
-                     "messages_since_compaction": 3}
+                     "messages_since_compaction": 3, "warn_at": 6000, "compact_at": 7200}
