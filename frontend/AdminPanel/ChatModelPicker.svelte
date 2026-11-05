@@ -32,7 +32,8 @@
 
     const usable = $derived(connections.filter((entry) => entry.token_readable));
     const shown = $derived(
-        (models ?? []).filter((model) => model.id.toLowerCase().includes(filter.trim().toLowerCase())),
+        (models ?? []).filter((model) =>
+            [model.id, model.name].some((text) => text.toLowerCase().includes(filter.trim().toLowerCase()))),
     );
 
     const probe = async (name: string) => {
@@ -141,7 +142,12 @@
                                                aria-label="Choose {model.id}" checked={chosen?.id === model.id}
                                                onchange={() => choose(model)} />
                                     </td>
-                                    <td class="font-monospace text-break">{model.id}</td>
+                                    <td class="text-break">
+                                        <span class="font-monospace">{model.id}</span>
+                                        {#if model.name !== model.id}
+                                            <div class="small text-body-secondary">{model.name}</div>
+                                        {/if}
+                                    </td>
                                     <td>{model.context_window?.toLocaleString() ?? "?"}</td>
                                     <td class="d-flex gap-1">
                                         {@render capability(model.tools, "tool-calling")}

@@ -14,6 +14,7 @@ from argus.backend.service.chat.llm import (
     ToolCallsReady,
     ToolSpec,
     Usage,
+    chat_models,
     normalize_model,
 )
 
@@ -99,6 +100,60 @@ async def test_the_stream_yields_text_reasoning_tool_calls_and_usage():
     assert seen["body"]["messages"][1] == {"role": "assistant", "content": None, "tool_calls": [
         {"id": "call_0", "type": "function", "function": {"name": "get_summary", "arguments": "{}"}}]}
     assert seen["body"]["messages"][2] == {"role": "tool", "tool_call_id": "call_0", "content": "{\"ok\": true}"}
+
+
+def stream_of(*chunks: str):
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        body = "".join([*chunks, chunk({}, finish="tool_calls"), "data: [DONE]\n\n"])
+        return httpx2.Response(200, headers={"content-type": "text/event-stream"}, content=body.encode())
+
+    return client_for(handler)
+
+
+async def calls_of(client: OpenAIChatClient) -> list[ToolCall]:
+    events = [event async for event in client.stream("m", [ChatMessage("user", "hi")], None)]
+    return next(event.calls for event in events if isinstance(event, ToolCallsReady))
+
+
+async def test_a_name_repeated_in_every_chunk_is_one_name():
+    piece = lambda arguments: chunk({"tool_calls": [{"index": 0, "id": "toolu_1", "type": "function",
+                                                      "function": {"name": "read_run", "arguments": arguments}}]})
+
+    calls = await calls_of(stream_of(piece(""), piece("{\"run\": "), piece("\"CDC#7\"}")))
+
+    assert calls == [ToolCall("toolu_1", "read_run", "{\"run\": \"CDC#7\"}")]
+
+
+async def test_cumulative_arguments_are_not_repeated():
+    piece = lambda arguments: chunk({"tool_calls": [{"index": 0, "function": {"arguments": arguments}}]})
+    start = chunk({"tool_calls": [{"index": 0, "id": "c1", "function": {"name": "read_", "arguments": ""}}]})
+    rest = chunk({"tool_calls": [{"index": 0, "function": {"name": "run"}}]})
+
+    calls = await calls_of(stream_of(start, rest, piece("{\"run\""), piece("{\"run\": \"7\"}")))
+
+    assert calls == [ToolCall("c1", "read_run", "{\"run\": \"7\"}")]
+
+
+async def test_calls_without_an_index_are_told_apart_by_id():
+    whole = lambda call_id, name, arguments: chunk({"tool_calls": [
+        {"id": call_id, "type": "function", "function": {"name": name, "arguments": arguments}}]})
+
+    calls = await calls_of(stream_of(whole("a", "read_run", {"run": "7"}), whole("b", "get_time", "{}")))
+
+    assert calls == [ToolCall("a", "read_run", "{\"run\": \"7\"}"), ToolCall("b", "get_time", "{}")]
+
+
+def test_a_model_listed_once_per_api_is_one_chat_model():
+    def entry(model_id: str, endpoint: str, context: int | None = None) -> dict:
+        info = {"name": f"Name of {model_id}", **({"contextLength": context} if context else {})}
+        return {"id": model_id, "type": endpoint, "info": info, "aliases": [], "tags": []}
+
+    models = chat_models([entry("claude", "anthropic/messages", 200000), entry("claude", "openai/chat-completions"),
+                          entry("claude", "anthropic/batches"), entry("video", "internal/video-generations/submit"),
+                          entry("gpt", "openai/chat-completions", 128000), entry("gpt", "openai/chat-completions")])
+
+    assert [(model.id, model.name, model.context_window) for model in models] == [
+        ("claude", "Name of claude", None), ("gpt", "Name of gpt", 128000)]
 
 
 async def test_an_endpoint_error_is_a_chat_model_error():
