@@ -441,8 +441,8 @@ class EditPlanArgs(BaseModel):
     assign: dict[str, str] = Field(default_factory=dict,
                                    description=f"{{{ENTITY}: username or full name}}; $owner unassigns")
     unassign: StringList = Field(default_factory=list, description="Entities that go back to the plan owner")
-    add_labels: dict[str, list[str]] = Field(default_factory=dict, description=f"{{{ENTITY}: [labels]}}")
-    remove_labels: dict[str, list[str]] = Field(default_factory=dict, description=f"{{{ENTITY}: [labels]}}")
+    add_labels: dict[str, StringList] = Field(default_factory=dict, description=f"{{{ENTITY}: [labels]}}")
+    remove_labels: dict[str, StringList] = Field(default_factory=dict, description=f"{{{ENTITY}: [labels]}}")
     name: str | None = None
     description: str | None = None
     target_version: str | None = None
@@ -537,6 +537,7 @@ def proposal_outcome(action: dict) -> ToolOutcome:
         "kind": action["kind"],
     }
     if action["kind"] == "execute_tests":
+        summary["note"] += " To change its parameters before it runs, call adjust_run_params."
         summary["proposed"] = [{"test": test["test"], "overrides": test["overrides"], "seed": test["seed"],
                                 "build_number": test["build_number"]} for test in action["proposal"]["tests"]]
         summary["rejected"] = action["rejected"]

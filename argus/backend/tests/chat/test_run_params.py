@@ -28,7 +28,8 @@ LAST_BUILD = [
     {"name": "scylla_ami_id", "value": ""},
     {"name": "byo_scylla_repo", "value": ""},
     {"name": "byo_scylla_branch", "value": ""},
-    {"name": "provision_type", "value": "spot", "description": "How the instances are provisioned"},
+    {"name": "provision_type", "value": "spot",
+     "description": "How the instances are <span class=\"fw-bold\">provisioned</span>"},
     {"name": "email_recipients", "value": ""},
     {"name": "post_behavior_db_nodes", "value": "destroy", "choices": ["destroy", "keep", "keep-on-failure"]},
 ]

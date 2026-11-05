@@ -65,6 +65,13 @@ async def test_an_edit_follows_the_command_line_rules(ctx, seeded, plan, chat_pe
     assert any(line.startswith("assign") and alice.username in line for line in outcome.action["proposal"]["summary"])
 
 
+async def test_a_single_label_needs_no_list(ctx, seeded, plan):
+    outcome = await call(ctx, "edit_plan", plan=plan.name, add_labels={seeded.tests[0].name: "nightly"})
+
+    assert outcome.action["proposal"]["diff"]["options_set"] == {
+        str(seeded.tests[0].id): {"labels": ["week1", "sanity", "nightly"]}}
+
+
 async def test_removing_the_last_label_removes_the_options(ctx, seeded, plan):
     outcome = await call(ctx, "edit_plan", plan=plan.name,
                          remove_labels={seeded.tests[0].name: ["week1", "sanity"]})
