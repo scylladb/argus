@@ -178,7 +178,8 @@ The assistant node records the memories it was given, as
 | `get_assignees(tests, version?)` | each test's assignee in every active plan that holds it, its own and its group's assignees, and its last run's assignee | — |
 | `investigate_runs(runs, question?)` | queue a Zeus investigation for each of 1–5 runs | card |
 | `get_investigation(run?)` | Zeus's report on a run, from the run's discussion or a chat-queued task; without a run, the state of the chat's investigations | a ready report card for a discussion report |
-| `read_discussion(run, limit)` | a run's comments with their authors; Zeus's comments marked | — |
+| `get_comments(run, limit)` | a run's comments with their authors; Zeus's comments marked | — |
+| `post_comment(run, message)` | post a comment on a run, as the confirming user | card |
 
 `investigate_runs` is offered only when `ZEUS_HOST` and `ZEUS_TOKEN` are
 configured. Reading reports needs no connection to Zeus.

@@ -24,6 +24,7 @@ from argus.backend.service.chat.resolve import (
 from argus.backend.service.issue_service import IssueService
 from argus.backend.service.jenkins_service import JenkinsService
 from argus.backend.service.planner_service import PlanningService
+from argus.backend.service.testrun import TestRunService
 from argus.backend.service.zeus_client import ZeusClient, ZeusError
 from argus.backend.util.common import gather_limited
 from argus.backend.util.encoders import ArgusJSONEncoder
@@ -374,6 +375,11 @@ async def execute(entity: ChatEntity, card: ChatHistory, action: dict, user: Use
                 results = [{"issue": issue, "error": None}]
             case "zeus_investigation":
                 results = await _queue_investigations(action)
+            case "post_comment":
+                await TestRunService().post_run_comment(test_id=UUID(proposal["test_id"]),
+                                                        run_id=UUID(proposal["run_id"]), message=proposal["message"],
+                                                        reactions={}, mentions=[], user=user)
+                results = [{"test": proposal["test"], "error": None}]
             case "mcp_call":
                 text, failed = await McpServerService().call(proposal["server"], proposal["tool"],
                                                              proposal["arguments"])

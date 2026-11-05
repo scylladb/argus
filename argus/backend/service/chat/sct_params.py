@@ -42,7 +42,9 @@ URL_RE = re.compile(r"^https?://(www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9
 FORMATS = {
     "scylla_version": (re.compile(r"^(([\w\-.]+:(latest|\d+|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z))|"
                                   r"(\d+\.\d+(\.\d+)?)((~|-)rc\d)?)$"),
-                       "a version such as 2025.1.0~rc1, or branch:latest"),
+                       "a released version (2025.1, 2025.1.0, 2025.1.0~rc1 or 2025.1.0-rc1), or a branch build as "
+                       "branch:latest, branch:<build number> or branch:<YYYY-MM-DDTHH:MM:SSZ> (master:latest, "
+                       "branch-2025.1:latest, master:1234)"),
     "scylla_repo": (URL_RE, "an http(s) link to the .repo or .list file"),
     "new_scylla_repo": (URL_RE, "an http(s) link to the .repo or .list file"),
     "scylla_ami_id": (re.compile(r"^(ami-[abcdef\d]{4,17}|scylla-.+)$"), "ami-<hex id>"),
@@ -135,6 +137,8 @@ def fields(params: dict[str, str], job: list[dict], sct: bool) -> list[dict]:
             entry["choices"] = list(choices)
         if description := HTML_TAG.sub("", param.get("description") or "").strip():
             entry["description"] = description[:160]
+        if sct and name in FORMATS:
+            entry["format"] = FORMATS[name][1]
         result.append(entry)
     order = list(FIELD_GROUPS) + ["other"]
     return sorted(result, key=lambda entry: order.index(entry["group"]))
