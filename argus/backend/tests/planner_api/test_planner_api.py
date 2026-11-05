@@ -178,11 +178,11 @@ def test_new_plan_view_carries_the_default_widgets(api_client, release, fake_tes
 
     widgets = json.loads(view["widget_settings"])
     assert [widget["type"] for widget in widgets] == [
-        "highlights", "githubIssues", "releaseStats", "releaseSummary", "testDashboard"]
-    assert [widget["position"] for widget in widgets] == [1, 2, 3, 4, 5]
-    assert widgets[0]["settings"]["index"] == 0
-    assert widgets[4]["settings"]["productVersion"] == "2025.1.0~rc1"
-    assert widgets[4]["settings"]["targetVersion"] is True
+        "chat", "highlights", "githubIssues", "releaseStats", "releaseSummary", "testDashboard"]
+    assert [widget["position"] for widget in widgets] == [1, 2, 3, 4, 5, 6]
+    assert widgets[1]["settings"]["index"] == 0
+    assert widgets[5]["settings"]["productVersion"] == "2025.1.0~rc1"
+    assert widgets[5]["settings"]["targetVersion"] is True
 
 
 def test_new_plan_without_a_version_turns_off_the_dashboard_version(api_client, release, fake_test, cleanup_plans):
