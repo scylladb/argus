@@ -124,6 +124,7 @@ class ChatHistory(Document):
     status: str = "done"
     error: Optional[str] = None
     hidden: bool = False
+    auto: Optional[bool] = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 

@@ -26,6 +26,10 @@ TOOL_RULES = """- Use the tools to look things up before you answer. Prefer one 
   a finding to the release summary (kind "finding").
 - Tools named mcp_... come from servers outside Argus. Those whose
   description says a user confirms each call only propose it as a card."""
+AUTO_RULE = """
+- Auto mode is on for this question: a proposal runs at once, as if the
+  asker confirmed its card, and the tool result is its outcome. Propose only
+  what the asker clearly asked for."""
 NO_TOOL_RULES = "- You have no tools in this chat. Answer from the summary and the memories."
 COMPACT_INSTRUCTION = """Summarize the conversation below for later reference. Keep the facts,
 the decisions, the open requests, the test names, the versions, and who asked
@@ -97,7 +101,7 @@ def scope_text(entity: ChatEntity) -> str:
 
 def build_system_prompt(entity: ChatEntity, memories: list[dict], summary_text: str, users: Mapping[UUID, User],
                         now: datetime, tools: bool, assistant_name: str | None = None, template: str = TEMPLATE,
-                        skills: str = "") -> str:
+                        skills: str = "", auto: bool = False) -> str:
     if skills and "{skills}" not in template:
         template = f"{template.rstrip()}\n\n{{skills}}"
     return template.format_map({
@@ -105,7 +109,7 @@ def build_system_prompt(entity: ChatEntity, memories: list[dict], summary_text: 
         "entity_kind": entity.type,
         "entity_name": entity.name,
         "date": now.strftime("%Y-%m-%d"),
-        "tool_rules": TOOL_RULES if tools else NO_TOOL_RULES,
+        "tool_rules": (TOOL_RULES + (AUTO_RULE if auto else "")) if tools else NO_TOOL_RULES,
         "scope": scope_text(entity),
         "memories": memory_lines(memories, users),
         "summary": summary_text,
@@ -145,6 +149,10 @@ def _result_text(kind: str, result: dict) -> str:
             return f"{result.get('issue')} is unlinked"
 
 
+def results_text(kind: str, results: list[dict]) -> str:
+    return "; ".join(_result_text(kind, result) for result in results)
+
+
 def action_note(node: ChatHistory, users: Mapping[UUID, User]) -> str | None:
     action = json.loads(node.action) if node.action else {}
     kind = action.get("kind", "action")
@@ -152,7 +160,7 @@ def action_note(node: ChatHistory, users: Mapping[UUID, User]) -> str | None:
         return None
     if node.action_state == "done":
         who = user_label(UUID(action["confirmed_by"]), users) if action.get("confirmed_by") else "A user"
-        results = "; ".join(_result_text(kind, result) for result in action.get("results", []))
+        results = results_text(kind, action.get("results", []))
         if kind == "zeus_investigation":
             return f"{who} queued Zeus investigations: {results}"
         return f"{who} confirmed {kind}: {results}"

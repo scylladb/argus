@@ -24,6 +24,11 @@ RECONNECT_MS = 1000
 
 class MessageRequest(BaseModel):
     content: str
+    auto: bool = False
+
+
+class RegenerateRequest(BaseModel):
+    auto: bool = False
 
 
 class HeadRequest(BaseModel):
@@ -138,12 +143,13 @@ async def events(entity: ChatEntity = Depends(chat_entity), user: User = Depends
 @router.post("/messages", name="api.chat_api.send")
 async def send(payload: MessageRequest, entity: ChatEntity = Depends(chat_entity),
                user: User = Depends(api_current_user)):
-    return ok(await ChatService().send(entity, payload.content, user))
+    return ok(await ChatService().send(entity, payload.content, user, payload.auto))
 
 
 @router.post("/regenerate", name="api.chat_api.regenerate")
-async def regenerate(entity: ChatEntity = Depends(chat_entity), user: User = Depends(api_current_user)):
-    return ok(await ChatService().regenerate(entity, user))
+async def regenerate(payload: RegenerateRequest | None = None, entity: ChatEntity = Depends(chat_entity),
+                     user: User = Depends(api_current_user)):
+    return ok(await ChatService().regenerate(entity, user, bool(payload and payload.auto)))
 
 
 @router.post("/compact", name="api.chat_api.compact")

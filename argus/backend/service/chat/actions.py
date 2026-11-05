@@ -328,7 +328,8 @@ async def locate_card(entity: ChatEntity, node: UUID) -> ChatHistory:
     return card
 
 
-async def claim(entity: ChatEntity, node: UUID, user: User, state: str) -> tuple[ChatHistory, dict]:
+async def claim(entity: ChatEntity, node: UUID, user: User, state: str,
+                auto: bool = False) -> tuple[ChatHistory, dict]:
     card = await locate_card(entity, node)
     stored_state = card.action_state
     result = await card.update(if_conditions={"action_state": "pending"}, action_state=state)
@@ -338,7 +339,7 @@ async def claim(entity: ChatEntity, node: UUID, user: User, state: str) -> tuple
     action = json.loads(card.action)
     now = datetime.now(UTC)
     if state == "running":
-        action.update(confirmed_by=user.id, confirmed_at=now)
+        action.update(confirmed_by=user.id, confirmed_at=now, auto=auto)
     else:
         action.update(dismissed_by=user.id)
     await ChatHistoryService(entity).flush(card, action=_json(action))
