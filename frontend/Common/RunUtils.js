@@ -83,8 +83,20 @@ export const buildMonitorCommands = function (testId, runningMonitor, runFinishe
     if (runFinished) {
         entries.push(["Restore monitor", `investigate show-monitor ${testId}`]);
     }
-    return entries.map(([label, args]) => ({ label, commands: SCT_RUNNERS.map((runner) => `${runner} ${args}`) }));
+    return entries.map(([label, args]) => withRunners(label, args));
 };
+
+/**
+ * The ssh command for a running node of a run, nothing for a stopped one.
+ * @param {string} testId
+ * @param {{ name: string, state: string }} node
+ * @returns {{ label: string, commands: string[] }[]}
+ */
+export const buildSshCommands = function (testId, node) {
+    return node.state === "running" ? [withRunners("SSH", `ssh -t ${testId} ${node.name}`)] : [];
+};
+
+const withRunners = (label, args) => ({ label, commands: SCT_RUNNERS.map((runner) => `${runner} ${args}`) });
 
 export const getRelocatableScyllaPackage = function(packages) {
     // relocatable package: https://docs.scylladb.com/stable/getting-started/install-scylla/unified-installer.html

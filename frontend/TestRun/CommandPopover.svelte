@@ -1,11 +1,9 @@
 <script lang="ts">
     import Fa from "svelte-fa";
     import { faCopy } from "@fortawesome/free-solid-svg-icons";
-    import { buildMonitorCommands } from "../Common/RunUtils";
     import { sendMessage } from "../Stores/AlertStore";
 
-    let { testId, monitor, runFinished, label } = $props();
-    let entries = $derived(buildMonitorCommands(testId, monitor, runFinished));
+    let { entries, label, btnClass = "btn-outline-success" } = $props();
 
     const copy = (command: string) => {
         navigator.clipboard.writeText(command);
@@ -17,9 +15,10 @@
     <div class="btn-group">
         <button
             type="button"
-            class="btn btn-outline-success dropdown-toggle"
+            class="btn {btnClass} dropdown-toggle"
             data-bs-toggle="dropdown"
             data-bs-auto-close="outside"
+            data-bs-popper-config={'{"strategy":"fixed"}'}
             aria-expanded="false"
         >
             <Fa icon={faCopy} /> {label}

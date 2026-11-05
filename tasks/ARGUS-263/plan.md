@@ -50,3 +50,21 @@ otherwise. *Open Grafana* stays only for a public IP.
 - [x] Preview the run card in a browser.
 - [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
 - [x] Commit, with the boxes of both tasks checked.
+
+## Task 3 — SSH per running instance
+
+**Files:**
+- Rename: `frontend/TestRun/MonitorConnect.svelte` to
+  `frontend/TestRun/CommandPopover.svelte`
+- Modify: `frontend/Common/RunUtils.js`, `frontend/Common/RunUtils.test.js`,
+  `frontend/TestRun/TestRunInfo.svelte`, `frontend/TestRun/ResourcesInfo.svelte`
+
+**Internals:** `buildSshCommands(testId, node)` returns the `ssh` entry for a
+running node and `[]` otherwise. `CommandPopover` takes `entries`, `label`
+and `btnClass`, so the run card and the Resources tab share it. The Resources
+table gets a *Connect* column after *State*.
+
+- [x] Write the failing test: a running node and a terminated node.
+- [x] Write the smallest change that passes it.
+- [x] Preview the Resources tab in a browser.
+- [x] Run `yarn test`, `yarn build` and the verify sequence.

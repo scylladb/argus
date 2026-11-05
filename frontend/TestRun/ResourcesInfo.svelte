@@ -7,7 +7,8 @@
         faPlay,
     } from "@fortawesome/free-solid-svg-icons";
     import { sendMessage } from "../Stores/AlertStore";
-    import { buildCleanResourcesCommand } from "../Common/RunUtils";
+    import { buildCleanResourcesCommand, buildSshCommands } from "../Common/RunUtils";
+    import CommandPopover from "./CommandPopover.svelte";
     let { resources = $bindable(), backend, run_id, regions = [], focusResource = null } = $props();
     let rows: Record<string, HTMLTableRowElement> = $state({});
 
@@ -313,6 +314,7 @@
                 {/if}
                 State
             </th>
+            <th scope="col" class="text-center align-middle">Connect</th>
             <th
                 role="button"
                 scope="col"
@@ -396,6 +398,9 @@
                     class="{tableStates[resource.state]}"
                 >
                 {titleCase(resource.state)}
+                </td>
+                <td class="text-center">
+                    <CommandPopover entries={buildSshCommands(run_id, resource)} label="SSH" btnClass="btn-sm btn-outline-success" />
                 </td>
                 <td>{timestampToISODate(resource.instance_info.creation_time * 1000, true)}</td>
                 <td>
