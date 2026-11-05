@@ -37,6 +37,8 @@
     let live = $state(false);
     let loadError = $state("");
     let side = $state<"memories" | "history" | "context">("memories");
+    const RECENT_MS = 3 * 24 * 60 * 60 * 1000;
+
     let thread = $state<HTMLElement | undefined>();
     let confirmingClear = $state(false);
     const watched = new SvelteSet<string>();
@@ -45,6 +47,14 @@
     const users = $derived($userList as Record<string, User>);
     const path = $derived(conversation ? activePath(conversation.nodes, conversation.head) : []);
     const turns = $derived(splitTurns(path));
+    let showOlder = $state(false);
+    const olderCount = $derived.by(() => {
+        if (showOlder) return 0;
+        const since = Date.now() - RECENT_MS;
+        const firstRecent = turns.findIndex((turn) => Date.parse(turn.opener.created_at) >= since);
+        return firstRecent === -1 ? turns.length : firstRecent;
+    });
+    const shownTurns = $derived(turns.slice(olderCount));
     const busy = $derived(Boolean(conversation?.busy));
     const disabledReason = $derived(
         !conversation
@@ -252,7 +262,19 @@
                                 failed upgrade tests on gce".</p>
                         </div>
                     {:else}
-                        {#each turns as turn (turn.opener.node)}
+                        {#if olderCount}
+                            <div class="text-center" class:my-auto={shownTurns.length === 0}>
+                                {#if shownTurns.length === 0}
+                                    <p class="text-body-secondary mb-1">No questions in the last 3 days.</p>
+                                {/if}
+                                <button type="button" class="btn btn-sm btn-link text-decoration-none"
+                                        title="Questions older than 3 days are folded away"
+                                        onclick={() => (showOlder = true)}>
+                                    Show {olderCount} earlier question{olderCount === 1 ? "" : "s"}
+                                </button>
+                            </div>
+                        {/if}
+                        {#each shownTurns as turn (turn.opener.node)}
                             <ChatMessage
                                 {turn}
                                 nodes={conversation.nodes}

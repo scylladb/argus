@@ -78,6 +78,9 @@ appears, Argus checks every override against the test's own Jenkins job:
   run page: a supported backend and a region of that backend, the known
   values of `provision_type` and the post-test actions, exactly one Scylla
   version source in its format, and a BYO branch that exists on GitHub.
+  `scylla_version` takes a released version (`2025.1`, `2025.1.0`,
+  `2025.1.0~rc1`) or a branch build: `master:latest`, `branch-2025.1:latest`,
+  `master:1234`, or a build timestamp such as `master:2025-11-01T10:00:00Z`.
   Setting one version source clears the others, and a new backend gets its
   first supported region when the job leaves it empty.
 
@@ -118,8 +121,10 @@ automatically, and for whom. Auto mode applies to the questions you send
 while it is on, in this browser tab; it never confirms a card of someone
 else's question.
 
-The assistant can also propose to link an issue to a run, or to unlink one.
-These need a confirmation on the card too.
+The assistant can also propose to link an issue to a run, to unlink one, or
+to post a comment on a run, which is posted as the user who confirms it.
+These need a confirmation on the card too. It reads a run's comments, with
+their authors, whenever a question needs them.
 
 ## Asking Zeus to investigate
 
@@ -257,6 +262,8 @@ calling.
 
 - Answers run in the background on the server. Closing the chat does not
   stop an answer.
+- The chat opens on the questions of the last 3 days; **Show earlier
+  questions** unfolds the older ones.
 - The page follows the chat over a server-sent event stream. The stream
   reconnects by itself, and the page falls back to refreshing every
   3 seconds while it cannot connect.

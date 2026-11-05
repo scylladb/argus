@@ -193,4 +193,21 @@ describe("ChatActionCard edits and new cards", () => {
         expect(screen.getByText("closed")).toBeTruthy();
         expect(screen.getByText(/Confirmed automatically for Alice Smith/)).toBeTruthy();
     });
+
+    it("shows the comment it would post and posts on confirm", async () => {
+        const onConfirm = vi.fn().mockResolvedValue(undefined);
+        const action: ChatAction = {
+            kind: "post_comment", state: "pending", rejected: [], confirmed_by: null, confirmed_at: null,
+            dismissed_by: null, results: [],
+            proposal: { test: "upgrades/rolling_upgrade", build_number: 11, run_url: "/test/x/11",
+                        message: "Same **OOM** as rc0." },
+        };
+        render(ChatActionCard, { props: { node: chatNode("card", "action", "a", { action }), users, onConfirm,
+                                          onDismiss: vi.fn() } });
+
+        expect(screen.getByText("Comment on upgrades/rolling_upgrade #11")).toBeTruthy();
+        expect(screen.getByText("OOM").tagName).toBe("STRONG");
+        await fireEvent.click(screen.getByRole("button", { name: /Post/ }));
+        expect(onConfirm).toHaveBeenCalledWith("card");
+    });
 });
