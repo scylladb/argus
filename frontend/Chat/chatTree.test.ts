@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activePath, alternativesOf, splitTurns } from "./chatTree";
+import { activePath, alternativesOf, atForkPoint, branches, splitTurns } from "./chatTree";
 import type { ChatNode } from "./types";
 
 let clock = 0;
@@ -44,5 +44,33 @@ describe("splitTurns", () => {
         expect(turns[1].answers.map((n) => n.node)).toEqual(["call", "answer"]);
         expect(turns[1].tools.map((n) => n.node)).toEqual(["result"]);
         expect(turns[1].firstAnswer?.node).toBe("call");
+    });
+});
+
+describe("branches", () => {
+    const root = node("r1", "user", null);
+    const answer = node("r1a", "assistant", "r1");
+    const later = node("r2", "user", "r1a");
+    const laterAnswer = node("r2a", "assistant", "r2");
+    const fork = node("f2", "user", "r1a", { content: "a different follow-up" });
+    const forkAnswer = node("f2a", "assistant", "f2");
+    const retry = node("r2b", "assistant", "r2");
+    const undone = node("u2", "user", "r1a", { hidden: true });
+    const all = [root, answer, later, laterAnswer, fork, forkAnswer, retry, undone];
+
+    it("lists one branch per visible leaf, newest first, with where it parts", () => {
+        const listed = branches(all, "r2a");
+
+        expect(listed.map((branch) => branch.leaf.node)).toEqual(["r2b", "f2a", "r2a"]);
+        expect(listed[2].current).toBe(true);
+        expect(listed[2].divergence).toBeNull();
+        expect(listed[1].divergence).toMatchObject({ kind: "question", node: { node: "f2" } });
+        expect(listed[0].divergence).toMatchObject({ kind: "answer", question: { node: "r2" } });
+        expect(listed[1].questions).toBe(2);
+    });
+
+    it("knows a fork point from the end of a branch", () => {
+        expect(atForkPoint(all, "r1a")).toBe(true);
+        expect(atForkPoint(all, "r2a")).toBe(false);
     });
 });

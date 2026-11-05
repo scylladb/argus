@@ -66,6 +66,15 @@ describe("ChatMessage", () => {
             "/api/v1/chat/identity/c/picture?v=1");
     });
 
+    it("forks after a finished answer", async () => {
+        const onFork = vi.fn().mockResolvedValue(undefined);
+        renderTurn({ forkNode: "a3", onFork });
+
+        await fireEvent.click(screen.getByRole("button", { name: /Fork/ }));
+
+        expect(onFork).toHaveBeenCalledWith("a3");
+    });
+
     it("sanitizes the model's markdown", () => {
         const evil = chatNode("x", "assistant", "q", { content: "<img src=x onerror=alert(1)> **bold**" });
         const [turn] = splitTurns([question, evil]);

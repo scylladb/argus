@@ -31,6 +31,11 @@ ends it.
 - **Undo** removes the last question and its answer for everyone. Jobs that
   already started keep running, and memory changes stay; revert those in the
   memory history.
+- **Fork** on an earlier answer continues the chat from there: the next
+  question starts a new branch, and the later messages stay on their own.
+  The **Forks** tab lists every branch with where it parts, and **Switch**
+  moves the chat to another branch, for everyone. Undo works only at the end
+  of a branch.
 
 Examples:
 
