@@ -28,7 +28,7 @@ async def test_a_memory_is_created_edited_and_deleted_with_its_history(release_e
         "note", release_entity.name, logged_in_user.id)
     assert (edited["content"], edited["kind"]) == ("We run tests on AWS", "finding")
     assert deleted["id"] == created["id"]
-    assert await service.list(release_entity) == []
+    assert await service.in_scope(release_entity) == []
     history = await service.history(release_entity)
     assert [(entry["action"], entry["before"], entry["after"]) for entry in history] == [
         ("delete", "We run tests on AWS", None),
@@ -52,7 +52,7 @@ async def test_reverting_restores_the_state_before_a_revision(release_entity, lo
     assert (before_update["content"], before_update["kind"]) == ("GCE", "note")
 
     await service.revert(release_entity, create_revision["revision"], logged_in_user)
-    assert await service.list(release_entity) == []
+    assert await service.in_scope(release_entity) == []
 
     latest = (await service.history(release_entity))[0]
     assert (latest["action"], latest["reverts"]) == ("revert", create_revision["revision"])
@@ -71,11 +71,11 @@ async def test_a_view_sees_its_releases_memories_but_writes_only_in_scope(releas
     in_release = await service.create(view, "Written from the view", "note", logged_in_user,
                                       scope=inside.release.id)
 
-    seen = {(memory["content"], memory["entity_type"]) for memory in await service.list(view)}
+    seen = {(memory["content"], memory["entity_type"]) for memory in await service.in_scope(view)}
     assert seen == {("Release convention", "release"), ("View convention", "view"),
                     ("Written from the view", "release")}
     assert in_release["entity_id"] == inside.release.id
-    assert {memory["content"] for memory in await service.list(release)} == {
+    assert {memory["content"] for memory in await service.in_scope(release)} == {
         "Release convention", "Written from the view"}
     with pytest.raises(ChatMemoryError):
         await service.create(view, "Elsewhere", "note", logged_in_user, scope=outside.release.id)
