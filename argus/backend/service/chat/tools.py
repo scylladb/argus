@@ -1,3 +1,4 @@
+import functools
 import json
 import logging
 from collections import defaultdict
@@ -34,6 +35,7 @@ from argus.backend.service.chat.actions import (
 from argus.backend.service.chat.entity import ChatEntity
 from argus.backend.service.chat.history import ChatHistoryService
 from argus.backend.service.chat.llm import ToolCall, ToolSpec
+from argus.backend.service.chat.mcp import McpServerService, chat_tool_name
 from argus.backend.service.chat.memory import ChatMemoryService
 from argus.backend.service.chat.people import load_people, person
 from argus.backend.service.chat.plans import PlanChanges, build_plan_diff, plan_labels, plan_stamp
@@ -147,6 +149,30 @@ class Toolbox:
 
 def tool_specs(box: Toolbox = Toolbox()) -> list[ToolSpec]:
     return box.specs()
+
+
+async def mcp_tools() -> tuple[ExternalTool, ...]:
+    """The tools of the enabled MCP servers that an administrator switched on, from their stored lists."""
+    taken = set(TOOLS)
+    tools = []
+    for entry in await McpServerService().enabled_tools():
+        name = chat_tool_name(entry.server, entry.tool.name, taken)
+        taken.add(name)
+        description = f"[{entry.server}] {entry.tool.description}".strip()
+        if entry.mode == "confirm":
+            description += " A user confirms each call."
+        schema = entry.tool.input_schema or {"type": "object", "properties": {}}
+        tools.append(ExternalTool(ToolSpec(name, description, schema),
+                                  functools.partial(run_mcp_tool, server=entry.server, tool=entry.tool.name,
+                                                    mode=entry.mode)))
+    return tuple(tools)
+
+
+async def run_mcp_tool(ctx: ToolContext, arguments: dict, *, server: str, tool: str, mode: str) -> ToolOutcome:
+    if mode == "confirm":
+        return proposal_outcome(new_action("mcp_call", {"server": server, "tool": tool, "arguments": arguments}))
+    text, error = await McpServerService().call(server, tool, arguments)
+    return ToolOutcome(truncate(text) or "(no output)", error=error)
 
 
 def to_json(value: object) -> str:
@@ -519,6 +545,8 @@ def proposal_outcome(action: dict) -> ToolOutcome:
         summary["rejected"] = action["rejected"]
         summary["note"] += (" Zeus answers one investigation at a time, each in up to 30 minutes; the card shows "
                             "each report when it is done.")
+    elif action["kind"] == "mcp_call":
+        summary.update(server=action["proposal"]["server"], tool=action["proposal"]["tool"])
     elif action["kind"] == "edit_plan":
         summary["plan"] = action["proposal"]["plan"]
         summary["changes"] = action["proposal"]["summary"]

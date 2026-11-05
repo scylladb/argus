@@ -46,6 +46,23 @@ class ChatIdentity(Document):
         name = "chat_identity_v1"
 
 
+class ChatMcpServer(Document):
+    scope: Annotated[str, PrimaryKey()] = GLOBAL_SCOPE
+    name: Annotated[str, ClusteringKey()]
+    url: Optional[str] = None
+    transport: Optional[str] = None
+    headers_encrypted: Optional[str] = None
+    enabled: Optional[bool] = None
+    catalog: Optional[str] = None
+    tool_modes: Optional[str] = None
+    probed_at: Optional[datetime] = None
+    updated_by: Optional[UUID] = None
+    updated_at: Optional[datetime] = None
+
+    class Settings:
+        name = "chat_mcp_server_v1"
+
+
 class ChatSkill(Document):
     scope: Annotated[str, PrimaryKey()] = GLOBAL_SCOPE
     name: Annotated[str, ClusteringKey()]
@@ -151,4 +168,4 @@ class ChatMemoryRevision(Document):
         name = "chat_memory_revision_v1"
 
 
-CHAT_MODELS = [ChatConfiguration, ChatIdentity, ChatSkill, ChatState, ChatPresence, ChatHistory, ChatMemory, ChatMemoryRevision]
+CHAT_MODELS = [ChatConfiguration, ChatIdentity, ChatMcpServer, ChatSkill, ChatState, ChatPresence, ChatHistory, ChatMemory, ChatMemoryRevision]

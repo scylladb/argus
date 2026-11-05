@@ -72,6 +72,7 @@ web-backend = [
   "onnxruntime >= 1.23",
   "tokenizers >= 0.22",
   "openai>=3.46.0",
+  "mcp>=2.3.0 ; python_full_version >= '3.13'",
 ]
 docker-image = ["supervisor ~= 4.2.4"]
 dev = [

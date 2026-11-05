@@ -32,7 +32,15 @@ from argus.backend.service.chat.prompt import (
     to_messages,
 )
 from argus.backend.service.chat.skills import PromptSetup, SkillService
-from argus.backend.service.chat.tools import ToolContext, Toolbox, entity_summaries, run_tool, to_json, tool_specs
+from argus.backend.service.chat.tools import (
+    ToolContext,
+    Toolbox,
+    entity_summaries,
+    mcp_tools,
+    run_tool,
+    to_json,
+    tool_specs,
+)
 
 LOGGER = logging.getLogger(__name__)
 MAX_MODEL_CALLS = 8
@@ -133,6 +141,14 @@ class ChatAgent:
                 if await self._stop_requested():
                     raise StopRequested
 
+    @staticmethod
+    async def _mcp_tools() -> tuple:
+        try:
+            return await mcp_tools()
+        except Exception:  # noqa: BLE001 - an answer without MCP tools beats no answer
+            LOGGER.exception("The MCP tools are unavailable for the chat")
+            return ()
+
     async def _context(self, path: list[ChatHistory],
                        setup: PromptSetup | None = None) -> tuple[str, list[ChatMessage], list[dict]]:
         setup = setup or await SkillService().prompt_setup()
@@ -161,7 +177,8 @@ class ChatAgent:
             nonlocal current
             _, nodes = await self.history.read()
             setup = await SkillService().prompt_setup()
-            self.box = Toolbox(hidden=frozenset() if setup.on_demand else frozenset({"load_skill"}))
+            self.box = Toolbox(hidden=frozenset() if setup.on_demand else frozenset({"load_skill"}),
+                               external=await self._mcp_tools() if self.model.tools else ())
             system, messages, snapshot = await self._context(active_path(nodes, assistant.parent), setup)
             messages.insert(0, ChatMessage("system", system))
             tools = tool_specs(self.box) if self.model.tools else None

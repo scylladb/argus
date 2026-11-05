@@ -11,6 +11,7 @@ from argus.backend.models.web import ArgusTest, User
 from argus.backend.service.chat import sct_params
 from argus.backend.service.chat.entity import ChatEntity
 from argus.backend.service.chat.history import ChatHistoryService
+from argus.backend.service.chat.mcp import McpServerService
 from argus.backend.service.chat.plans import plan_diff_payload, plan_stamp
 from argus.backend.service.chat.resolve import (
     Scope,
@@ -33,6 +34,7 @@ SCT_PLUGIN = "scylla-cluster-tests"
 ZEUS_RUN_LIMIT = 5
 ZEUS_REFRESH_SECONDS = 15
 ZEUS_OPEN_STATES = ("queued", "processing")
+MCP_RESULT_LIMIT = 20000
 
 
 class ChatActionError(APIException):
@@ -371,6 +373,11 @@ async def execute(entity: ChatEntity, card: ChatHistory, action: dict, user: Use
                 results = [{"issue": issue, "error": None}]
             case "zeus_investigation":
                 results = await _queue_investigations(action)
+            case "mcp_call":
+                text, failed = await McpServerService().call(proposal["server"], proposal["tool"],
+                                                             proposal["arguments"])
+                results = [{"server": proposal["server"], "tool": proposal["tool"],
+                            "text": text[:MCP_RESULT_LIMIT], "error": text[:500] if failed else None}]
             case "edit_plan":
                 plan = await ArgusReleasePlan.get(id=UUID(proposal["plan_id"]))
                 if plan_stamp(plan) != proposal["last_updated"]:
