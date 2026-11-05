@@ -15,7 +15,12 @@ from argus.backend.models.web import ArgusEvent, ArgusTest, ArgusUserView, User
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.sct.service import SCTService
 from argus.backend.plugins.sct.testrun import SCTEvent, SCTEventSeverity
+from argus.backend.service.chat import sct_params
 from argus.backend.service.chat.actions import (
+    Seed,
+    adjust_start,
+    job_parameters,
+    new_action,
     plans_in_scope,
     propose_investigation,
     propose_link,
@@ -27,9 +32,11 @@ from argus.backend.service.chat.actions import (
     zeus_cards,
 )
 from argus.backend.service.chat.entity import ChatEntity
+from argus.backend.service.chat.history import ChatHistoryService
 from argus.backend.service.chat.llm import ToolCall, ToolSpec
 from argus.backend.service.chat.memory import ChatMemoryService
 from argus.backend.service.chat.people import load_people, person
+from argus.backend.service.chat.plans import PlanChanges, build_plan_diff, plan_labels, plan_stamp
 from argus.backend.service.chat.prompt import truncate
 from argus.backend.service.chat.resolve import (
     EXPANSION_LIMIT,
@@ -44,6 +51,7 @@ from argus.backend.service.chat.resolve import (
     run_url,
 )
 from argus.backend.service.issue_service import IssueService
+from argus.backend.service.jenkins_service import JenkinsService
 from argus.backend.service.release_summary import ReleaseSummaryService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.zeus_client import ZeusClient
@@ -352,6 +360,51 @@ async def get_plan(ctx: ToolContext, args: PlanArgs) -> dict:
     return {"plans": result}
 
 
+class PlanLabelsArgs(BaseModel):
+    plan: str = Field(description="Plan id, key (release#n) or name")
+
+
+@tool("get_plan_labels", "Every label of a release plan with the tests and groups that carry it, and whether "
+                         "each is enabled. Use execute_plan_tests with dry_run to see what a selection starts.",
+      PlanLabelsArgs)
+async def get_plan_labels(ctx: ToolContext, args: PlanLabelsArgs) -> dict:
+    scope = await load_scope(ctx.entity)
+    return plan_labels(resolve_plan(await plans_in_scope(scope), args.plan), scope)
+
+
+ENTITY = "test or group reference"
+
+
+class EditPlanArgs(BaseModel):
+    plan: str = Field(description="Plan id, key (release#n) or name")
+    add_tests: StringList = Field(default_factory=list, description=f"Tests to add; a {ENTITY} (a group adds its "
+                                                                     "enabled tests)")
+    remove_tests: StringList = Field(default_factory=list, description=f"Tests to remove; a {ENTITY}")
+    remove_groups: StringList = Field(default_factory=list, description="Groups of the plan to remove")
+    assign: dict[str, str] = Field(default_factory=dict,
+                                   description=f"{{{ENTITY}: username or full name}}; $owner unassigns")
+    unassign: StringList = Field(default_factory=list, description="Entities that go back to the plan owner")
+    add_labels: dict[str, list[str]] = Field(default_factory=dict, description=f"{{{ENTITY}: [labels]}}")
+    remove_labels: dict[str, list[str]] = Field(default_factory=dict, description=f"{{{ENTITY}: [labels]}}")
+    name: str | None = None
+    description: str | None = None
+    target_version: str | None = None
+    completed: bool | None = None
+
+
+@tool("edit_plan", "Propose an edit of a release plan: add or remove tests, remove groups, assign or unassign, "
+                   "add or remove labels, rename, change the description or the target version, mark it "
+                   "completed. A user confirms the card.", EditPlanArgs)
+async def edit_plan(ctx: ToolContext, args: EditPlanArgs) -> ToolOutcome:
+    scope = await load_scope(ctx.entity)
+    plan = resolve_plan(await plans_in_scope(scope), args.plan)
+    changes = PlanChanges(**args.model_dump(exclude={"plan"}))
+    diff, summary = await build_plan_diff(plan, scope, changes)
+    proposal = {"plan_id": str(plan.id), "plan": plan.name, "key": plan.key, "last_updated": plan_stamp(plan),
+                "diff": diff, "summary": summary}
+    return proposal_outcome(new_action("edit_plan", proposal))
+
+
 class ReadMemoryArgs(BaseModel):
     query: str | None = Field(None, description="Only memories containing this text")
 
@@ -413,31 +466,52 @@ def proposal_outcome(action: dict) -> ToolOutcome:
         "kind": action["kind"],
     }
     if action["kind"] == "execute_tests":
-        summary["proposed"] = [{"test": test["test"], "overrides": test["overrides"]}
-                               for test in action["proposal"]["tests"]]
+        summary["proposed"] = [{"test": test["test"], "overrides": test["overrides"], "seed": test["seed"],
+                                "build_number": test["build_number"]} for test in action["proposal"]["tests"]]
         summary["rejected"] = action["rejected"]
     elif action["kind"] == "zeus_investigation":
         summary["proposed"] = [{"run_id": run["run_id"], "test": run["test"]} for run in action["proposal"]["runs"]]
         summary["rejected"] = action["rejected"]
         summary["note"] += (" Zeus answers one investigation at a time, each in up to 30 minutes; the card shows "
                             "each report when it is done.")
+    elif action["kind"] == "edit_plan":
+        summary["plan"] = action["proposal"]["plan"]
+        summary["changes"] = action["proposal"]["summary"]
     else:
         summary["proposal"] = action["proposal"]
     return ToolOutcome(to_json(summary), action=action)
 
 
-class ExecuteTestsArgs(BaseModel):
+SEED_DESCRIPTION = ("Where the parameters come from before the overrides: last_build (default), defaults (the "
+                    "job's configured defaults), or build (with build_number)")
+
+
+class StartArgs(BaseModel):
+    params: dict[str, str] = Field(default_factory=dict,
+                                   description="Job parameters to override for every test, e.g. {\"backend\": \"gce\"}")
+    per_test: dict[str, dict[str, str]] = Field(default_factory=dict,
+                                                description="Overrides for single tests, by test reference; they "
+                                                            "win over params")
+    seed: Literal["last_build", "defaults", "build"] | None = Field(None, description=SEED_DESCRIPTION)
+    build_number: int | None = Field(None, description="The build to take the parameters from, with seed build")
+
+
+def per_test_overrides(scope: Scope, per_test: dict[str, dict[str, str]]) -> dict[UUID, dict[str, str]]:
+    return {resolve_test_reference(scope, reference).id: overrides for reference, overrides in per_test.items()}
+
+
+class ExecuteTestsArgs(StartArgs):
     tests: StringList = Field(min_length=1, max_length=50,
                              description="Tests by id, name, pretty name, group/test, release/group/test, Jenkins "
                                          "job path or URL; a group or a release stands for its enabled tests")
-    params: dict[str, str] = Field(default_factory=dict,
-                                   description="Job parameters to override, e.g. {\"backend\": \"gce\"}")
 
 
-@tool("execute_tests", "Propose starting tests in Jenkins with the parameters of their last build, overridden "
-                       "by params. Each override is checked against the job's own parameters.", ExecuteTestsArgs)
+@tool("execute_tests", "Propose starting tests in Jenkins with the parameters of their last build (or another "
+                       "seed), overridden by params and per_test. Each override is checked against the job's "
+                       "parameters and, for SCT jobs, the rules of the parameter wizard.", ExecuteTestsArgs)
 async def execute_tests(ctx: ToolContext, args: ExecuteTestsArgs) -> ToolOutcome:
     scope = await load_scope(ctx.entity)
+    seed = Seed.of(args.seed, args.build_number)
     tests, rejected = [], []
     for reference in args.tests:
         try:
@@ -446,23 +520,87 @@ async def execute_tests(ctx: ToolContext, args: ExecuteTestsArgs) -> ToolOutcome
             rejected.append({"test": reference, "reason": str(exception)})
     if len({test.id for test in tests}) > EXPANSION_LIMIT:
         raise TestReferenceError(f"That is more than {EXPANSION_LIMIT} tests; name fewer tests or groups")
-    return proposal_outcome(await propose_start(scope, tests, args.params, rejected))
+    action = await propose_start(scope, tests, args.params, rejected, per_test_overrides(scope, args.per_test), seed)
+    return proposal_outcome(action)
 
 
-class ExecutePlanArgs(BaseModel):
+class ExecutePlanArgs(StartArgs):
     plan: str = Field(description="Plan id, key (release#n) or name")
     labels: StringList = Field(min_length=1, description="Plan labels, such as week1")
     match_all: bool = Field(False, description="Only tests that carry every label")
-    params: dict[str, str] = Field(default_factory=dict, description="Job parameters to override")
+    dry_run: bool = Field(False, description="Only list the tests the labels select; propose nothing")
 
 
 @tool("execute_plan_tests", "Propose starting the tests of a release plan that carry the labels. A labelled "
-                            "group stands for its tests.", ExecutePlanArgs)
-async def execute_plan_tests(ctx: ToolContext, args: ExecutePlanArgs) -> ToolOutcome:
+                            "group stands for its tests. With dry_run, only list them.", ExecutePlanArgs)
+async def execute_plan_tests(ctx: ToolContext, args: ExecutePlanArgs) -> ToolOutcome | dict:
     scope = await load_scope(ctx.entity)
     plan = resolve_plan(await plans_in_scope(scope), args.plan)
     tests = resolve_labeled_tests(scope, plan, args.labels, args.match_all)
-    return proposal_outcome(await propose_start(scope, tests, args.params, []))
+    if args.dry_run:
+        return {"plan": plan.name, "labels": args.labels, "match_all": args.match_all,
+                "tests": [scope.label(test) for test in tests]}
+    seed = Seed.of(args.seed, args.build_number)
+    return proposal_outcome(await propose_start(scope, tests, args.params, [],
+                                                per_test_overrides(scope, args.per_test), seed))
+
+
+class JobParamsArgs(BaseModel):
+    test: str = Field(description="Test reference")
+    seed: Literal["last_build", "defaults", "build"] | None = Field(None, description=SEED_DESCRIPTION)
+    build_number: int | None = Field(None, description="The build, with seed build")
+
+
+@tool("get_job_params", "Read a test's Jenkins job parameters with their current values and allowed values, "
+                        "grouped as the SCT parameter wizard groups them. Read it before overriding a parameter "
+                        "you are not sure of.", JobParamsArgs)
+async def get_job_params(ctx: ToolContext, args: JobParamsArgs) -> dict:
+    scope = await load_scope(ctx.entity)
+    test = resolve_test_reference(scope, args.test)
+    if not test.build_system_id:
+        raise ToolScopeError(f"{scope.label(test)} has no Jenkins job")
+    seed = Seed.of(args.seed, args.build_number)
+    job = await job_parameters(JenkinsService(), test, seed)
+    params = {param["name"]: param.get("value") for param in job}
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for field in sct_params.fields(params, job, test.plugin_name == SCT_PLUGIN_NAME):
+        groups[field.pop("group")].append(field)
+    return {"test": scope.label(test), **seed.as_json(), "groups": groups}
+
+
+class AdjustArgs(BaseModel):
+    card: UUID | None = Field(None, description="The start card; by default the latest pending one")
+    tests: StringList = Field(default_factory=list, description="Only these tests of the card; by default all")
+    set: dict[str, str] = Field(default_factory=dict, description="Parameters to override")
+    unset: StringList = Field(default_factory=list, description="Overrides to drop, back to the seed's value")
+    seed: Literal["last_build", "defaults", "build"] | None = Field(None, description=SEED_DESCRIPTION)
+    build_number: int | None = Field(None, description="The build, with seed build")
+
+
+async def latest_start_card(ctx: ToolContext) -> UUID:
+    _, nodes = await ChatHistoryService(ctx.entity).read()
+    pending = [node for node in nodes if node.role == "action" and node.action_state == "pending"
+               and not node.hidden and json.loads(node.action)["kind"] == "execute_tests"]
+    if not pending:
+        raise ToolScopeError("There is no pending start card in this chat")
+    return max(pending, key=lambda node: node.node.time).node
+
+
+@tool("adjust_run_params", "Change the parameters of a pending start card before anyone confirms it: set or "
+                           "unset overrides for all its tests or some, or take the parameters from another seed. "
+                           "Every test is checked again; nothing changes if one fails.", AdjustArgs)
+async def adjust_run_params(ctx: ToolContext, args: AdjustArgs) -> dict:
+    node = args.card or await latest_start_card(ctx)
+    only = None
+    if args.tests:
+        scope = await load_scope(ctx.entity)
+        only = {str(resolve_test_reference(scope, reference).id) for reference in args.tests}
+    seed = Seed.of(args.seed, args.build_number) if args.seed or args.build_number else None
+    _, action = await adjust_start(ctx.entity, node, set_params=args.set, unset=list(args.unset), only=only,
+                                   seed=seed)
+    return {"status": "card updated", "card": node,
+            "tests": [{"test": test["test"], "overrides": test["overrides"], "seed": test["seed"],
+                       "build_number": test["build_number"]} for test in action["proposal"]["tests"]]}
 
 
 class LinkArgs(BaseModel):

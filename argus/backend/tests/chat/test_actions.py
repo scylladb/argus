@@ -34,8 +34,8 @@ JOBS = {
 def jenkins(seeded):
     by_job = {test.build_system_id: JOBS[index] for index, test in enumerate(seeded.tests)}
     instance = MagicMock(spec=JenkinsService, name="JenkinsService")
-    instance.retrieve_job_parameters.side_effect = lambda build_id, build_number: [dict(param)
-                                                                                   for param in by_job[build_id]]
+    instance.retrieve_job_parameters.side_effect = lambda build_id, build_number, **_: [
+        dict(param) for param in by_job[build_id]]
     instance.build_job.return_value = 777
     instance.next_build_number.return_value = 42
     with patch("argus.backend.service.chat.actions.JenkinsService", return_value=instance):

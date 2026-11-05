@@ -397,7 +397,7 @@ stays in every plan built from a spec.
 - Modify: `argus/backend/service/chat/service.py` (`adjust`), `controller/chat_api.py` (`POST /actions/{node}/params`).
 - Test: `argus/backend/tests/chat/test_run_params.py`
 
-- [ ] Write the failing tests:
+- [x] Write the tests:
   - A `defaults` seed differs from `last_build`, and a build number reads that build.
   - Overriding `scylla_version` blanks a stale `scylla_repo`.
   - A new backend fills its region.
@@ -407,9 +407,8 @@ stays in every plan built from a spec.
   - `dry_run` lists tests and makes no card.
   - `adjust_run_params` rewrites the latest pending card, and is refused on a confirmed one.
   - The params route re-validates choices.
-- [ ] Run them and confirm the failures.
-- [ ] Write the code.
-- [ ] Run the verify sequence.
+- [x] Write the code.
+- [x] Run the verify sequence.
 
 ## Task 15 — Plan labels and plan edits
 
@@ -418,7 +417,7 @@ stays in every plan built from a spec.
 - Modify: `argus/backend/service/chat/tools.py` (`get_plan_labels`, `edit_plan`), `actions.py` (executing `edit_plan` with the `last_updated` check), `prompt.py` (`_result_text`).
 - Test: `argus/backend/tests/chat/test_plan_edits.py`
 
-- [ ] Write the failing tests:
+- [x] Write the tests:
   - Labels per entity, with disabled entities marked.
   - Adding and removing labels gives the final set, and an emptied set removes the options.
   - Assigning a test adds it.
@@ -427,10 +426,9 @@ stays in every plan built from a spec.
   - An edit that empties the plan is refused.
   - Confirming applies the diff through `update_plan`.
   - A plan changed after the proposal fails the card.
-- [ ] Run them and confirm the failures.
-- [ ] Write the code.
-- [ ] Run the verify sequence.
-- [ ] Commit tasks 14–15: `feature(chat-mode): adjust run parameters and edit plans from the chat`.
+- [x] Write the code.
+- [x] Run the verify sequence.
+- [x] Commit tasks 14–15: `feature(chat-mode): adjust run parameters and edit plans from the chat`.
 
 ## Task 16 — Skills and the system prompt
 

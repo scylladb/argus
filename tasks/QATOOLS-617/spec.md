@@ -334,7 +334,9 @@ command line tool's rules:
 - Labels give each entity's final set: added and kept labels are set, and an
   entity left without labels has its options removed.
 - Assigning a test adds it to the plan.
-- The participants become the final assignees minus the owner.
+- A new assignee becomes a participant, and a participant who loses their
+  last assignment in the edit stops being one; participants added by hand
+  in the planner stay.
 - An edit that leaves the plan with no tests and no groups is refused.
 
 The card shows the changes line by line and keeps the plan's `last_updated`.
