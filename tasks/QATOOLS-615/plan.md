@@ -213,39 +213,127 @@ stays in every plan built from a spec.
 
 ## Task 6 — Frontend widget
 
-**Files:**
-- Create: `frontend/Views/Widgets/ReleaseSummary/ReleaseSummary.svelte`
-- Create: `frontend/Views/Widgets/ReleaseSummary/ReleaseSummaryCounts.svelte`
-- Modify: `frontend/Common/ViewTypes.js`: the `releaseSummary` entry, no
-  settings
-- Modify: `frontend/ReleaseDashboard/ReleaseDashboard.svelte`: a fixed
-  section after the release stats
-- Test: `frontend/Views/Widgets/ReleaseSummary/ReleaseSummary.test.ts`
+**Files:** all new files are under `frontend/Views/Widgets/ReleaseSummary/`.
+- Create:
+  - `types.ts`: the response types
+  - `summaryUtils.ts`: the pure helpers
+  - `SummaryBar.svelte`: the stacked status bar
+  - `SummaryTestList.svelte`: the test list of one version or of the family
+  - `FamilyTimeline.svelte`: one row per version, the family row first
+  - `FamilyGrid.svelte`: tests by version
+  - `FamilyIssues.svelte`: open and fixed issues
+  - `FamilySummary.svelte`: one family, with the tabs and the status filter
+  - `ReleaseSummary.svelte`: loading, the refresh time, the stale note and
+    the collapsed mode
+  - `frontend/Common/flyout.ts`: the arc keyframes, the landing point and
+    the two actions, `flyAlongArc` and `ping`
+  - `frontend/Common/FlyoutLayer.svelte`: renders the flights and the
+    landing pings
+- Modify:
+  - `frontend/Common/ViewTypes.js`: the `releaseSummary` entry, no settings
+  - `frontend/ReleaseDashboard/ReleaseDashboard.svelte`: a collapsed
+    accordion under the Issues one, and a test click that adds the test to
+    the test popout through the release stats the dashboard already holds
+- Test: `summaryUtils.test.ts`, `ReleaseSummary.test.ts`,
+  `frontend/Common/flyout.test.ts`, `frontend/Common/FlyoutLayer.test.ts`
 
 **Internals:**
-- Props are `{dashboardObject, dashboardObjectType}`. The component fetches
-  the release route or the view route from them.
-- Layout:
-  - One card per release, holding one block per family.
-  - Each family block shows the rollup counts as Bootstrap badges, each with
-    its own `background-color` and `color` pair.
-  - A collapsible table lists the family's versions, one row of counts each.
-  - The rollup's issue list links to the tracker and marks each issue as
-    new, existing or fixed.
-  - A count with tests behind it expands to the list of those tests, each
-    linked to its run.
-- Svelte 5 runes, with no `svelte/legacy` imports.
+- `ReleaseSummary` props: `{dashboardObject, dashboardObjectType, collapsible, onTestClick}`.
+  - It fetches the release route or the view route.
+  - `collapsible` renders an accordion item. Its header carries the newest
+    three families with a compact bar each. The body renders on open.
+- Each family block:
+  - The header holds a toggle, the rollup bar (a segment click filters the
+    family tests), the test totals and the issue badges.
+  - The first family of a release starts open.
+  - The tabs are Timeline and Grid. Beside them is a status filter: one
+    coloured toggle per status, with a check or a cross and its count, as in
+    the SCT events tab. "Show all statuses" appears once one is off.
+  - The issue column reads the selected version on Timeline and the family
+    on Grid. It stretches to the main column's height and scrolls inside.
+- The Timeline tab:
+  - One row per version, the family row first. Each row has a bar and one
+    button per non-zero count, which selects that version and status.
+  - Below the table, the test list of the selected row. A test name hands
+    the test to `onTestClick` when one is set. The run number links to
+    `/test/{build_id}/{build_number}`.
+- The Grid tab:
+  - Rows are the family tests under group header rows, filtered by their
+    family result. Columns are the versions.
+  - Each cell is a status badge with an icon, linked to its run, titled
+    `<version>: <status>, run #<n>`.
+- The issue list groups issues by tracker state through
+  `isClosedInTracker` in `Common/IssueTypes.ts`: closed, done, duplicate and
+  won't fix count as closed.
+  - Each row has a line with the state pill (the shared colour and icon
+    maps), the key and the one-line title.
+  - Under it sits a line of badges: "on latest run" or "last seen <rcN>";
+    then new or existing, and the short versions.
+  - Rows on a latest run sort first. A row click expands the shared
+    `IssueCard` with `aggregated` set, no delete and no current run.
+- The backend entry adds `issue`: the issue's model dump with `subtype` and
+  the links in scope, the shape `JiraService.resolve_issues` and
+  `GithubService.resolve_issues` give with `aggregate_by_issue`.
+- The family header is a grid with fixed name and bar columns, so the bars
+  of every family line up whatever the version length. A click anywhere on
+  the header toggles the family. A click on a bar segment opens the family
+  with that filter instead of toggling it.
+- Layout follows the dashboard's layering. The families sit in a rounded
+  `bg-light-one` inset with `shadow-sm`, each family a `bg-white rounded
+  shadow-sm` card with no border. Inside an open family:
+  - another `bg-light-one` inset flows white cards with flexbox: the
+    timeline, the test list or the grid, and the issues
+  - each issue is a `bg-light-three` tile
+- The flyout: a test click that adds a test to the popout also launches a
+  flight.
+  - `ReleaseDashboard` keeps the flights in `$state`, and `FlyoutLayer`
+    renders each as a pill with the test name.
+  - The pill flies on a quadratic arc from the cursor (from the button for a
+    keyboard click) to the popout column. The landing point is clamped to
+    the viewport, so a popout below the screen draws the pill to the bottom
+    edge.
+  - A ping ring marks the landing.
+  - Under `prefers-reduced-motion` only the ping shows. No animation API
+    (jsdom) lands at once.
+- Badges use the existing `StatusBadgeCSSClassMap` class pairs. Svelte 5
+  runes, no `svelte/legacy` imports.
 
 - [x] Write the failing tests:
-  - [x] It renders a family with its rollup and the versions in order.
-  - [x] The issue states are shown.
-  - [x] It calls the view URL for `dashboardObjectType="view"` and the
-    release URL for `"release"`.
-  - [x] It shows an empty state when there are no families.
-- [ ] Run them and confirm the failure.
-- [x] Write the components, the registry entry and the dashboard section.
-- [x] Run `yarn test`, `yarn build` and the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+  - [x] the helpers: status groups, bar segments, "updated ago", issue
+    versions, grid rows and the grid filter
+  - [x] the timeline lists the family row first, then the versions in order
+  - [x] a version click and a count click narrow the test list, and the
+    status filter widens it again
+  - [x] a test click goes to `onTestClick`, and the run link stays
+  - [x] the Grid tab shows a cell per version with its title, and the
+    family issues
+  - [x] the issues group into open and fixed, with state, tests and versions
+  - [x] the collapsed mode shows the families in the header and opens on click
+  - [x] a click anywhere on a family header toggles it, and a bar segment
+    opens it with its filter
+  - [x] each status toggles on its own, and "Show all statuses" resets them
+  - [x] the issues group by tracker state, and each says whether it is on a
+    latest run, with no regression flag on closed issues
+  - [x] an issue row expands into the issue card in aggregated mode, without
+    "Add to current run"
+  - [x] `isClosedInTracker` and `shortVersion`
+  - [x] backend: each issue entry carries the issue with its links in scope
+  - [x] the view route names each release
+  - [x] the stale note and the empty state
+  - [x] the arc starts at the cursor, ends at the target and bends up; a
+    short hop lifts less; the landing point clamps to the viewport
+  - [x] the flyout layer shows the flight's label at the cursor and reports
+    the landing
+- [x] Run them and confirm the failure.
+- [x] Write the components, the registry entry and the dashboard wiring.
+- [x] Run `yarn test`, `yarn build`, `svelte-check` on the widget folder and
+  the verify sequence.
+- [x] Check the dashboard at 1600 and 900 pixels on the dev instance:
+  collapsed, timeline, a count filter, the grid.
+- [x] Check on the dev instance that the family bars of `enterprise-2024.1`
+  share their edges, and that a click on a summary test flies a pill and
+  adds the test to the popout.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 7 — Docs
 
