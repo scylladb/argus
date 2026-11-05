@@ -124,6 +124,9 @@ flowchart TD
 - **Try again:** a new assistant sibling under the last user node. `head`
   moves to it.
 - **Branch switch:** `head` moves to the newest leaf under the chosen sibling.
+- **Fork:** `head` moves to the end of an earlier turn, so the next question
+  becomes a new child there. Undo is refused while `head` has visible
+  children. The client lists one branch per visible leaf.
 - **Undo:** `head` moves to the parent of the last user node on the active
   path, and that node and its descendants are marked `hidden`. Started jobs
   and memory edits stay; a memory edit has its own revert.
@@ -595,6 +598,7 @@ POST   /regenerate {auto?}        -> Started   # retry the last answer on the ac
 POST   /compact                   -> Started
 POST   /undo                      -> Conversation
 POST   /head {node}               -> Conversation
+POST   /fork {node}               -> Conversation   # head at the end of an earlier turn
 POST   /stop                      -> {stopping: node}
 POST   /actions/{node}/confirm    -> Node      # state "running"; results follow on the stream
 POST   /actions/{node}/dismiss    -> Node

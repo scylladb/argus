@@ -131,6 +131,10 @@ class ChatService:
         await ChatHistoryService(entity).set_head(node)
         return await self._after_tree_change(entity)
 
+    async def fork(self, entity: ChatEntity, node: UUID) -> dict:
+        await ChatHistoryService(entity).fork(node)
+        return await self._after_tree_change(entity)
+
     async def wipe(self, entity: ChatEntity) -> dict:
         await ChatHistoryService(entity).wipe()
         return await self._after_tree_change(entity)

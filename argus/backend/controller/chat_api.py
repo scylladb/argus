@@ -168,6 +168,12 @@ async def set_head(payload: HeadRequest, entity: ChatEntity = Depends(chat_entit
     return ok(await ChatService().set_head(entity, payload.node))
 
 
+@router.post("/fork", name="api.chat_api.fork")
+async def fork(payload: HeadRequest, entity: ChatEntity = Depends(chat_entity),
+               user: User = Depends(api_current_user)):
+    return ok(await ChatService().fork(entity, payload.node))
+
+
 @router.post("/stop", name="api.chat_api.stop")
 async def stop(entity: ChatEntity = Depends(chat_entity), user: User = Depends(api_current_user)):
     return ok({"stopping": await ChatService().stop(entity)})
