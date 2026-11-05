@@ -198,6 +198,12 @@ limit, loses its start. **Compact context** asks the model to summarize the
 conversation so far. Later answers start from that summary; the earlier
 messages stay readable. Undo removes a compaction like a question.
 
+From 75% of the window, a note above the question box warns that the context
+is filling up. A question sent at 90% or more is preceded by an automatic
+compaction: the chat shows **Compacting** with how much of the summary is
+written, then answers from the summary. If the compaction fails, the answer
+uses the whole conversation and the chat says so.
+
 ## Setting up the model
 
 An administrator connects Argus to a model in the Admin Panel, under

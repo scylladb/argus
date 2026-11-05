@@ -15,7 +15,9 @@
     let { context, model, busy, empty, onCompact }: Props = $props();
 
     const share = $derived(percent(context.used, context.window));
-    const tone = $derived(share >= 85 ? "bg-danger" : share >= 60 ? "bg-warning" : "bg-success");
+    const warnAt = $derived(context.warn_at ?? Math.round(context.window * 0.75));
+    const compactAt = $derived(context.compact_at ?? Math.round(context.window * 0.9));
+    const tone = $derived(context.used >= compactAt ? "bg-danger" : context.used >= warnAt ? "bg-warning" : "bg-success");
 </script>
 
 {#if model}
@@ -39,6 +41,9 @@
         {context.messages_since_compaction} message{context.messages_since_compaction === 1 ? "" : "s"} since the last
         compaction{#if context.estimated_tokens}, about {context.estimated_tokens.toLocaleString()} tokens
             estimated{/if}.
+    </div>
+    <div class="text-body-secondary">
+        Compacts automatically at {percent(compactAt, context.window)}%, before the next question.
     </div>
 </section>
 

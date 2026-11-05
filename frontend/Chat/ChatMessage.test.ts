@@ -75,6 +75,32 @@ describe("ChatMessage", () => {
         expect(onFork).toHaveBeenCalledWith("a3");
     });
 
+    it("shows a compaction's progress while it is written, and a failure after", async () => {
+        const summary = chatNode("s", "summary", null, { content: "", reasoning: "hmm", status: "streaming", auto: true });
+        const { rerender } = render(ChatMessage, { props: { turn: splitTurns([summary])[0], nodes: [summary], users,
+                                                            memories, onSetHead: vi.fn(), onConfirm: vi.fn(),
+                                                            onDismiss: vi.fn() } });
+
+        expect(screen.getByText("Compacting")).toBeTruthy();
+        expect(screen.getByText(/automatically before the next answer · thinking it over/)).toBeTruthy();
+        const writing = { ...summary, content: "Two upgrade tests failed" };
+        await rerender({ turn: splitTurns([writing])[0], nodes: [writing] });
+        expect(screen.getByText(/4 words written/)).toBeTruthy();
+        const question = chatNode("q9", "user", "s", { content: "next question" });
+        const waiting = chatNode("a9", "assistant", "q9", { content: "", status: "streaming" });
+        cleanup();
+        render(ChatMessage, { props: { turn: splitTurns([question, waiting])[0], nodes: [writing, question, waiting],
+                                       users, memories, onSetHead: vi.fn(), onConfirm: vi.fn(), onDismiss: vi.fn() } });
+        expect(screen.getByText("Waiting for the compaction to finish…")).toBeTruthy();
+        cleanup();
+        const view = render(ChatMessage, { props: { turn: splitTurns([summary])[0], nodes: [summary], users, memories,
+                                                    onSetHead: vi.fn(), onConfirm: vi.fn(), onDismiss: vi.fn() } });
+        const failed = { ...summary, status: "error" as const, error: "the model is down" };
+        await view.rerender({ turn: splitTurns([failed])[0], nodes: [failed] });
+        expect(screen.getByText(/The automatic compaction failed/)).toBeTruthy();
+        expect(screen.getByText("the model is down")).toBeTruthy();
+    });
+
     it("sanitizes the model's markdown", () => {
         const evil = chatNode("x", "assistant", "q", { content: "<img src=x onerror=alert(1)> **bold**" });
         const [turn] = splitTurns([question, evil]);
