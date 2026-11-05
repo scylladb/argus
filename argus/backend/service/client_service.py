@@ -24,6 +24,7 @@ from argus.backend.models.run_config import (
     RunConfigParamValueIndex,
     RunConfiguration,
 )
+from argus.backend.models.release_summary import mark_release_summary_stale
 from argus.backend.models.web import ArgusEvent, ArgusTestRunComment, ArgusTest, ArgusGroup, ArgusRelease
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.generic.model import GenericRun
@@ -123,6 +124,7 @@ class ClientService:
         run = await model.load_test_run(run_id)
         run.change_status(new_status=TestStatus(new_status))
         await run.save()
+        await mark_release_summary_stale(run.release_id)
         await RunCostService().refresh_rollup_guarded(run_id)
 
         return run.status
@@ -132,6 +134,7 @@ class ClientService:
         run = await model.load_test_run(run_id)
         await run.submit_product_version(version)
         await run.save()
+        await mark_release_summary_stale(run.release_id)
 
         return "Submitted"
 
@@ -148,6 +151,7 @@ class ClientService:
         run = await model.load_test_run(run_id)
         await run.finish_run(payload)
         await run.save()
+        await mark_release_summary_stale(run.release_id)
         try:
             await RunCostService().recompute_actual_cost(run_id, use_estimate=True)
             await CostRollupService().refresh(run)

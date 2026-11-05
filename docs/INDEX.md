@@ -135,6 +135,8 @@ Located in `docs/`. Single-topic notes, outside the standards.
   procedure. The unit, the nginx vhost and the logrotate policy live there too.
 - `api_usage.md` — the REST API, written by hand.
 - `generic_results.md` — the generic results submission format.
+- `release_summary.md` — the release summary per version: what each number counts, the
+  family rollup, and when it refreshes.
 - `argus_status_page.md` — the status page.
 - `pypi-guide.md` — publishing the Python packages.
 - `plans/archive/` — design documents from earlier work, kept as a historical record.

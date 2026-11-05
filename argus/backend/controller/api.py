@@ -25,6 +25,7 @@ from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, User
 from argus.backend.rendering import url_for
 from argus.backend.service.argus_service import ArgusService, ScheduleUpdateRequest
 from argus.backend.service.release_cleanup import ReleaseCleanupService
+from argus.backend.service.release_summary import ReleaseSummaryService
 from argus.backend.service.stats import ReleaseStatsCollector, summarize_release_stats
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.user import DEFAULT_API_TOKEN_DURATION, UserService, api_current_user
@@ -131,6 +132,14 @@ async def release_versions(release_id: UUID, user: User = Depends(api_current_us
     return APIResponse({
         "status": "ok",
         "response": distinct_versions
+    })
+
+
+@router.get("/release/{release_id}/version_summary", name="api.release_version_summary")
+async def release_version_summary(release_id: UUID, user: User = Depends(api_current_user)):
+    return APIResponse({
+        "status": "ok",
+        "response": await ReleaseSummaryService().get(release_id)
     })
 
 
