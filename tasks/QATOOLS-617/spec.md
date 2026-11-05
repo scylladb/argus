@@ -131,8 +131,13 @@ flowchart TD
   path, and that node and its descendants are marked `hidden`. Started jobs
   and memory edits stay; a memory edit has its own revert.
 - **Compaction:** the model summarizes the active path since the last
-  summary into a `summary` node. The prompt starts from the newest summary on
-  the path. Undo removes a summary like any node.
+  summary into a `summary` node. The prompt starts from the newest finished
+  summary on the path. Undo removes a summary like any node.
+- **Automatic compaction:** a question sent while the active path uses 90% of
+  the context window or more gets a `summary` node (`auto`) above it, written
+  by the same task before the answer. A failed compaction is kept as an error
+  and ignored by the prompt, and the answer still runs. The context stats carry
+  `warn_at` (75%) and `compact_at` (90%) for the warning.
 
 ### The prompt
 
