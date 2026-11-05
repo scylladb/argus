@@ -50,6 +50,7 @@ from argus.backend.service.chat.resolve import (
     resolve_tests,
     run_url,
 )
+from argus.backend.service.chat.skills import SkillService
 from argus.backend.service.issue_service import IssueService
 from argus.backend.service.jenkins_service import JenkinsService
 from argus.backend.service.release_summary import ReleaseSummaryService
@@ -118,25 +119,55 @@ def tool(name: str, description: str, args: type[BaseModel], available: Callable
     return register
 
 
-def tool_specs() -> list[ToolSpec]:
-    return [entry.spec for entry in TOOLS.values() if entry.available()]
+@dataclass(slots=True, frozen=True)
+class ExternalTool:
+    """A tool that exists for one answer only, such as an MCP server's tool: its spec carries the schema the
+    model sees, and its arguments go to ``run`` unvalidated."""
+    spec: ToolSpec
+    run: Callable[[ToolContext, dict], Awaitable[object]]
+
+
+@dataclass(slots=True, frozen=True)
+class Toolbox:
+    """The tools of one answer: the available built-in tools without the hidden ones, then the external ones."""
+    hidden: frozenset[str] = frozenset()
+    external: tuple[ExternalTool, ...] = ()
+
+    def builtin(self, name: str) -> Tool | None:
+        entry = TOOLS.get(name)
+        return entry if entry and entry.available() and name not in self.hidden else None
+
+    def find_external(self, name: str) -> ExternalTool | None:
+        return next((entry for entry in self.external if entry.spec.name == name), None)
+
+    def specs(self) -> list[ToolSpec]:
+        return [entry.spec for name, entry in TOOLS.items() if self.builtin(name)] + [
+            entry.spec for entry in self.external]
+
+
+def tool_specs(box: Toolbox = Toolbox()) -> list[ToolSpec]:
+    return box.specs()
 
 
 def to_json(value: object) -> str:
     return json.dumps(value, cls=ArgusJSONEncoder, ensure_ascii=False)
 
 
-async def run_tool(ctx: ToolContext, call: ToolCall) -> ToolOutcome:
-    entry = TOOLS.get(call.name)
-    if entry is None or not entry.available():
-        offered = ", ".join(spec.name for spec in tool_specs())
+async def run_tool(ctx: ToolContext, call: ToolCall, box: Toolbox = Toolbox()) -> ToolOutcome:
+    entry = box.builtin(call.name)
+    external = None if entry else box.find_external(call.name)
+    if entry is None and external is None:
+        offered = ", ".join(spec.name for spec in box.specs())
         return ToolOutcome(f"There is no tool {call.name}. Available: {offered}", error=True)
     try:
-        args = entry.args.model_validate(json.loads(call.arguments or "{}"))
-    except (json.JSONDecodeError, ValidationError) as exception:
+        raw = json.loads(call.arguments or "{}")
+        args = entry.args.model_validate(raw) if entry else raw
+        if not isinstance(args, (dict, BaseModel)):
+            raise ValueError("the arguments must be a JSON object")
+    except (json.JSONDecodeError, ValidationError, ValueError) as exception:
         return ToolOutcome(f"Invalid arguments for {call.name}: {exception}", error=True)
     try:
-        result = await entry.run(ctx, args)
+        result = await (entry.run(ctx, args) if entry else external.run(ctx, args))
     except (ToolScopeError, TestReferenceError, APIException) as exception:
         return ToolOutcome(str(exception), error=True)
     except Exception as exception:  # noqa: BLE001 - the model gets the failure and can recover
@@ -403,6 +434,20 @@ async def edit_plan(ctx: ToolContext, args: EditPlanArgs) -> ToolOutcome:
     proposal = {"plan_id": str(plan.id), "plan": plan.name, "key": plan.key, "last_updated": plan_stamp(plan),
                 "diff": diff, "summary": summary}
     return proposal_outcome(new_action("edit_plan", proposal))
+
+
+class LoadSkillArgs(BaseModel):
+    name: str = Field(description="The skill's name, as the system prompt lists it")
+
+
+@tool("load_skill", "Load the full text of an on-demand skill that the system prompt lists.", LoadSkillArgs)
+async def load_skill(ctx: ToolContext, args: LoadSkillArgs) -> dict:
+    skills = (await SkillService().prompt_setup()).on_demand
+    skill = next((skill for skill in skills if skill.name.lower() == args.name.strip().lower()), None)
+    if skill is None:
+        raise ToolScopeError(f"No on-demand skill {args.name}; the skills are "
+                             f"{', '.join(skill.name for skill in skills) or 'none'}")
+    return {"skill": skill.name, "content": skill.content}
 
 
 class ReadMemoryArgs(BaseModel):
