@@ -23,7 +23,9 @@ TOOL_RULES = """- Use the tools to look things up before you answer. Prefer one 
   Argus shows the proposal to the users as a card, and nothing happens until
   one of them confirms it. Tell the user to confirm the card.
 - Use write_memory when a user asks you to remember a convention, or to add
-  a finding to the release summary (kind "finding")."""
+  a finding to the release summary (kind "finding").
+- Tools named mcp_... come from servers outside Argus. Those whose
+  description says a user confirms each call only propose it as a card."""
 NO_TOOL_RULES = "- You have no tools in this chat. Answer from the summary and the memories."
 COMPACT_INSTRUCTION = """Summarize the conversation below for later reference. Keep the facts,
 the decisions, the open requests, the test names, the versions, and who asked
@@ -137,6 +139,8 @@ def _result_text(kind: str, result: dict) -> str:
             return "the issue is linked"
         case "edit_plan":
             return f"the plan {result['plan']} is updated"
+        case "mcp_call":
+            return f"{result['tool']} of {result['server']} returned: {truncate(result['text'], ZEUS_NOTE_LIMIT)}"
         case _:
             return f"{result.get('issue')} is unlinked"
 

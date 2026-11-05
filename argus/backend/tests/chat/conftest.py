@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 import pytest
 from starlette.testclient import TestClient
 
-from argus.backend.models.chat import GLOBAL_SCOPE, ChatConfiguration, ChatIdentity, ChatSkill
+from argus.backend.models.chat import GLOBAL_SCOPE, ChatConfiguration, ChatIdentity, ChatMcpServer, ChatSkill
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.chat import config as chat_config
 from argus.backend.service.chat.config import ChatConfigService, DefaultModel
@@ -31,12 +31,14 @@ async def clean_chat_config(monkeypatch):
     await ChatConfiguration.find(scope=GLOBAL_SCOPE).delete()
     await ChatIdentity.find(scope=GLOBAL_SCOPE).delete()
     await ChatSkill.find(scope=GLOBAL_SCOPE).delete()
+    await ChatMcpServer.find(scope=GLOBAL_SCOPE).delete()
     monkeypatch.setitem(Config.CONFIG, "CHAT_MODELS", [])
     ChatConfigService._fallback_probes.clear()
     yield
     await ChatConfiguration.find(scope=GLOBAL_SCOPE).delete()
     await ChatIdentity.find(scope=GLOBAL_SCOPE).delete()
     await ChatSkill.find(scope=GLOBAL_SCOPE).delete()
+    await ChatMcpServer.find(scope=GLOBAL_SCOPE).delete()
     ChatConfigService._fallback_probes.clear()
 
 
