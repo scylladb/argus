@@ -12,9 +12,9 @@
     import { InProgressStatuses } from "../Common/TestStatus";
     import { timestampToISODate } from "../Common/DateUtils";
     import { getScyllaPackage, getKernelPackage, getUpgradedScyllaPackage,
-        getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage, isMonitorResource,
+        getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage, isMonitorResource, buildMonitorCommands,
     } from "../Common/RunUtils";
-    import MonitorConnect from "./MonitorConnect.svelte";
+    import CommandPopover from "./CommandPopover.svelte";
     import { clusterTypeLabel, networkTypeLabel, isCloudManagedDbCluster, getDbNodeSetup } from "../Common/CloudSetupUtils";
     import JenkinsBuildModal from "./Jenkins/JenkinsBuildModal.svelte";
     import JenkinsCloneModal from "./Jenkins/JenkinsCloneModal.svelte";
@@ -387,10 +387,8 @@
                             ><Fa icon={faCopy} /> Clone</button
                         >
                     {/if}
-                    <MonitorConnect
-                        testId={test_run.id}
-                        monitor={runningMonitor}
-                        {runFinished}
+                    <CommandPopover
+                        entries={buildMonitorCommands(test_run.id, runningMonitor, runFinished)}
                         label={runningMonitor ? (grafanaIp ? "Hydra Tunnel" : "Grafana via tunnel") : "Hydra Show Monitor"}
                     />
                     {#if runFinished}

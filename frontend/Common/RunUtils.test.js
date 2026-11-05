@@ -13,6 +13,7 @@ import {
     createScreenshotUrl,
     buildCleanResourcesCommand,
     buildMonitorCommands,
+    buildSshCommands,
     isMonitorResource,
 } from "./RunUtils.js";
 
@@ -240,6 +241,26 @@ describe("buildMonitorCommands", () => {
 
     it("offers nothing for a run in progress without a running monitor", () => {
         expect(commands(undefined, false)).toEqual([]);
+    });
+});
+
+describe("buildSshCommands", () => {
+    const node = (state) => ({ name: "sct-db-node-6c1f8a2b-0-1", state });
+
+    it("gives ssh for a running node", () => {
+        expect(buildSshCommands("t-1", node("running"))).toEqual([
+            {
+                label: "SSH",
+                commands: [
+                    "hydra ssh -t t-1 sct-db-node-6c1f8a2b-0-1",
+                    "uv run sct.py ssh -t t-1 sct-db-node-6c1f8a2b-0-1",
+                ],
+            },
+        ]);
+    });
+
+    it("gives nothing for a terminated node", () => {
+        expect(buildSshCommands("t-1", node("terminated"))).toEqual([]);
     });
 });
 

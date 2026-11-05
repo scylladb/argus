@@ -44,7 +44,9 @@ that predates `resource_type`, when its name holds `-monitor-node-`.
 | Run in progress, no running monitor | No button |
 | No clipboard API | The commands stay visible and selectable |
 
-The Resources tab does not change. The mobile *Actions* menu keeps its
+The Resources tab gets a *Connect* column after *State*: an *SSH* popover on
+every running instance, with `ssh -t <test_id> <node-name>` in both forms. A
+stopped instance gets an empty cell. The mobile *Actions* menu keeps its
 *Hydra Show Monitor* item.
 
 ## Contracts
@@ -67,6 +69,7 @@ The command strings, each with the `hydra` and the `uv run sct.py` prefix:
 <runner> tunnel -t <test_id> -p 3000 <monitor-name>
 <runner> tunnel -t <test_id> -p 9090 <monitor-name>
 <runner> investigate show-monitor <test_id>
+<runner> ssh -t <test_id> <node-name>
 ```
 
 ### Module API
@@ -79,6 +82,9 @@ export const isMonitorResource = function (resource) {};
 
 /** @returns {{ label: string, commands: string[] }[]} */
 export const buildMonitorCommands = function (testId, runningMonitor, runFinished) {};
+
+/** @returns {{ label: string, commands: string[] }[]} */
+export const buildSshCommands = function (testId, node) {};
 ```
 
 ## Risks
@@ -97,8 +103,9 @@ export const buildMonitorCommands = function (testId, runningMonitor, runFinishe
 - The restore command follows the run status, for when the logs are
   collected. The tunnel follows the resource state, for while the node is
   up. (review)
-- The popover replaces *Hydra Show Monitor* on the run card, and the
-  Resources tab stays as it is. No `ssh` command: the tunnel covers the
-  monitor. (review)
+- The popover replaces *Hydra Show Monitor* on the run card. No `ssh`
+  command there: the tunnel covers the monitor. (review)
+- The `ssh` command goes to the Resources tab, in its own *Connect* column
+  per running instance, not in the name cell. (review)
 - Every command also comes as `uv run sct.py`, for people who do not run SCT
   in docker. (review)
