@@ -47,6 +47,7 @@ from argus.backend.service.chat.tools import (
 LOGGER = logging.getLogger(__name__)
 MAX_MODEL_CALLS = 8
 FLUSH_SECONDS = 0.5
+HEARTBEAT_SECONDS = 30
 LIMIT_MESSAGE = (f"I stopped after {MAX_MODEL_CALLS} model calls, the limit for one question. "
                  "Ask again to continue from here.")
 
@@ -88,6 +89,7 @@ class ChatAgent:
         self.history = ChatHistoryService(entity)
         self.box = Toolbox()
         self.auto = False
+        self.beat_at = time.monotonic()
 
     def _publish(self, event: dict) -> None:
         self.hub.publish(self.entity.id, event)
@@ -140,6 +142,9 @@ class ChatAgent:
             if time.monotonic() - flushed_at >= FLUSH_SECONDS:
                 flushed_at = time.monotonic()
                 await self.history.flush(node, content=streamed.content, reasoning=streamed.thinking)
+                if time.monotonic() - self.beat_at >= HEARTBEAT_SECONDS:
+                    self.beat_at = time.monotonic()
+                    await self.history.heartbeat(self.busy_node)
                 self._publish_node(node)
                 if await self._stop_requested():
                     raise StopRequested
@@ -202,6 +207,8 @@ class ChatAgent:
                 messages.append(ChatMessage("assistant", streamed.content, tool_calls=calls))
                 head = current.node
                 for call in calls:
+                    if await self._stop_requested():
+                        raise StopRequested
                     head = await self._run_call(current, call, head, messages)
                 fields = {"role": "assistant", "parent": head, "user_id": self.user.id,
                           "model_name": self.model.model, "memory_snapshot": snapshot_json}

@@ -111,8 +111,14 @@ class DiffBuilder:
         if isinstance(entity, ArgusTest):
             return [entity.id]
         if entity.id in self.groups:
+            self.whole_group(entity)
             return [entity.id]
         return [test.id for test in self.scope.enabled_tests(group=entity)]
+
+    def whole_group(self, group: ArgusGroup) -> None:
+        if self.scope.partial:
+            raise TestReferenceError(f"The group {group.name} holds tests outside this view; a view chat changes "
+                                     "a plan group test by test")
 
     def ensure_in_plan(self, entity_id: UUID) -> None:
         if entity_id in self.tests or entity_id in self.groups:
@@ -139,6 +145,8 @@ class DiffBuilder:
                 self.ensure_in_plan(entity_id)
         for reference in changes.remove_tests:
             entity = entity_reference(self.scope, reference)
+            if not isinstance(entity, ArgusTest) and entity.id in self.groups:
+                self.whole_group(entity)
             ids = [entity.id] if isinstance(entity, ArgusTest) or entity.id in self.groups else \
                 [test.id for test in self.scope.tests if test.group_id == entity.id]
             for entity_id in ids:
@@ -147,6 +155,7 @@ class DiffBuilder:
             group = entity_reference(self.scope, reference)
             if isinstance(group, ArgusTest) or group.id not in self.groups:
                 raise TestReferenceError(f"{reference} is not a group of the plan {self.plan.name}")
+            self.whole_group(group)
             self.remove_entity(group.id)
         for reference, user_reference in changes.assign.items():
             if user_reference.strip().lower() in OWNER_REFERENCES:

@@ -46,7 +46,9 @@ text, and the system prompt itself can be edited.
   Only an admin may clear a whole conversation. The
   existing issue and Jenkins routes check nothing more either.
 - **Endpoint tokens never leave the server.** A token stored in the database
-  is encrypted.
+  is encrypted. Changing a connection's endpoint, or an MCP server's URL,
+  needs its token or headers again, so a stored secret never follows a new
+  host.
 
 ## Design
 
@@ -59,7 +61,7 @@ text, and the system prompt itself can be edited.
 | History service | Owns the message tree: reading, appending, the active branch, the generation lock, undo, and the branch switch. |
 | Memory service | Memories and their revisions: create, edit, delete, revert, scope. |
 | Agent | Builds the prompt, runs the model and the tool loop as a background task, publishes events, and flushes progress to the database. |
-| Background tasks | A per-worker registry of running generations, compactions and confirmed actions. A task outlives the request that started it, and a worker shutdown marks its node `stopped`. |
+| Background tasks | A per-worker registry of running generations, compactions and confirmed actions. A task outlives the request that started it, and a worker shutdown marks its node `stopped`; a confirmed card cut off by a shutdown is closed with that error. |
 | Hub | A per-worker fan-out from published events to the worker's open event streams. For each entity with a local stream, a watcher polls the entity's state rows and pushes what another worker wrote. It also keeps the presence list. |
 | Tools | Argus reads, memory writes, and action proposals, each limited to the entity's tests. |
 | Actions | Validate a proposal against Jenkins job parameters, and run it once on confirmation. |
@@ -199,7 +201,9 @@ assignees, and memory authors. An email address never reaches the model.
 **Scope:** every tool is limited to the entity. A release chat reaches its
 own tests. A view chat reaches the view's tests and, for reads, their
 releases. A run, test or plan outside that scope is refused, with the reason
-returned to the model.
+returned to the model. A view chat sees only the groups of its tests, and
+changes a plan group test by test, since the group may hold tests outside
+the view.
 
 **References:** a tool takes whatever the user or the model has at hand.
 Names compare without case, and an ambiguous name answers with its
@@ -394,7 +398,8 @@ users' questions are not affected.
 | Another generation is running | The command is refused with the asker's name. The stream already shows the running answer |
 | The stream does not connect, is closed for good, or is buffered (no event or heartbeat for 30 s) | `EventSource` reconnects on its own; until an event arrives, the client polls `GET` every 3 s |
 | The server shuts down or reloads | Every open stream ends at once; the clients reconnect to the next worker |
-| A lock older than 5 minutes (worker died) | The next send takes it over and marks the abandoned node `error` |
+| A lock older than 5 minutes (worker died) | A running answer refreshes its lock every 30 s, so only a dead one ages. Stop, or the next send, frees it and marks the abandoned node `error` |
+| Stop while the model's tool calls wait to run | No further tool runs and no card is confirmed, Auto mode included |
 | The endpoint fails or times out | The assistant node gets `status=error` with the message, the lock is released, and Try again works |
 | The model calls an unknown tool or sends bad arguments | The tool node carries the error and the loop continues, so the model can correct itself |
 | The tool loop reaches 8 model calls | The answer ends with a note that the limit was reached |
@@ -870,6 +875,7 @@ class ChatEntity:
 | A conversation partition grows without bound. Compaction hides old messages from the prompt, not from the read | Reads take the whole partition. A thousand nodes stay within a few hundred kilobytes. Paging is deferred work |
 | A small model invents parameters or test names | Every proposal is resolved and validated on the server, and nothing starts without a user's confirmation |
 | A prompt injection through run data, such as a comment or an issue title, steers the model | Tools that change Argus only propose. The card shows exactly what runs. Memory writes can be reverted and carry `source=chat` |
+| Auto mode, or a `direct` MCP tool, runs a change that injected text asked for | Auto mode is the asker's choice for each question, and the prompt tells the model to propose only what the asker asked for; every card it confirmed stays in the chat, marked as confirmed automatically. A `direct` MCP tool is the admin's choice per tool. An answer shows no image from another host, so it cannot send data out |
 | nginx buffers the stream despite the header | The heartbeat never arrives, so the client polls. The live check covers the dev server, which runs without nginx, and a production check follows the deploy |
 | Watchers poll the database: one state-row read every 0.5 s per entity with an open stream, per worker, plus one read per release every 2 s for a view | One watcher serves every stream of an entity in a worker, and stops with its last stream. Ten people in one chat on four workers are at most 8 reads a second. A run with ten clients on one chat kept the other routes at their idle latency |
 | An endpoint is slow, around 30 seconds before the first token on a cold local model | No request timeout below 5 minutes on the stream. The lock covers 5 minutes. The UI shows "waiting for the model" |
@@ -978,3 +984,8 @@ room for each:
   chat, the command line and the run page agree. (spec)
 - Auto mode is a choice of the asker, per question; it never confirms a card
   for anyone else's question. (spec)
+- Auto mode confirms every kind of card, accepting that injected text can
+  reach a confirmation without a person: the asker turns it on for their own
+  questions, the cards stay visible, and the outside image channel is closed.
+  Keeping a card for some kinds was weighed and left out, since it would
+  make Auto mode stop halfway through the requests it exists for. (spec)

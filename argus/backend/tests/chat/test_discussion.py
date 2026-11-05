@@ -99,3 +99,9 @@ async def test_a_comment_is_posted_once_confirmed(discussed, chat_model, chat_pe
     assert json.loads(card.action)["proposal"]["message"] == "Same OOM as rc0."
     assert len(comments) == before + 1
     assert [(comment.message, comment.user_id) for comment in comments].count(("Same OOM as rc0.", bob.id)) == 1
+
+
+async def test_read_run_shows_only_the_last_comments(ctx, discussed):
+    outcome = await call(ctx, "read_run", run=str(discussed.run))
+
+    assert len(json.loads(outcome.content)["comments"]) == 3

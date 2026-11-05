@@ -111,7 +111,7 @@ class ChatHub:
                     subscription.overflowed = True
 
     def publish(self, entity_id: UUID, event: dict) -> None:
-        if event["type"] == "node":
+        if event["type"] == "node" and entity_id in self._subscriptions:
             self._known[entity_id][event["node"]["node"]] = to_millis(event["node"]["updated_at"])
         for subscription in list(self._subscriptions.get(entity_id, ())):
             try:
@@ -120,13 +120,21 @@ class ChatHub:
                 subscription.overflowed = True
 
     async def _watch(self, entity: ChatEntity) -> None:
-        state = await ensure_state(entity.id, entity.type)
-        changed_at, memory_at = state.changed_at, state.memory_changed_at
-        known = self._known[entity.id]
-        for node in await ChatHistory.find(entity_id=entity.id).all():
-            known.setdefault(node.node, to_millis(node.updated_at))
         other_ids = [release_id for release_id in entity.release_ids if release_id != entity.id]
-        release_stamps = await self._memory_stamps(other_ids)
+        while True:
+            try:
+                state = await ensure_state(entity.id, entity.type)
+                known = self._known[entity.id]
+                for node in await ChatHistory.find(entity_id=entity.id).all():
+                    known.setdefault(node.node, to_millis(node.updated_at))
+                release_stamps = await self._memory_stamps(other_ids)
+                break
+            except asyncio.CancelledError:
+                raise
+            except Exception:  # noqa: BLE001 - a transient database error must not end the watcher
+                LOGGER.warning("The chat watcher of %s could not start; retrying", entity.id, exc_info=True)
+                await asyncio.sleep(self.poll_seconds)
+        changed_at, memory_at = state.changed_at, state.memory_changed_at
         presence: list[UUID] | None = None
         loop = asyncio.get_running_loop()
         presence_due = release_due = 0.0
