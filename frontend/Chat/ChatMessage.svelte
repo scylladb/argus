@@ -21,10 +21,11 @@
         onConfirm: (node: string) => Promise<void>;
         onDismiss: (node: string) => Promise<void>;
         onRefresh?: (node: string) => Promise<void>;
+        onAdjust?: (node: string, testId: string, overrides: Record<string, string>) => Promise<string | null>;
     }
 
     let { turn, nodes, users, memories, assistant = null, initiallyExpanded = false, onSetHead, onConfirm, onDismiss,
-          onRefresh }: Props = $props();
+          onRefresh, onAdjust }: Props = $props();
 
     let expandedByUser = $state<boolean | null>(null);
 
@@ -183,7 +184,7 @@
 
     {#each turn.actions as action (action.node)}
         <div class="ms-4">
-            <ChatActionCard node={action} {users} {onConfirm} {onDismiss} {onRefresh} />
+            <ChatActionCard node={action} {users} {onConfirm} {onDismiss} {onRefresh} {onAdjust} />
         </div>
     {/each}
 </article>

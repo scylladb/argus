@@ -144,6 +144,16 @@
         }
     };
 
+    const adjustCard = async (node: string, testId: string, overrides: Record<string, string>) => {
+        try {
+            const card = await postJson<ChatNode>(`${base}/actions/${node}/params`, { tests: { [testId]: overrides } });
+            if (conversation) conversation = applyEvent(conversation, { type: "node", node: card });
+            return null;
+        } catch (error) {
+            return error instanceof Error ? error.message : String(error);
+        }
+    };
+
     const clear = async () => {
         confirmingClear = false;
         try {
@@ -254,6 +264,7 @@
                                 onConfirm={(node) => decideCard(node, "confirm")}
                                 onDismiss={(node) => decideCard(node, "dismiss")}
                                 onRefresh={(node) => decideCard(node, "refresh")}
+                                onAdjust={adjustCard}
                             />
                         {/each}
                     {/if}
@@ -264,9 +275,9 @@
                     {busy}
                     canRetry={path.some((node) => node.role === "user")}
                     canUndo={path.length > 0}
-                    onSend={(content) => start("messages", { content })}
+                    onSend={(content, auto) => start("messages", { content, auto })}
                     onStop={stop}
-                    onRetry={() => start("regenerate")}
+                    onRetry={(auto) => start("regenerate", { auto })}
                     onUndo={() => replace("undo")}
                 />
             </section>

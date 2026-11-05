@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
 import ChatActionCard from "./ChatActionCard.svelte";
 import { chatNode, showRunAction, startAction, zeusAction, zeusReportAction } from "./chatTestData";
+import type { ChatAction } from "./types";
 
 const users = { u1: { id: "u1", username: "alice", full_name: "Alice Smith" } } as never;
 
@@ -123,5 +124,73 @@ describe("ChatActionCard for a Zeus report", () => {
         const link = screen.getByRole("link", { name: /Open run/ }) as HTMLAnchorElement;
         expect(link.getAttribute("href")).toBe("/test/scylla-2025.1/rolling-upgrade/rolling-upgrade-centos9-test/11");
         expect(screen.queryByRole("button", { name: /Run|Dismiss/ })).toBeNull();
+    });
+});
+
+describe("ChatActionCard edits and new cards", () => {
+    afterEach(cleanup);
+
+    const withFields = () => startAction({
+        rejected: [],
+        proposal: {
+            tests: [{
+                test_id: "t1", test: "upgrades/rolling_upgrade", name: "rolling_upgrade", group: "upgrades",
+                build_system_id: "scylla-2025.1/upgrades/rolling_upgrade", seed: "last_build", build_number: null,
+                params: { backend: "aws", region: "eu-west-1", scylla_version: "2025.1.0" }, overrides: {},
+                fields: [
+                    { name: "backend", value: "aws", group: "environment", choices: ["aws", "gce"] },
+                    { name: "region", value: "eu-west-1", group: "environment", choices: ["eu-west-1", "us-west-2"] },
+                    { name: "scylla_version", value: "2025.1.0", group: "scylla" },
+                ],
+            }],
+        },
+    });
+
+    it("edits a pending start's parameters and shows a rejection", async () => {
+        const onAdjust = vi.fn().mockResolvedValueOnce("mars-1 is not a supported region").mockResolvedValueOnce(null);
+        render(ChatActionCard, { props: { node: chatNode("card", "action", "a", { action: withFields() }), users,
+                                          onConfirm: vi.fn(), onDismiss: vi.fn(), onAdjust } });
+
+        await fireEvent.click(screen.getByRole("button", { name: /Edit parameters/ }));
+        expect(screen.getByText("Environment")).toBeTruthy();
+        await fireEvent.change(screen.getByLabelText("region"), { target: { value: "us-west-2" } });
+        await fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+        expect(onAdjust).toHaveBeenCalledWith("card", "t1", { region: "us-west-2" });
+        expect(await screen.findByText("mars-1 is not a supported region")).toBeTruthy();
+        await fireEvent.click(screen.getByRole("button", { name: "Save" }));
+        await vi.waitFor(() => expect(screen.queryByRole("button", { name: "Save" })).toBeNull());
+    });
+
+    it("lists a plan edit's changes and applies it", async () => {
+        const onConfirm = vi.fn().mockResolvedValue(undefined);
+        const action: ChatAction = {
+            kind: "edit_plan", state: "pending", rejected: [], confirmed_by: null, confirmed_at: null,
+            dismissed_by: null, results: [],
+            proposal: { plan: "Week plan", summary: ["+ upgrades/rolling_upgrade", "labels of upgrades/x: week1 (were none)"] },
+        };
+        render(ChatActionCard, { props: { node: chatNode("card", "action", "a", { action }), users, onConfirm,
+                                          onDismiss: vi.fn() } });
+
+        expect(screen.getByText("Edit the plan Week plan")).toBeTruthy();
+        expect(screen.getByText("+ upgrades/rolling_upgrade")).toBeTruthy();
+        await fireEvent.click(screen.getByRole("button", { name: /Apply/ }));
+        expect(onConfirm).toHaveBeenCalledWith("card");
+    });
+
+    it("shows an MCP call's arguments, its result, and an automatic confirmation", () => {
+        const action: ChatAction = {
+            kind: "mcp_call", state: "done", rejected: [], confirmed_by: "u1",
+            confirmed_at: new Date().toISOString(), dismissed_by: null, auto: true,
+            proposal: { server: "jira", tool: "close_issue", arguments: { key: "SCYLLA-1" } },
+            results: [{ server: "jira", tool: "close_issue", text: "closed", error: null }],
+        };
+        render(ChatActionCard, { props: { node: chatNode("card", "action", "a", { action }), users,
+                                          onConfirm: vi.fn(), onDismiss: vi.fn() } });
+
+        expect(screen.getByText("Call close_issue on jira")).toBeTruthy();
+        expect(screen.getByText(/"key": "SCYLLA-1"/)).toBeTruthy();
+        expect(screen.getByText("closed")).toBeTruthy();
+        expect(screen.getByText(/Confirmed automatically for Alice Smith/)).toBeTruthy();
     });
 });

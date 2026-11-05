@@ -1,9 +1,17 @@
 <script lang="ts">
     import Fa from "svelte-fa";
-    import { faArrowUpRightFromSquare, faCheck, faMagnifyingGlass, faPlay, faXmark } from "@fortawesome/free-solid-svg-icons";
+    import {
+        faArrowUpRightFromSquare,
+        faCheck,
+        faMagnifyingGlass,
+        faPlay,
+        faSliders,
+        faXmark,
+    } from "@fortawesome/free-solid-svg-icons";
     import type { User } from "../Common/UserTypes";
     import { ago, displayName } from "./chatFormat";
     import { renderMarkdown } from "./markdown";
+    import StartParamsEditor from "./StartParamsEditor.svelte";
     import type { ActionResult, ChatAction, ChatNode } from "./types";
 
     interface Props {
@@ -12,9 +20,10 @@
         onConfirm: (node: string) => Promise<void>;
         onDismiss: (node: string) => Promise<void>;
         onRefresh?: (node: string) => Promise<void>;
+        onAdjust?: (node: string, testId: string, overrides: Record<string, string>) => Promise<string | null>;
     }
 
-    let { node, users, onConfirm, onDismiss, onRefresh }: Props = $props();
+    let { node, users, onConfirm, onDismiss, onRefresh, onAdjust }: Props = $props();
 
     const REFRESH_MS = 30_000;
     const ZEUS_BADGES: Record<string, string> = {
@@ -26,6 +35,7 @@
 
     let working = $state(false);
     let openParams = $state<Record<string, boolean>>({});
+    let editing = $state<string | null>(null);
 
     const action = $derived(node.action as ChatAction);
     const tests = $derived(action.proposal.tests ?? []);
@@ -42,6 +52,10 @@
                 return "Link an issue";
             case "zeus_investigation":
                 return `Queue ${runs.length} Zeus investigation${runs.length === 1 ? "" : "s"}`;
+            case "edit_plan":
+                return `Edit the plan ${action.proposal.plan}`;
+            case "mcp_call":
+                return `Call ${action.proposal.tool} on ${action.proposal.server}`;
             default:
                 return "Unlink an issue";
         }
@@ -122,14 +136,27 @@
                             {#each Object.entries(test.overrides) as [name, value] (name)}
                                 <span class="badge text-bg-primary">{name}={value}</span>
                             {/each}
-                            <button
-                                type="button"
-                                class="btn btn-link btn-sm p-0 ms-auto"
-                                onclick={() => (openParams[test.test_id] = !openParams[test.test_id])}
-                            >
-                                {openParams[test.test_id] ? "Hide parameters" : "All parameters"}
-                            </button>
+                            <span class="ms-auto d-inline-flex gap-2">
+                                {#if action.state === "pending" && onAdjust}
+                                    <button type="button" class="btn btn-link btn-sm p-0"
+                                            title="Change this test's parameters before it starts"
+                                            onclick={() => (editing = editing === test.test_id ? null : test.test_id)}>
+                                        <Fa icon={faSliders} /> Edit parameters
+                                    </button>
+                                {/if}
+                                <button
+                                    type="button"
+                                    class="btn btn-link btn-sm p-0"
+                                    onclick={() => (openParams[test.test_id] = !openParams[test.test_id])}
+                                >
+                                    {openParams[test.test_id] ? "Hide parameters" : "All parameters"}
+                                </button>
+                            </span>
                         </div>
+                        {#if editing === test.test_id && onAdjust}
+                            <StartParamsEditor {test} onSave={(testId, overrides) => onAdjust(node.node, testId, overrides)}
+                                               onClose={() => (editing = null)} />
+                        {/if}
                         {#if result}
                             {#if result.error}
                                 <div class="text-danger">Did not start: {result.error}</div>
@@ -209,6 +236,27 @@
                 Checked with Zeus {ago(action.refreshed_at)}{zeusOpen ? "; checking every 30 s while this chat is open" : ""}
             </div>
         {/if}
+    {:else if action.kind === "edit_plan"}
+        <ul class="small mb-1 ps-3 plan-changes">
+            {#each action.proposal.summary ?? [] as line, index (index)}
+                <li class:text-success={line.startsWith("+ ")} class:text-danger={line.startsWith("- ")}>{line}</li>
+            {/each}
+        </ul>
+        {#each action.results.filter((entry) => entry.error) as result, index (index)}
+            <div class="small text-danger">{result.error}</div>
+        {/each}
+    {:else if action.kind === "mcp_call"}
+        <pre class="small rounded bg-light-one p-2 mb-1 arguments">{JSON.stringify(action.proposal.arguments ?? {}, null, 2)}</pre>
+        {#each action.results as result, index (index)}
+            {#if result.error}
+                <div class="small text-danger">{result.error}</div>
+            {:else}
+                <details class="small" open>
+                    <summary>Result</summary>
+                    <pre class="rounded bg-light-one p-2 mb-0 mt-1 mcp-result">{result.text}</pre>
+                </details>
+            {/if}
+        {/each}
     {:else}
         <div class="small">
             {#if action.kind === "link_issue"}
@@ -236,6 +284,8 @@
             >
                 {#if action.kind === "zeus_investigation"}
                     <Fa icon={faMagnifyingGlass} /> Queue
+                {:else if action.kind === "edit_plan"}
+                    <Fa icon={faCheck} /> Apply
                 {:else}
                     <Fa icon={action.kind === "execute_tests" ? faPlay : faCheck} /> Run
                 {/if}
@@ -244,6 +294,10 @@
                 <Fa icon={faXmark} /> Dismiss
             </button>
             <span class="text-body-secondary">Anyone can confirm. Nothing runs until then.</span>
+        {:else if action.confirmed_by && action.auto}
+            <span class="text-body-secondary"
+                >Confirmed automatically for {displayName(action.confirmed_by, users)} {ago(action.confirmed_at)}</span
+            >
         {:else if action.confirmed_by}
             <span class="text-body-secondary"
                 >Confirmed by {displayName(action.confirmed_by, users)} {ago(action.confirmed_at)}</span
@@ -269,6 +323,13 @@
     }
     .params td {
         font-size: 0.75rem;
+    }
+    .arguments,
+    .mcp-result {
+        max-height: 16rem;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
     }
     .zeus-report {
         max-height: 24rem;
