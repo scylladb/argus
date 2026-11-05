@@ -73,6 +73,26 @@ The family row, *All of 2025.1.0*, rolls up the family's versions:
   later version. Otherwise it is open.
 - The row adds the *Fixed issues* count.
 
+The issue list groups issues by their state in Jira or GitHub. Each issue says
+whether it is linked to the latest run of a test in the family, or on which
+version it was last seen. A closed issue on a latest run is not necessarily
+back: it may have been closed after that run, before any test ran again.
+
+## Reading the summary
+
+The release dashboard shows the summary as a collapsed *Release summary* panel.
+Each family has two tabs:
+
+- **Timeline**: one row per version, with the family row first. A click on a
+  count, or on a bar segment, lists the tests behind it.
+- **Grid**: one row per test and one column per version, each cell linked to
+  its run.
+
+The status toggles filter both tabs, each on its own; a count or a bar segment
+shows only its status. On the release dashboard, a click on a
+test name adds the test to the selected tests beside the test dashboard, as a
+click in the test dashboard does.
+
 ## When the summary refreshes
 
 The summary is stored per release and recomputed on the first read after a

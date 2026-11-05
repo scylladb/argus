@@ -6,6 +6,9 @@
     import TestPopoutSelector from "./TestPopoutSelector.svelte";
     import { sendMessage } from "../Stores/AlertStore";
     import TestDashboard from "./TestDashboard.svelte";
+    import ReleaseSummary from "../Views/Widgets/ReleaseSummary/ReleaseSummary.svelte";
+    import FlyoutLayer from "../Common/FlyoutLayer.svelte";
+    import { landingPoint } from "../Common/flyout";
     import { TestStatus } from "../Common/TestStatus";
     let { releaseData = {} } = $props();
     let clickedTests = $state({});
@@ -13,6 +16,9 @@
     let productVersion = $state(queryString.parse(document.location.search)?.productVersion);
     let includeNoVersion = $state(false);
     let stats = $state();
+    let popoutColumn = $state();
+    let flights = $state([]);
+    let lastFlightId = 0;
 
     const handleTestClick = function (detail) {
         if (detail.start_time == 0) {
@@ -39,6 +45,42 @@
             delete clickedTests[key];
             clickedTests = clickedTests;
         }
+    };
+
+    const flightStart = function (event) {
+        if (event.detail === 0 && event.currentTarget instanceof Element) {
+            const rect = event.currentTarget.getBoundingClientRect();
+            return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        }
+        return { x: event.clientX, y: event.clientY };
+    };
+
+    const launchFlight = function (event, label) {
+        if (!popoutColumn) return;
+        const to = landingPoint(popoutColumn.getBoundingClientRect(), { width: window.innerWidth, height: window.innerHeight });
+        flights.push({ id: ++lastFlightId, from: flightStart(event), to, label });
+    };
+
+    const handleSummaryTestClick = function (test, event) {
+        const group = stats?.groups?.[test.group_id];
+        const entry = group?.tests?.[test.test_id];
+        if (!entry) {
+            sendMessage("info", `The test "${test.test_name}" is not in the test dashboard below.`, "ReleaseDashboard::summaryTestClick");
+            return;
+        }
+        if (!clickedTests[entry.test.id]) {
+            launchFlight(event, entry.test.name);
+        }
+        handleTestClick({
+            name: entry.test.name,
+            id: entry.test.id,
+            assignees: [],
+            group: group.group.name,
+            status: entry.status,
+            start_time: entry.start_time,
+            last_runs: entry.last_runs,
+            build_system_id: entry.test.build_system_id,
+        });
     };
 
     const handleQuickSelect = function (e) {
@@ -103,6 +145,16 @@
     </div>
     <div class="row mb-2">
         <div class="col">
+            <ReleaseSummary
+                dashboardObject={releaseData.release}
+                dashboardObjectType="release"
+                collapsible={true}
+                onTestClick={handleSummaryTestClick}
+            />
+        </div>
+    </div>
+    <div class="row mb-2">
+        <div class="col">
             <ReleaseStats
                 horizontal={false}
                 displayExtendedStats={true}
@@ -123,7 +175,7 @@
                 on:statsUpdate={(e) => (stats = e.detail)}
             />
         </div>
-        <div class="col-xs-10 col-sm-6 col-md-5">
+        <div class="col-xs-10 col-sm-6 col-md-5" bind:this={popoutColumn}>
             <TestPopoutSelector
                 bind:tests={clickedTests}
                 on:deleteRequest={handleDeleteRequest}
@@ -135,3 +187,4 @@
         <ReleaseActivity releaseName={releaseData.release.name} />
     </div>
 </div>
+<FlyoutLayer {flights} onLanded={(id) => (flights = flights.filter((flight) => flight.id !== id))} />
