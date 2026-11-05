@@ -492,18 +492,18 @@ stays in every plan built from a spec.
   - The `edit_plan` and `mcp_call` cards.
   - The "Confirmed automatically" label.
 - Modify: `ChatComposer.svelte` (the Auto mode checkbox, kept in `sessionStorage`), `ChatModal.svelte`, `types.ts`.
+- Create: `frontend/Chat/StartParamsEditor.svelte`.
 - Test: `ChatActionCard.test.ts`, `ChatComposer.test.ts`
 
-- [ ] Write the failing tests:
+- [x] Write the tests:
   - Editing a parameter posts the overrides, and a rejection shows its reason.
   - The plan card lists its changes.
   - The MCP card shows the arguments and then the result.
   - The auto label shows.
   - The Auto checkbox is sent with the question.
-- [ ] Run them and confirm the failures.
-- [ ] Write the code.
-- [ ] Run `yarn test` and `yarn build`.
-- [ ] Commit `feature(frontend): edit run parameters and plans in chat cards, and auto mode`.
+- [x] Write the code.
+- [x] Run `yarn test` and `yarn build`.
+- [x] Commit `feature(frontend): edit run parameters and plans in chat cards, and auto mode`.
 
 ## Task 20 — Frontend: MCP servers, prompt and skills in the Admin Panel
 
