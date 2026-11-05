@@ -124,6 +124,12 @@ class PlanningService:
     VIEW_WIDGET_SETTINGS = [
         {
             "position": 1,
+            "type": "chat",
+            "filter": [],
+            "settings": {}
+        },
+        {
+            "position": 2,
             "type": "highlights",
             "filter": [],
             "settings": {
@@ -142,7 +148,7 @@ class PlanningService:
             }
         },
         {
-            "position": 2,
+            "position": 3,
             "type": "githubIssues",
             "filter": [],
             "settings": {
@@ -151,7 +157,7 @@ class PlanningService:
             }
         },
         {
-            "position": 3,
+            "position": 4,
             "type": "releaseStats",
             "filter": [],
             "settings": {
@@ -161,13 +167,13 @@ class PlanningService:
             }
         },
         {
-            "position": 4,
+            "position": 5,
             "type": "releaseSummary",
             "filter": [],
             "settings": {}
         },
         {
-            "position": 5,
+            "position": 6,
             "type": "testDashboard",
             "filter": [],
             "settings": {
