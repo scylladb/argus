@@ -1,5 +1,6 @@
 import json
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -7,8 +8,10 @@ from argus.backend.error_handlers import APIException, DataValidationError
 from argus.backend.models.chat import ChatHistory
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.web import ArgusTest, User
+from argus.backend.service.chat import sct_params
 from argus.backend.service.chat.entity import ChatEntity
 from argus.backend.service.chat.history import ChatHistoryService
+from argus.backend.service.chat.plans import plan_diff_payload, plan_stamp
 from argus.backend.service.chat.resolve import (
     Scope,
     TestReferenceError,
@@ -45,41 +48,119 @@ def new_action(kind: str, proposal: dict, rejected: list[dict] | None = None) ->
             "confirmed_at": None, "dismissed_by": None, "results": []}
 
 
-async def _check_start(jenkins: JenkinsService, scope: Scope, test: ArgusTest,
-                       overrides: dict[str, str]) -> tuple[dict | None, dict | None]:
+SEEDS = ("last_build", "defaults", "build")
+
+
+@dataclass(slots=True, frozen=True)
+class Seed:
+    """Where a start takes its parameters from before the overrides: the last build, the job's defaults, or
+    one build."""
+    kind: str = "last_build"
+    build_number: int | None = None
+
+    @classmethod
+    def of(cls, kind: str | None, build_number: int | None = None) -> "Seed":
+        kind = kind or ("build" if build_number else "last_build")
+        if kind not in SEEDS:
+            raise ChatActionError(f"seed must be one of {', '.join(SEEDS)}")
+        if kind == "build" and not build_number:
+            raise ChatActionError("A build seed needs build_number")
+        return cls(kind, build_number if kind == "build" else None)
+
+    def as_json(self) -> dict:
+        return {"seed": self.kind, "build_number": self.build_number}
+
+
+async def job_parameters(jenkins: JenkinsService, test: ArgusTest, seed: Seed) -> list[dict]:
+    return await jenkins.retrieve_job_parameters(test.build_system_id, seed.build_number,
+                                                 from_defaults=seed.kind == "defaults")
+
+
+async def _check_start(jenkins: JenkinsService, scope: Scope, test: ArgusTest, overrides: dict[str, str],
+                       seed: Seed) -> tuple[dict | None, dict | None]:
     label = scope.label(test)
     if not test.build_system_id:
         return None, {"test": label, "reason": "The test has no Jenkins job"}
     try:
-        params = await jenkins.retrieve_job_parameters(test.build_system_id, None)
+        job = await job_parameters(jenkins, test, seed)
     except Exception as exception:  # noqa: BLE001 - one unreachable job must not hide the others
         return None, {"test": label, "reason": f"Jenkins did not return the job parameters: {exception}"}
-    by_name = {param["name"]: param for param in params}
+    by_name = {param["name"]: param for param in job}
     for name, value in overrides.items():
         if name not in by_name:
             return None, {"test": label, "reason": f"The job has no parameter {name}"}
         choices = by_name[name].get("choices")
         if choices and value not in choices:
             return None, {"test": label, "reason": f"{value} is not a choice of {name} ({', '.join(choices)})"}
-    merged = {name: param.get("value") for name, param in by_name.items()} | overrides
-    if test.plugin_name == SCT_PLUGIN:
+    params = {name: param.get("value") for name, param in by_name.items()}
+    sct = test.plugin_name == SCT_PLUGIN
+    if sct:
+        params, changed = sct_params.normalize(params, overrides)
+        if reason := await sct_params.check(params, changed):
+            return None, {"test": label, "reason": reason}
         try:
-            JenkinsService.validate_sct_version_source(merged)
+            JenkinsService.validate_sct_version_source(params)
         except DataValidationError as exception:
             return None, {"test": label, "reason": str(exception)}
+    else:
+        params |= overrides
     return {"test_id": str(test.id), "test": label, "name": test.name, "group": scope.group_name(test),
-            "build_system_id": test.build_system_id, "params": merged, "overrides": dict(overrides)}, None
+            "build_system_id": test.build_system_id, "params": params, "overrides": dict(overrides),
+            **seed.as_json(), "fields": sct_params.fields(params, job, sct)}, None
 
 
-async def propose_start(scope: Scope, tests: list[ArgusTest], overrides: dict[str, str],
-                        rejected: list[dict]) -> dict:
+async def propose_start(scope: Scope, tests: list[ArgusTest], overrides: dict[str, str], rejected: list[dict],
+                        per_test: dict[UUID, dict[str, str]] | None = None, seed: Seed = Seed()) -> dict:
     jenkins = JenkinsService()
     unique = list({test.id: test for test in tests}.values())
-    checked = await gather_limited((_check_start(jenkins, scope, test, overrides) for test in unique),
-                                   limit=JOB_CONCURRENCY)
+    per_test = per_test or {}
+    checked = await gather_limited(
+        (_check_start(jenkins, scope, test, overrides | per_test.get(test.id, {}), seed) for test in unique),
+        limit=JOB_CONCURRENCY)
     proposed = [entry for entry, _ in checked if entry]
     rejected = rejected + [reason for _, reason in checked if reason]
     return new_action("execute_tests", {"tests": proposed}, rejected)
+
+
+async def adjust_start(entity: ChatEntity, node: UUID, *, replace: dict[str, dict[str, str]] | None = None,
+                       set_params: dict[str, str] | None = None, unset: list[str] | None = None,
+                       only: set[str] | None = None, seed: Seed | None = None) -> tuple[ChatHistory, dict]:
+    """Recompute a pending start card with changed overrides or another seed. ``replace`` gives tests their
+    whole overrides by test id; ``set_params`` and ``unset`` change the overrides of the tests in ``only``,
+    or of every test. Nothing changes unless every test still passes."""
+    card = await locate_card(entity, node)
+    action = json.loads(card.action)
+    if action["kind"] != "execute_tests":
+        raise ChatActionError("Only a card that starts tests has parameters")
+    if card.action_state != "pending":
+        raise ChatActionError(f"This card is already {card.action_state}")
+    scope = await load_scope(entity)
+    tests = {str(test.id): test for test in scope.tests}
+    jenkins = JenkinsService()
+
+    async def recheck(entry: dict) -> tuple[dict | None, dict | None]:
+        test = tests.get(entry["test_id"])
+        if test is None:
+            return None, {"test": entry["test"], "reason": "The test is no longer in this chat's scope"}
+        overrides = dict(entry["overrides"])
+        if replace is not None and entry["test_id"] in replace:
+            overrides = dict(replace[entry["test_id"]])
+        elif only is None or entry["test_id"] in only:
+            overrides = {name: value for name, value in (overrides | (set_params or {})).items()
+                         if name not in set(unset or [])}
+        entry_seed = seed or Seed.of(entry.get("seed"), entry.get("build_number"))
+        return await _check_start(jenkins, scope, test, overrides, entry_seed)
+
+    checked = await gather_limited((recheck(entry) for entry in action["proposal"]["tests"]), limit=JOB_CONCURRENCY)
+    if failures := [reason for _, reason in checked if reason]:
+        raise ChatActionError("; ".join(f"{failure['test']}: {failure['reason']}" for failure in failures))
+    action["proposal"]["tests"] = [entry for entry, _ in checked]
+    result = await card.update(if_conditions={"action_state": "pending"}, action=_json(action),
+                               updated_at=datetime.now(UTC))
+    if not result.applied:
+        raise ChatActionError(f"This card is already {(result.existing or {}).get('action_state')}")
+    await ChatHistoryService(entity).touch()
+    return card, action
 
 
 def resolve_plan(plans: list[ArgusReleasePlan], reference: str) -> ArgusReleasePlan:
@@ -290,6 +371,12 @@ async def execute(entity: ChatEntity, card: ChatHistory, action: dict, user: Use
                 results = [{"issue": issue, "error": None}]
             case "zeus_investigation":
                 results = await _queue_investigations(action)
+            case "edit_plan":
+                plan = await ArgusReleasePlan.get(id=UUID(proposal["plan_id"]))
+                if plan_stamp(plan) != proposal["last_updated"]:
+                    raise ChatActionError("The plan changed since this was proposed; ask for the edit again")
+                await PlanningService().update_plan(plan_diff_payload(proposal["diff"]), user)
+                results = [{"plan": proposal["plan"], "error": None}]
             case "unlink_issue":
                 await IssueService().delete(issue_id=UUID(proposal["issue_id"]), run_id=UUID(proposal["run_id"]),
                                             user=user)
