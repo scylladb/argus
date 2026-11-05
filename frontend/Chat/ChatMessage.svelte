@@ -47,16 +47,41 @@
         }));
     });
     const openerUser = $derived(opener.user_id ? users[opener.user_id] : undefined);
+    const afterCompaction = $derived(
+        nodes.some((node) => node.node === opener.parent && node.role === "summary" && node.status === "streaming"),
+    );
+
+    const compactionProgress = (node: ChatNode) => {
+        const words = node.content.trim() ? node.content.trim().split(/\s+/).length : 0;
+        if (words) return `${words} word${words === 1 ? "" : "s"} written`;
+        return node.reasoning ? "thinking it over" : "waiting for the model";
+    };
 </script>
 
 <article class="turn d-flex flex-column gap-1">
     {#if opener.role === "summary"}
-        <details class="compaction small text-body-secondary">
+        {@const compacting = opener.status === "streaming"}
+        <details class="compaction small text-body-secondary" open={compacting}>
             <summary>
-                <Fa icon={faCompress} /> Context compacted by {displayName(opener.user_id, users)}
-                {ago(opener.created_at)}{#if opener.status === "streaming"}…{/if}
+                <Fa icon={faCompress} />
+                {#if compacting}
+                    <span class="badge text-bg-info d-inline-flex align-items-center gap-1"><span
+                        class="badge-spinner spinner-border" aria-hidden="true"></span>Compacting</span>
+                    {opener.auto ? "the context automatically before the next answer" : "the context"} ·
+                    {compactionProgress(opener)}
+                {:else if opener.status === "error" || opener.status === "stopped"}
+                    {opener.auto ? "The automatic compaction" : "The compaction"}
+                    {opener.status === "error" ? "failed" : "stopped"} {ago(opener.created_at)}; the answers use the
+                    whole conversation
+                {:else}
+                    Context compacted {opener.auto ? "automatically" : `by ${displayName(opener.user_id, users)}`}
+                    {ago(opener.created_at)}
+                {/if}
             </summary>
-            <div class="markdown-body mt-1 p-2 rounded bg-white">{@html renderMarkdown(opener.content)}</div>
+            {#if opener.content}
+                <div class="markdown-body mt-1 p-2 rounded bg-white">{@html renderMarkdown(opener.content)}</div>
+            {/if}
+            {#if opener.error}<div class="text-danger mt-1">{opener.error}</div>{/if}
         </details>
     {:else if opener.role === "user"}
         <div class="question d-flex gap-2 align-items-start">
@@ -129,7 +154,9 @@
                 {#if text}
                     <div class="markdown-body mt-1">{@html renderMarkdown(text)}</div>
                 {:else if streaming}
-                    <div class="text-body-secondary small mt-1">Waiting for the model…</div>
+                    <div class="text-body-secondary small mt-1">
+                        {afterCompaction ? "Waiting for the compaction to finish…" : "Waiting for the model…"}
+                    </div>
                 {/if}
             {:else}
                 <button type="button" class="preview btn btn-link text-start text-body p-0 mt-1 w-100"

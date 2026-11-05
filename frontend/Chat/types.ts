@@ -127,6 +127,8 @@ export interface ContextStats {
     last_prompt_tokens: number | null;
     estimated_tokens: number;
     messages_since_compaction: number;
+    warn_at?: number;
+    compact_at?: number;
 }
 
 export interface Busy {

@@ -67,6 +67,22 @@ describe("ChatModal", () => {
         expect(screen.queryByRole("button", { name: /earlier question/ })).toBeNull();
     });
 
+    it("warns as the context fills up", async () => {
+        const full = (used: number) => ({ ...conversation(), context: { window: 8000, used, last_prompt_tokens: used,
+            estimated_tokens: 0, messages_since_compaction: 2, warn_at: 6000, compact_at: 7200 } });
+        vi.mocked(fetchJson).mockImplementation(async (url: string) => url.endsWith("/memories") ? [] : full(6400));
+        render(ChatModal, { props: { entityType: "release", entityId: "r1", entityName: "scylla-2025.1",
+                                     onClose: vi.fn() } });
+
+        expect(await screen.findByText(/The context is 80% full. At 90%, the next question compacts it first./))
+            .toBeTruthy();
+        cleanup();
+        vi.mocked(fetchJson).mockImplementation(async (url: string) => url.endsWith("/memories") ? [] : full(7300));
+        render(ChatModal, { props: { entityType: "release", entityId: "r1", entityName: "scylla-2025.1",
+                                     onClose: vi.fn() } });
+        expect(await screen.findByText(/your next question compacts it first/)).toBeTruthy();
+    });
+
     it("shows no clear button to other users", async () => {
         vi.mocked(fetchJson).mockImplementation(async (url: string) => url.endsWith("/memories") ? [] : conversation());
         render(ChatModal, { props: { entityType: "release", entityId: "r1", entityName: "scylla-2025.1",
