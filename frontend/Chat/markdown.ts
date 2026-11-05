@@ -14,6 +14,24 @@ const singleTilde: TokenizerAndRendererExtension = {
 
 const chatMarked = new Marked({ gfm: true, breaks: true, async: false, extensions: [singleTilde] });
 
-/** Model output is untrusted: it can echo run data, comments and issue titles. */
-export const renderMarkdown = (text: string): string =>
-    DOMPurify.sanitize(chatMarked.parse(text ?? "") as string);
+const sameOrigin = (src: string): boolean => {
+    try {
+        return new URL(src, window.location.href).origin === window.location.origin;
+    } catch {
+        return false;
+    }
+};
+
+/** Model output is untrusted: it can echo run data, comments and issue titles. An image from another host
+ * would let such text send data out of Argus, so only Argus's own images stay; the others keep their alt text. */
+export const renderMarkdown = (text: string): string => {
+    const fragment = DOMPurify.sanitize(chatMarked.parse(text ?? "") as string, { RETURN_DOM_FRAGMENT: true });
+    for (const image of Array.from(fragment.querySelectorAll("img"))) {
+        if (!sameOrigin(image.getAttribute("src") ?? "")) {
+            image.replaceWith(document.createTextNode(image.getAttribute("alt") ?? ""));
+        }
+    }
+    const holder = document.createElement("div");
+    holder.appendChild(fragment);
+    return holder.innerHTML;
+};
