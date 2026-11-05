@@ -6,6 +6,7 @@
         faCircle,
         faCodeBranch,
         faComments,
+        faCompress,
         faTrash,
     } from "@fortawesome/free-solid-svg-icons";
     import { fetchJson } from "../Common/ApiUtils";
@@ -62,6 +63,12 @@
     });
     const shownTurns = $derived(turns.slice(olderCount));
     const forks = $derived(conversation ? branches(conversation.nodes, conversation.head) : []);
+    const context = $derived(conversation?.context);
+    const contextShare = $derived(context ? Math.round((context.used / Math.max(context.window, 1)) * 100) : 0);
+    const contextFull = $derived(Boolean(context?.compact_at && context.used >= context.compact_at));
+    const compacting = $derived(path.some((node) => node.role === "summary" && node.status === "streaming"));
+    const contextWarning = $derived(Boolean(context?.warn_at && context.used >= context.warn_at &&
+        context.messages_since_compaction > 0 && !compacting));
     const forking = $derived(conversation ? atForkPoint(conversation.nodes, conversation.head) : false);
     const turnEnds = $derived.by(() => {
         const ends = new Map<string, string>();
@@ -310,6 +317,15 @@
                         {/each}
                     {/if}
                 </div>
+                {#if contextWarning}
+                    <div class="context-note small d-flex align-items-center gap-2 px-2 pb-1"
+                         class:text-warning-emphasis={!contextFull} class:text-danger-emphasis={contextFull}>
+                        <Fa icon={faCompress} />
+                        {contextFull
+                            ? "The context is nearly full: your next question compacts it first."
+                            : `The context is ${contextShare}% full. At 90%, the next question compacts it first.`}
+                    </div>
+                {/if}
                 {#if forking}
                     <div class="fork-note small text-body-secondary d-flex align-items-center gap-2 px-2 pb-1">
                         <Fa icon={faCodeBranch} /> The next question starts a new branch after this answer.
