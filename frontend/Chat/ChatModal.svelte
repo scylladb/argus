@@ -2,7 +2,12 @@
     import { onDestroy, onMount, tick } from "svelte";
     import { SvelteSet } from "svelte/reactivity";
     import Fa from "svelte-fa";
-    import { faBookmark, faCircle, faClockRotateLeft, faComments, faGauge, faTrash } from "@fortawesome/free-solid-svg-icons";
+    import {
+        faCircle,
+        faCodeBranch,
+        faComments,
+        faTrash,
+    } from "@fortawesome/free-solid-svg-icons";
     import { fetchJson } from "../Common/ApiUtils";
     import type { User } from "../Common/UserTypes";
     import { getPicture } from "../Common/UserUtils";
@@ -11,12 +16,13 @@
     import ChatComposer from "./ChatComposer.svelte";
     import ChatContextStats from "./ChatContextStats.svelte";
     import ChatMemories from "./ChatMemories.svelte";
+    import ChatForks from "./ChatForks.svelte";
     import ChatMessage from "./ChatMessage.svelte";
     import { chatBase, postJson } from "./chatApi";
     import { connectChat } from "./chatEvents";
     import { displayName } from "./chatFormat";
     import { applyEvent } from "./chatState";
-    import { activePath, splitTurns } from "./chatTree";
+    import { activePath, atForkPoint, branches, splitTurns } from "./chatTree";
     import type { ChatNode, Conversation, EntityType, Memory, ServerEvent, Started } from "./types";
 
     interface Props {
@@ -36,7 +42,7 @@
     let presence = $state<string[]>([]);
     let live = $state(false);
     let loadError = $state("");
-    let side = $state<"memories" | "history" | "context">("memories");
+    let side = $state<"memories" | "history" | "context" | "forks">("memories");
     const RECENT_MS = 3 * 24 * 60 * 60 * 1000;
 
     let thread = $state<HTMLElement | undefined>();
@@ -55,6 +61,17 @@
         return firstRecent === -1 ? turns.length : firstRecent;
     });
     const shownTurns = $derived(turns.slice(olderCount));
+    const forks = $derived(conversation ? branches(conversation.nodes, conversation.head) : []);
+    const forking = $derived(conversation ? atForkPoint(conversation.nodes, conversation.head) : false);
+    const turnEnds = $derived.by(() => {
+        const ends = new Map<string, string>();
+        turns.forEach((turn, index) => {
+            const next = turns[index + 1];
+            const end = next ? path[path.findIndex((node) => node.node === next.opener.node) - 1] : null;
+            if (end && end.role !== "user") ends.set(turn.opener.node, end.node);
+        });
+        return ends;
+    });
     const busy = $derived(Boolean(conversation?.busy));
     const disabledReason = $derived(
         !conversation
@@ -287,16 +304,27 @@
                                 onDismiss={(node) => decideCard(node, "dismiss")}
                                 onRefresh={(node) => decideCard(node, "refresh")}
                                 onAdjust={adjustCard}
+                                forkNode={turnEnds.get(turn.opener.node) ?? null}
+                                onFork={(node) => replace("fork", { node })}
                             />
                         {/each}
                     {/if}
                 </div>
+                {#if forking}
+                    <div class="fork-note small text-body-secondary d-flex align-items-center gap-2 px-2 pb-1">
+                        <Fa icon={faCodeBranch} /> The next question starts a new branch after this answer.
+                        <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none" disabled={busy}
+                                onclick={() => conversation?.head && replace("head", { node: conversation.head })}>
+                            Back to the latest
+                        </button>
+                    </div>
+                {/if}
                 <ChatComposer
                     {entityType}
                     {disabledReason}
                     {busy}
                     canRetry={path.some((node) => node.role === "user")}
-                    canUndo={path.length > 0}
+                    canUndo={path.length > 0 && !forking}
                     onSend={(content, auto) => start("messages", { content, auto })}
                     onStop={stop}
                     onRetry={(auto) => start("regenerate", { auto })}
@@ -305,29 +333,37 @@
             </section>
 
             <aside class="side-column rounded bg-white shadow-sm d-flex flex-column">
-                <ul class="nav nav-underline px-3 pt-1 border-bottom" role="tablist">
+                <ul class="side-tabs nav nav-underline flex-nowrap px-2 pt-1 border-bottom" role="tablist">
                     <li class="nav-item">
                         <button type="button" class="nav-link" class:active={side === "memories"} role="tab"
                                 aria-selected={side === "memories"} onclick={() => (side = "memories")}>
-                            <Fa icon={faBookmark} /> Memories <span class="badge rounded-pill text-bg-light">{memories.length}</span>
+                            Memories <span class="badge rounded-pill text-bg-light">{memories.length}</span>
                         </button>
                     </li>
                     <li class="nav-item">
                         <button type="button" class="nav-link" class:active={side === "history"} role="tab"
                                 aria-selected={side === "history"} onclick={() => (side = "history")}>
-                            <Fa icon={faClockRotateLeft} /> History
+                            History
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button type="button" class="nav-link" class:active={side === "forks"} role="tab"
+                                aria-selected={side === "forks"} onclick={() => (side = "forks")}>
+                            Forks <span class="badge rounded-pill text-bg-light">{forks.length}</span>
                         </button>
                     </li>
                     <li class="nav-item">
                         <button type="button" class="nav-link" class:active={side === "context"} role="tab"
                                 aria-selected={side === "context"} onclick={() => (side = "context")}>
-                            <Fa icon={faGauge} /> Context
+                            Context
                         </button>
                     </li>
                 </ul>
                 <div class="side-scroll flex-grow-1 p-2 d-flex flex-column">
                     <div class="side-inset rounded bg-light-one shadow-sm p-2 d-flex flex-column gap-2 flex-grow-1">
-                        {#if side === "context"}
+                        {#if side === "forks"}
+                            <ChatForks branches={forks} {users} {busy} onSwitch={(leaf) => replace("head", { node: leaf })} />
+                        {:else if side === "context"}
                             {#if conversation}
                                 <ChatContextStats context={conversation.context} model={conversation.model} {busy}
                                                   empty={path.length === 0} onCompact={() => start("compact")} />
@@ -345,6 +381,13 @@
 </div>
 
 <style>
+    .side-tabs {
+        --bs-nav-underline-gap: 0.6rem;
+        --bs-nav-link-font-size: 0.875rem;
+    }
+    .side-tabs .nav-link {
+        white-space: nowrap;
+    }
     .chat-overlay {
         position: fixed;
         inset: 0;
