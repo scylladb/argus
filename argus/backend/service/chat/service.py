@@ -12,6 +12,7 @@ from argus.backend.service.chat.history import ChatHistoryError, ChatHistoryServ
 from argus.backend.service.chat.hub import ChatHub, default_hub
 from argus.backend.service.chat.identity import ChatIdentityService, identity_json
 from argus.backend.service.chat.memory import ChatMemoryService
+from argus.backend.service.chat.prompt import needs_compaction
 
 MAX_QUESTION_LENGTH = 8000
 
@@ -73,16 +74,26 @@ class ChatService:
         model = await self._model()
         history = ChatHistoryService(entity)
         question_node, answer_node = uuid1(), uuid1()
+        compaction: list[ChatHistory] = []
 
         async def build(state: ChatState, nodes: list[ChatHistory]):
+            parent = state.head
+            if needs_compaction(active_path(nodes, state.head), model.context_window):
+                summary = await history.append(role="summary", status="streaming", user_id=user.id, parent=parent,
+                                               model_name=model.model, auto=True)
+                compaction.append(summary)
+                parent = summary.node
             asked = await history.append(node=question_node, role="user", content=content, user_id=user.id,
-                                         parent=state.head)
+                                         parent=parent)
             answer = await history.append(node=answer_node, role="assistant", status="streaming",
                                           user_id=user.id, parent=asked.node, model_name=model.model, auto=auto)
             return asked, answer
 
         asked, answer = await self._start(entity, user, model, history, answer_node, build)
-        tasks.spawn(ChatAgent(entity, user, model, self.hub).answer(answer), name=f"chat-answer-{answer.node}")
+        for summary in compaction:
+            self.hub.publish(entity.id, {"type": "node", "node": node_json(summary)})
+        tasks.spawn(ChatAgent(entity, user, model, self.hub).answer(answer, compaction[0] if compaction else None),
+                    name=f"chat-answer-{answer.node}")
         return {"user_node": node_json(asked), "assistant_node": node_json(answer)}
 
     async def regenerate(self, entity: ChatEntity, user: User, auto: bool = False) -> dict:
