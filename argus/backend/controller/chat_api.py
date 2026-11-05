@@ -72,7 +72,7 @@ def ok(response) -> APIResponse:
 
 @router.get("/memories", name="api.chat_api.list_memories")
 async def list_memories(entity: ChatEntity = Depends(chat_entity), user: User = Depends(api_current_user)):
-    return ok(await ChatMemoryService().list(entity))
+    return ok(await ChatMemoryService().in_scope(entity))
 
 
 @router.post("/memories", name="api.chat_api.create_memory")

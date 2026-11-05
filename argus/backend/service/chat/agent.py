@@ -160,7 +160,7 @@ class ChatAgent:
     async def _context(self, path: list[ChatHistory],
                        setup: PromptSetup | None = None) -> tuple[str, list[ChatMessage], list[dict]]:
         setup = setup or await SkillService().prompt_setup()
-        memories = await ChatMemoryService().list(self.entity)
+        memories = await ChatMemoryService().in_scope(self.entity)
         users = await load_users(node_user_ids(path) | {memory["updated_by"] for memory in memories}, self.user)
         try:
             summary = compact_summary(await entity_summaries(self.entity))
