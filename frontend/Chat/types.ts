@@ -62,7 +62,7 @@ export interface ZeusRun {
 
 export interface ChatAction {
     kind: "execute_tests" | "link_issue" | "unlink_issue" | "zeus_investigation" | "show_run" | "zeus_report" |
-        "edit_plan" | "mcp_call";
+        "edit_plan" | "mcp_call" | "post_comment";
     state: ActionState;
     proposal: {
         tests?: ProposedTest[];
@@ -88,6 +88,7 @@ export interface ChatAction {
         server?: string;
         tool?: string;
         arguments?: Record<string, unknown>;
+        message?: string;
     };
     rejected: { test: string; reason: string }[];
     confirmed_by: string | null;
