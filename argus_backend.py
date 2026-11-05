@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -23,6 +24,8 @@ from argus.backend.error_handlers import (
 from argus.backend.metrics import build_instrumentator, build_metrics_router
 from argus.backend.plugins.sct.events.processor import get_event_processor, start_event_processor
 from argus.backend.rendering import register_app
+from argus.backend.service.chat import tasks as chat_tasks
+from argus.backend.service.chat.hub import close_streams_on_exit
 from argus.backend.service.user import UserServiceException, api_current_user
 from argus.backend.service.views import UserViewException
 from argus.backend.util.config import Config
@@ -36,7 +39,9 @@ SESSION_LIFETIME = 31 * 24 * 60 * 60  # Flask's permanent_session_lifetime defau
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.event_model_load = await start_event_processor()
+    close_streams_on_exit(asyncio.get_running_loop())
     yield
+    await chat_tasks.shutdown()
     await get_event_processor().drain()
 
 
