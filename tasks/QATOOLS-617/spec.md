@@ -23,14 +23,13 @@ runs until a user confirms the card. Findings show in the release summary.
 ## Constraints
 
 - **Four gunicorn workers share no memory.** The active branch, the
-  generation lock, and every message live in the database. A socket on one
-  worker learns about work on another worker through the database.
-- **nginx sits in front of the WebSocket.** The production vhost lives in
-  scylladb/qatools (`roles/argus`) and needs the `Upgrade` and `Connection`
-  headers on the chat socket path. This repository cannot change it, so the
-  chat falls back to polling when the socket does not connect.
-- **uvicorn needs a WebSocket library.** None is installed today, so
-  `websockets` joins the `web-backend` extra.
+  generation lock, and every message live in the database. An event stream
+  on one worker learns about work on another worker through the database.
+- **nginx sits in front of the event stream.** The production vhost lives in
+  scylladb/qatools (`roles/argus`) and is not changed by this task. The
+  stream turns proxy buffering off with the `X-Accel-Buffering: no` response
+  header, and the client falls back to polling when no event or heartbeat
+  arrives.
 - **Small local models are first-class.** The test endpoint serves 4B–31B
   GGUF models with a 32k–64k context. Prompts and tool results stay compact,
   and a model without tool calling still answers from the prompt.
@@ -54,10 +53,10 @@ runs until a user confirms the card. Findings show in the release summary.
 | Memory service | Memories and their revisions: create, edit, delete, revert, scope. |
 | Agent | Builds the prompt, runs the model and the tool loop as a background task, publishes events, and flushes progress to the database. |
 | Background tasks | A per-worker registry of running generations, compactions and confirmed actions. A task outlives the request that started it, and a worker shutdown marks its node `stopped`. |
-| Hub | A per-worker fan-out from published events to the worker's open sockets. For each entity with a local socket, a watcher polls the entity's state rows and pushes what another worker wrote. It also keeps the presence list. |
+| Hub | A per-worker fan-out from published events to the worker's open event streams. For each entity with a local stream, a watcher polls the entity's state rows and pushes what another worker wrote. It also keeps the presence list. |
 | Tools | Argus reads, memory writes, and action proposals, each limited to the entity's tests. |
 | Actions | Validate a proposal against Jenkins job parameters, and run it once on confirmation. |
-| Chat routes | REST commands that queue work and return at once, the conversation read, memories, and the WebSocket, under `/api/v1/chat/{entity_type}/{entity_id}`. |
+| Chat routes | REST commands that queue work and return at once, the conversation read, memories, and the event stream, under `/api/v1/chat/{entity_type}/{entity_id}`. |
 | Admin routes | Connections, the probe, the tool-calling test, and the default model. |
 | Frontend | The anchor bar, the chat modal, the action card, the memories panel, the context meter, and the admin manager with its model picker. |
 
@@ -83,22 +82,22 @@ sequenceDiagram
         A->>M: chat.completions (stream, tools)
         M-->>A: deltas, tool calls, usage
         A->>B: delta, tool, action events
-        B-->>U: socket: every token
+        B-->>U: stream: every token
         A->>H: flush nodes and touch state (every 0.5 s)
     end
     A->>H: finish node, release lock
     W->>H: poll state rows (every 0.5 s)
     H-->>W: changed nodes
-    W-->>V: socket: node and state events
+    W-->>V: stream: node and state events
 ```
 
-Sockets on the asker's worker get every token. Sockets on other workers get
+Streams on the asker's worker get every token. Streams on other workers get
 the flushed node about every half second. A client that disconnects does
 not stop the task. A stop request sets a flag on the node, and the task
 reads the flag at each flush.
 
 A confirmed action and a compaction run the same way: the route answers at
-once, the background task publishes its progress, and every socket sees it.
+once, the background task publishes its progress, and every stream sees it.
 
 ### The message tree
 
@@ -199,8 +198,8 @@ links the run.
 | Condition | Behavior |
 |---|---|
 | No connection or no default model | Chat routes answer `chat not configured`, and the anchor bar says so |
-| Another generation is running | The command is refused with the asker's name. The socket already shows the running answer |
-| The socket does not connect, or drops | The client retries with backoff, and polls `GET` every 3 s meanwhile |
+| Another generation is running | The command is refused with the asker's name. The stream already shows the running answer |
+| The stream does not connect, drops, or is buffered (no event or heartbeat for 40 s) | `EventSource` reconnects on its own; until an event arrives, the client polls `GET` every 3 s |
 | A lock older than 5 minutes (worker died) | The next send takes it over and marks the abandoned node `error` |
 | The endpoint fails or times out | The assistant node gets `status=error` with the message, the lock is released, and Try again works |
 | The model calls an unknown tool or sends bad arguments | The tool node carries the error and the loop continues, so the model can correct itself |
@@ -339,10 +338,10 @@ All tables are additive and are created by `sync-models`.
 #### Chat API
 
 All routes require a logged-in user and return the `APIResponse` envelope,
-except the WebSocket. The prefix is
+except the event stream. The prefix is
 `/api/v1/chat/{entity_type}/{entity_id}`, where `entity_type` is `release`
 or `view`. A command that starts work answers once the work is queued; the
-socket carries its progress.
+event stream carries its progress.
 
 ```
 GET    ""                         -> Conversation
@@ -353,9 +352,9 @@ POST   /compact                   -> Started
 POST   /undo                      -> Conversation
 POST   /head {node}               -> Conversation
 POST   /stop                      -> {stopping: node}
-POST   /actions/{node}/confirm    -> Node      # state "running"; results follow on the socket
+POST   /actions/{node}/confirm    -> Node      # state "running"; results follow on the stream
 POST   /actions/{node}/dismiss    -> Node
-WS     /ws                        -> Event stream, see below
+GET    /events                    -> text/event-stream, see below
 GET    /memories                  -> [Memory]           # own, plus releases' for a view
 POST   /memories {content, kind, scope?}         -> Memory
 PUT    /memories/{memory_id} {content?, kind?}   -> Memory
@@ -412,8 +411,11 @@ interface Revision {
 }
 ```
 
-The WebSocket authenticates with the session cookie, like the pages. Each
-frame is one JSON object with a `type`:
+The event stream is a `GET` that `EventSource` opens with the session
+cookie, like the pages. It answers `text/event-stream` with the headers
+`Cache-Control: no-cache` and `X-Accel-Buffering: no`. Each event is one
+`data:` line holding a JSON object with a `type`. A comment line
+(`: heartbeat`) every 15 s keeps proxies from closing an idle stream.
 
 ```ts
 type ServerEvent =
@@ -425,12 +427,12 @@ type ServerEvent =
   | { type: "memory"; memories: Memory[] }               // the whole list in scope, after a change
   | { type: "presence"; users: string[] }                // user ids with the chat open
   | { type: "error"; message: string };
-type ClientEvent = { type: "ping" } | { type: "resync" };
 ```
 
 A `delta` appends to the node's text. A `node` event replaces the node,
-so a socket that only sees flushed nodes still converges. A client that
-misses frames sends `resync` and gets a fresh `snapshot`.
+so a stream that only sees flushed nodes still converges. Every connect,
+including an automatic reconnect, starts with a fresh `snapshot`, so a
+client that missed events converges without `Last-Event-ID`.
 
 #### Admin API
 
@@ -534,8 +536,8 @@ class ChatService:
 
 # service/chat/hub.py — one per worker
 class ChatHub:
-    async def subscribe(self, entity: ChatEntity, socket: WebSocket, user: User) -> None: ...  # until it closes
-    def publish(self, entity_id: UUID, event: dict) -> None: ...   # local sockets only
+    def subscribe(self, entity: ChatEntity, user: User) -> AsyncIterator[dict]: ...  # events until the client leaves
+    def publish(self, entity_id: UUID, event: dict) -> None: ...   # local streams only
 async def touch(entity_id: UUID, *, memory: bool = False) -> None: ...  # other workers' watchers see it
 
 # service/chat/tasks.py — one per worker
@@ -557,8 +559,8 @@ class ChatEntity:
 | A conversation partition grows without bound. Compaction hides old messages from the prompt, not from the read | Reads take the whole partition. A thousand nodes stay within a few hundred kilobytes. Paging is deferred work |
 | A small model invents parameters or test names | Every proposal is resolved and validated on the server, and nothing starts without a user's confirmation |
 | A prompt injection through run data, such as a comment or an issue title, steers the model | Tools that change Argus only propose. The card shows exactly what runs. Memory writes can be reverted and carry `source=chat` |
-| Production nginx does not upgrade the socket until the qatools vhost changes | The client falls back to polling. The pull request names the vhost change. The live check covers the dev server, which runs without nginx |
-| Watchers poll the database: one state-row read every 0.5 s per entity with an open socket, per worker | It stops when the last local socket of the entity closes. Ten open chats on four workers are 80 single-row reads a second |
+| nginx buffers the stream despite the header | The heartbeat never arrives, so the client polls. The live check covers the dev server, which runs without nginx, and a production check follows the deploy |
+| Watchers poll the database: one state-row read every 0.5 s per entity with an open stream, per worker | It stops when the last local stream of the entity closes. Ten open chats on four workers are 80 single-row reads a second |
 | An endpoint is slow, around 30 seconds before the first token on a cold local model | No request timeout below 5 minutes on the stream. The lock covers 5 minutes. The UI shows "waiting for the model" |
 | A rotated `SECRET_KEY` makes stored tokens unreadable | Shown in the Admin Panel. The token is entered again |
 
@@ -617,11 +619,13 @@ room for each:
   that sets only static columns cannot name the clustering key, which the
   mapper's conditional update requires. (spec)
 - Commands go over REST and return once the work is queued. The work runs
-  in background tasks, and every viewer follows it over a WebSocket, with
-  presence. Errors keep the REST envelope, and the socket carries only
-  events. (build)
+  in background tasks, and every viewer follows it over a server-sent event
+  stream, with presence. The live channel only flows from the server, so
+  SSE carries it: it needs no change to the production nginx vhost and no
+  new library, and `EventSource` reconnects on its own. Errors keep
+  the REST envelope. (build)
 - Workers share events through the database: a per-entity state row that
-  each write touches, polled by the workers that hold a socket of that
+  each write touches, polled by the workers that hold a stream of that
   entity. No message broker is added to the stack. (build)
 - The model's reasoning is stored and shown collapsed, and never sent back
   to the model. (spec)
