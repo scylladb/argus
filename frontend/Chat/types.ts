@@ -9,6 +9,14 @@ export interface ToolCallInfo {
     arguments: string;
 }
 
+export interface JobField {
+    name: string;
+    value: string | null;
+    group: string;
+    choices?: string[];
+    description?: string;
+}
+
 export interface ProposedTest {
     test_id: string;
     test: string;
@@ -17,6 +25,9 @@ export interface ProposedTest {
     build_system_id: string;
     params: Record<string, string>;
     overrides: Record<string, string>;
+    seed?: "last_build" | "defaults" | "build";
+    build_number?: number | null;
+    fields?: JobField[];
 }
 
 export interface ActionResult {
@@ -32,6 +43,10 @@ export interface ActionResult {
     started_at?: string | null;
     completed_at?: string | null;
     refresh_error?: string | null;
+    plan?: string;
+    server?: string;
+    tool?: string;
+    text?: string;
     error: string | null;
 }
 
@@ -46,7 +61,8 @@ export interface ZeusRun {
 }
 
 export interface ChatAction {
-    kind: "execute_tests" | "link_issue" | "unlink_issue" | "zeus_investigation" | "show_run" | "zeus_report";
+    kind: "execute_tests" | "link_issue" | "unlink_issue" | "zeus_investigation" | "show_run" | "zeus_report" |
+        "edit_plan" | "mcp_call";
     state: ActionState;
     proposal: {
         tests?: ProposedTest[];
@@ -66,6 +82,12 @@ export interface ChatAction {
         report?: string;
         posted_at?: string;
         author?: { id: string; username?: string; name?: string; unknown?: boolean } | null;
+        plan?: string;
+        key?: string;
+        summary?: string[];
+        server?: string;
+        tool?: string;
+        arguments?: Record<string, unknown>;
     };
     rejected: { test: string; reason: string }[];
     confirmed_by: string | null;
@@ -73,6 +95,7 @@ export interface ChatAction {
     dismissed_by: string | null;
     results: ActionResult[];
     refreshed_at?: string | null;
+    auto?: boolean;
 }
 
 export interface ChatNode {
@@ -92,6 +115,7 @@ export interface ChatNode {
     status: NodeStatus;
     error: string | null;
     hidden: boolean;
+    auto?: boolean;
     created_at: string;
     updated_at: string;
 }
