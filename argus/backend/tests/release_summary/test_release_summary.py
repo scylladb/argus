@@ -247,3 +247,26 @@ async def test_an_invalid_regex_filters_nothing(release_manager_service, client_
     summary = await ReleaseSummaryService().get(seeded.release.id)
 
     assert [entry["family"] for entry in summary["families"]] == ["2029.6.0"]
+
+
+async def test_each_issue_carries_the_issue_and_its_links_in_scope(release_manager_service, client_service,
+                                                                   logged_in_user):
+    seeded = await seed_release(release_manager_service, test_count=1)
+    test = seeded.tests[0]
+    issues = mocked_issue_service()
+    key = new_jira_key()
+    rc1 = await submit_run(client_service, test, "2030.14.0~rc1", "failed")
+    rc2 = await submit_run(client_service, test, "2030.14.0~rc2", "failed")
+    await link_jira(issues, key, test, rc1, logged_in_user)
+    await link_jira(issues, key, test, rc2, logged_in_user)
+
+    rows = by_version(await ReleaseSummaryService().get(seeded.release.id), "2030.14.0")
+
+    [rc1_issue] = rows["2030.14.0~rc1"]["issues"]
+    [family_issue] = rows[None]["issues"]
+    assert rc1_issue["issue"]["subtype"] == "jira"
+    assert rc1_issue["issue"]["key"] == key
+    assert rc1_issue["issue"]["permalink"].endswith(f"/browse/{key}")
+    assert [link["run_id"] for link in rc1_issue["issue"]["links"]] == [str(rc1)]
+    assert sorted(link["run_id"] for link in family_issue["issue"]["links"]) == sorted([str(rc1), str(rc2)])
+    assert family_issue["issue"]["links"][0]["user_id"] == str(logged_in_user.id)
