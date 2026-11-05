@@ -94,8 +94,11 @@ def scope_text(entity: ChatEntity) -> str:
 
 
 def build_system_prompt(entity: ChatEntity, memories: list[dict], summary_text: str, users: Mapping[UUID, User],
-                        now: datetime, tools: bool, assistant_name: str | None = None) -> str:
-    return TEMPLATE.format_map({
+                        now: datetime, tools: bool, assistant_name: str | None = None, template: str = TEMPLATE,
+                        skills: str = "") -> str:
+    if skills and "{skills}" not in template:
+        template = f"{template.rstrip()}\n\n{{skills}}"
+    return template.format_map({
         "identity": f"{assistant_name}, the assistant of Argus" if assistant_name else "the assistant of Argus",
         "entity_kind": entity.type,
         "entity_name": entity.name,
@@ -104,6 +107,7 @@ def build_system_prompt(entity: ChatEntity, memories: list[dict], summary_text: 
         "scope": scope_text(entity),
         "memories": memory_lines(memories, users),
         "summary": summary_text,
+        "skills": skills,
     })
 
 

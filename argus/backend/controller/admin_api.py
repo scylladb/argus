@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.chat.config import ChatConfigService, DefaultModel
 from argus.backend.service.chat.identity import PICTURE_LIMIT, ChatIdentityService, identity_json
+from argus.backend.service.chat.skills import SkillService, template_json
 from argus.backend.service.release_manager import ReleaseManagerService
 from argus.backend.service.tunnel_service import TunnelService
 from argus.backend.service.user import UserService, require_roles
@@ -482,6 +483,17 @@ class ChatActiveIdentityRequest(BaseModel):
     connection: str | None = None
 
 
+class ChatTemplateRequest(BaseModel):
+    template: str = Field(min_length=1)
+
+
+class ChatSkillRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    description: str = ""
+    content: str = Field(min_length=1)
+    mode: str = "always"
+
+
 class ChatDefaultRequest(BaseModel):
     connection: str = Field(min_length=1)
     model: str = Field(min_length=1)
@@ -554,3 +566,37 @@ async def chat_delete_identity(name: str, user: User = Depends(admin_user)):
 async def chat_set_active_identity(payload: ChatActiveIdentityRequest, user: User = Depends(admin_user)):
     identity = await ChatIdentityService().set_active(payload.connection)
     return APIResponse({"status": "ok", "response": identity_json(identity)})
+
+
+@router.get("/chat/prompt", name="admin.admin_api.chat_prompt")
+async def chat_prompt(user: User = Depends(admin_user)):
+    return APIResponse({"status": "ok", "response": template_json(await SkillService().prompt_setup())})
+
+
+@router.put("/chat/prompt", name="admin.admin_api.chat_save_prompt")
+async def chat_save_prompt(payload: ChatTemplateRequest, user: User = Depends(admin_user)):
+    return APIResponse({"status": "ok", "response": template_json(await SkillService().save_template(
+        payload.template, user))})
+
+
+@router.delete("/chat/prompt", name="admin.admin_api.chat_reset_prompt")
+async def chat_reset_prompt(user: User = Depends(admin_user)):
+    return APIResponse({"status": "ok", "response": template_json(await SkillService().reset_template(user))})
+
+
+@router.get("/chat/skills", name="admin.admin_api.chat_skills")
+async def chat_skills(user: User = Depends(admin_user)):
+    setup = await SkillService().prompt_setup()
+    return APIResponse({"status": "ok", "response": [asdict(skill) for skill in setup.skills]})
+
+
+@router.post("/chat/skill", name="admin.admin_api.chat_save_skill")
+async def chat_save_skill(payload: ChatSkillRequest, user: User = Depends(admin_user)):
+    skill = await SkillService().save_skill(payload.name, payload.description, payload.content, payload.mode, user)
+    return APIResponse({"status": "ok", "response": asdict(skill)})
+
+
+@router.delete("/chat/skill/{name}", name="admin.admin_api.chat_delete_skill")
+async def chat_delete_skill(name: str, user: User = Depends(admin_user)):
+    await SkillService().delete_skill(name)
+    return APIResponse({"status": "ok", "response": {"deleted": name}})

@@ -438,7 +438,7 @@ stays in every plan built from a spec.
 - Modify: `prompt.py` (`build_system_prompt` takes the template and the skills), `agent.py`, `tools.py` (`load_skill`), `prompts/system.md` (`{skills}`), `controller/admin_api.py`.
 - Test: `argus/backend/tests/chat/test_skills.py`
 
-- [ ] Write the failing tests:
+- [x] Write the tests:
   - An `always` skill joins the prompt.
   - An `on_demand` skill is listed, and `load_skill` returns it.
   - `load_skill` is offered only when such a skill exists.
@@ -446,10 +446,9 @@ stays in every plan built from a spec.
   - A template without `{skills}` gets them appended.
   - Reset restores the default.
   - The routes are admin-only.
-- [ ] Run them and confirm the failures.
-- [ ] Write the code.
-- [ ] Run the verify sequence.
-- [ ] Commit `feature(chat-mode): add skills and system prompt editing`.
+- [x] Write the code.
+- [x] Run the verify sequence.
+- [x] Commit `feature(chat-mode): add skills and system prompt editing`.
 
 ## Task 17 — MCP servers
 

@@ -46,6 +46,22 @@ class ChatIdentity(Document):
         name = "chat_identity_v1"
 
 
+class ChatSkill(Document):
+    scope: Annotated[str, PrimaryKey()] = GLOBAL_SCOPE
+    name: Annotated[str, ClusteringKey()]
+    description: Optional[str] = None
+    content: Optional[str] = None
+    mode: Optional[str] = None
+    updated_by: Optional[UUID] = None
+    updated_at: Optional[datetime] = None
+    system_template: Annotated[Optional[str], Static()] = None
+    template_updated_by: Annotated[Optional[UUID], Static()] = None
+    template_updated_at: Annotated[Optional[datetime], Static()] = None
+
+    class Settings:
+        name = "chat_skill_v1"
+
+
 class ChatState(Document):
     entity_id: Annotated[UUID, PrimaryKey()]
     entity_type: Optional[str] = None
@@ -135,4 +151,4 @@ class ChatMemoryRevision(Document):
         name = "chat_memory_revision_v1"
 
 
-CHAT_MODELS = [ChatConfiguration, ChatIdentity, ChatState, ChatPresence, ChatHistory, ChatMemory, ChatMemoryRevision]
+CHAT_MODELS = [ChatConfiguration, ChatIdentity, ChatSkill, ChatState, ChatPresence, ChatHistory, ChatMemory, ChatMemoryRevision]
