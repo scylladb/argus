@@ -229,6 +229,9 @@ class IssueEntry(TypedDict):
     status: Literal["open", "fixed"]   # always "open" on a version row
     test_ids: list[str]
     run_ids: list[str]
+    issue: dict                # the issue as the issues API returns it with
+                               # aggregate_by_issue: its fields, "subtype" and
+                               # the "links" inside this summary's scope
 
 class Summary(TypedDict):
     version: str | None        # None on the rollup
@@ -275,8 +278,25 @@ async def mark_release_summary_stale(release_id: UUID | None) -> None: ...
 ```
 
 Frontend: the view widget type `releaseSummary` in `WIDGET_TYPES`, with no
-settings. The same component takes `{dashboardObject, dashboardObjectType}`,
-where the type is `"view"` or `"release"`.
+settings. The same component takes `{dashboardObject, dashboardObjectType,
+collapsible, onTestClick}`, where the type is `"view"` or `"release"`.
+
+- **Each family** has two tabs:
+  - **Timeline:** one row per version with a status bar and its counts.
+    Each count filters the test list below.
+  - **Grid:** tests by version, one status cell per run.
+
+  An issue list beside them groups issues by tracker state: open in the
+  tracker, then closed in the tracker.
+  - Each issue is a compact row: the tracker state pill, the key and the
+    title, then badges for whether it is on a latest run (or when it was
+    last seen), new or existing, and the versions it reproduced on.
+  - Issues on a latest run sort first.
+  - A row expands into the shared `IssueCard` in aggregated mode.
+- **The release dashboard** mounts the component as a collapsed accordion. A
+  test click adds the test to the existing test popout. A pill with the test
+  name flies in an arc from the cursor towards the popout, because the
+  popout sits below the summary and usually off screen.
 
 ## Risks
 
@@ -289,6 +309,10 @@ where the type is `"view"` or `"release"`.
 | Clock skew between hosts reorders `invalidated_at` and `generated_at` | The workers of one deployment share a host. A skew only delays freshness by one change |
 
 ## Deferred work
+
+- Store the close date of each tracker issue (Jira `resolutiondate`, GitHub
+  `closed_at`) during `refresh-issues`. The summary can then flag an issue
+  that was linked to a run started after it was closed.
 
 - The release chat and memory (QATOOLS-617 to QATOOLS-621) reads
   `ReleaseSummaryService.get`. Notes and corrections from the chat go to
@@ -319,6 +343,24 @@ where the type is `"view"` or `"release"`.
 - `aborted` is its own count, part of `executed` and not of `failed`. (spec)
 - A test that ran on several versions counts once in the rollup, by its
   latest result. (spec)
+- A family shows both a version timeline and a test-by-version grid, as
+  tabs. The timeline answers how far each candidate got; the grid answers
+  which tests changed between candidates. (build)
+- The release dashboard shows the summary as a collapsed accordion, so the
+  test dashboard keeps its place on load. (build)
+- A count filters the test list, issues show their tracker state, versions
+  and tests, the summary says when it was refreshed, and a test click on the
+  release dashboard fills the test popout. (build)
+- Issues group by tracker state, and whether the issue is on a test's latest
+  run is a badge on each row. Grouping by reproduction put tracker-closed
+  issues under an "open" heading. (build)
+- The summary does not flag a closed issue on a latest run as a regression.
+  The issue may have been closed after that run, and Argus stores no close
+  date to tell the two apart. (build)
+- A row expands into the shared `IssueCard`, so the summary entry carries
+  the issue in the issues API's aggregated shape. (build)
+- The status filter is a set of independent toggles, as in the SCT events
+  tab. A count or a bar segment shows only its status. (build)
 - The release route is `/release/{release_id}/version_summary`. A
   `/release/{release_id}/summary` route answers `/release/stats/summary`
   first and breaks it. (build)

@@ -75,6 +75,7 @@ class IssueEntry(TypedDict):
     status: Literal["open", "fixed"]
     test_ids: list[str]
     run_ids: list[str]
+    issue: dict
 
 
 class Summary(TypedDict):
@@ -220,9 +221,11 @@ class SummaryBuilder:
 
     def _issue_entries(self, runs: list[SummaryRun], is_new, results: dict[UUID, SummaryRun] | None) -> list[IssueEntry]:
         runs_by_issue: dict[UUID, list[SummaryRun]] = defaultdict(list)
+        links_by_issue: dict[UUID, list[IssueLink]] = defaultdict(list)
         for run in runs:
             for link in self.links_by_run.get(run.id, []):
                 runs_by_issue[link.issue_id].append(run)
+                links_by_issue[link.issue_id].append(link)
         entries = []
         for issue_id, issue_runs in runs_by_issue.items():
             entry = self._describe_issue(issue_id)
@@ -234,6 +237,7 @@ class SummaryBuilder:
                 status=status,
                 test_ids=sorted({str(run.test_id) for run in issue_runs}),
                 run_ids=sorted({str(run.id) for run in issue_runs}),
+                issue=self._issue_card(issue_id, links_by_issue[issue_id]),
             ))
         return sorted(entries, key=lambda entry: entry["key"])
 
@@ -250,6 +254,14 @@ class SummaryBuilder:
             if result.status not in FINAL or result.version.sort_key() <= max(linked_versions):
                 return "open"
         return "fixed"
+
+    def _issue_card(self, issue_id: UUID, links: list[IssueLink]) -> dict:
+        dumped_links = [link.model_dump(mode="json") for link in links]
+        if issue := self.data.jira.get(issue_id):
+            return {**issue.model_dump(mode="json"), "subtype": "jira", "links": dumped_links}
+        if issue := self.data.github.get(issue_id):
+            return {**issue.model_dump(mode="json"), "subtype": "github", "links": dumped_links}
+        return {"id": str(issue_id), "subtype": "unknown", "links": dumped_links}
 
     def _describe_issue(self, issue_id: UUID) -> dict:
         if issue := self.data.jira.get(issue_id):
