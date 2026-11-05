@@ -1,6 +1,6 @@
 <script lang="ts">
     import Fa from "svelte-fa";
-    import { faArrowUpRightFromSquare } from "@fortawesome/free-solid-svg-icons";
+    import { faArrowUpRightFromSquare, faBug, faComment } from "@fortawesome/free-solid-svg-icons";
     import { byGroupAndName, matchesFilter, statusBadge, type StatusFilter } from "./summaryUtils";
     import type { SummaryTest } from "./types";
 
@@ -33,6 +33,10 @@
                     <th scope="col">Test</th>
                     <th scope="col">Status</th>
                     {#if showVersion}<th scope="col">Version</th>{/if}
+                    <th scope="col" class="text-end" title="Issues linked to the run"><Fa icon={faBug} />
+                        <span class="visually-hidden">Issues</span></th>
+                    <th scope="col" class="text-end" title="Comments on the run"><Fa icon={faComment} />
+                        <span class="visually-hidden">Comments</span></th>
                     <th scope="col"><span class="visually-hidden">Run</span></th>
                 </tr>
             </thead>
@@ -58,6 +62,10 @@
                             </span>
                         </td>
                         {#if showVersion}<td class="small text-body-secondary">{test.version ?? ""}</td>{/if}
+                        <td class="text-end small" class:text-body-secondary={!test.issues}
+                            aria-label="{test.issues ?? 0} issues">{test.run_id ? (test.issues ?? "") : ""}</td>
+                        <td class="text-end small" class:text-body-secondary={!test.comments}
+                            aria-label="{test.comments ?? 0} comments">{test.run_id ? (test.comments ?? "") : ""}</td>
                         <td class="text-end text-nowrap">
                             {#if test.build_id && test.build_number !== null}
                                 <a

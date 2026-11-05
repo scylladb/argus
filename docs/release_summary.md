@@ -88,6 +88,11 @@ Each family has two tabs:
 - **Grid**: one row per test and one column per version, each cell linked to
   its run.
 
+Each row of the test list also counts the issues linked to the test's run and
+the comments on that run, so a failed test nobody has looked at stands out.
+The counts follow the summary's refresh: linking an issue or posting a
+comment marks the summary for a refresh.
+
 The status toggles filter both tabs, each on its own; a count or a bar segment
 shows only its status. On the release dashboard, a click on a
 test name adds the test to the selected tests beside the test dashboard, as a
