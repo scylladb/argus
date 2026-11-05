@@ -96,7 +96,7 @@ class JenkinsService:
         return [{"_class": param.get("_class", ""),
                  "name": param["name"],
                  "value": "" if param["name"] in self.OPTIONAL_CHOICE_PARAMETERS
-                 else param.get("defaultParameterValue", {}).get("value", "")}
+                 else (param.get("defaultParameterValue") or {}).get("value", "")}
                 for param in default_params if param["name"] != self.RESERVED_PARAMETER_NAME]
 
     async def retrieve_job_parameters(self, build_id: str, build_number: int | None,
