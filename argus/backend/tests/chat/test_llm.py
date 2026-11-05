@@ -177,3 +177,37 @@ async def test_list_models_keeps_the_extra_fields():
 
     assert [(model.id, model.context_window, model.tools) for model in models] == [("a", None, None),
                                                                                     ("b", 4096, True)]
+
+
+async def test_the_anthropic_api_gets_its_own_headers_on_the_model_list():
+    seen = {}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen["path"], seen["query"] = request.url.path, dict(request.url.params)
+        seen["version"], seen["key"] = request.headers.get("anthropic-version"), request.headers.get("x-api-key")
+        return httpx2.Response(200, json={"data": [
+            {"type": "model", "id": "claude-sonnet-5-5", "display_name": "Claude Sonnet 5.5",
+             "created_at": "2026-09-01T00:00:00Z"}], "has_more": False, "first_id": "claude-sonnet-5-5",
+            "last_id": "claude-sonnet-5-5"})
+
+    client = OpenAIChatClient("https://api.anthropic.com/v1", "sk-ant-test",
+                              http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(handler)))
+
+    models = await client.list_models()
+
+    assert (seen["path"], seen["query"]) == ("/v1/models", {"limit": "1000"})
+    assert (seen["version"], seen["key"]) == ("2023-06-01", "sk-ant-test")
+    assert [(model.id, model.name) for model in models] == [("claude-sonnet-5-5", "Claude Sonnet 5.5")]
+
+
+async def test_other_endpoints_get_no_anthropic_headers():
+    seen = {}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen["headers"], seen["query"] = dict(request.headers), dict(request.url.params)
+        return httpx2.Response(200, json={"object": "list", "data": []})
+
+    await client_for(handler).list_models()
+
+    assert "anthropic-version" not in seen["headers"] and "x-api-key" not in seen["headers"]
+    assert seen["query"] == {}

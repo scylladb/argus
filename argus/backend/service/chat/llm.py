@@ -2,12 +2,15 @@ import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
+from urllib.parse import urlparse
 
 import httpx2
 import openai
 from openai import AsyncOpenAI
 
 MODEL_TIMEOUT_SECONDS = 300
+ANTHROPIC_VERSION = "2023-06-01"
+ANTHROPIC_MODEL_PAGE = 1000
 CHAT_ENDPOINT_TYPE = "chat-completions"
 
 
@@ -106,7 +109,7 @@ def normalize_model(entry: dict) -> ProbedModel:
         vision = capabilities.get("vision")
     return ProbedModel(
         id=entry["id"],
-        name=entry.get("name") or info.get("name") or entry["id"],
+        name=entry.get("name") or entry.get("display_name") or info.get("name") or entry["id"],
         context_window=_positive_int(entry.get("context_length"), entry.get("max_model_len"),
                                      meta.get("context_length"), info.get("contextLength")),
         tools=tools if isinstance(tools, bool) else None,
@@ -178,10 +181,17 @@ def _wire_tool(tool: ToolSpec) -> dict:
             "function": {"name": tool.name, "description": tool.description, "parameters": tool.parameters}}
 
 
+def is_anthropic(endpoint: str) -> bool:
+    host = urlparse(endpoint).hostname or ""
+    return host == "anthropic.com" or host.endswith(".anthropic.com")
+
+
 class OpenAIChatClient:
     def __init__(self, endpoint: str, token: str, http_client: httpx2.AsyncClient | None = None) -> None:
+        self._anthropic = is_anthropic(endpoint)
+        headers = {"anthropic-version": ANTHROPIC_VERSION, "x-api-key": token} if self._anthropic and token else None
         self._client = AsyncOpenAI(base_url=endpoint, api_key=token or "none", timeout=MODEL_TIMEOUT_SECONDS,
-                                   max_retries=1, http_client=http_client)
+                                   max_retries=1, http_client=http_client, default_headers=headers)
 
     async def stream(self, model: str, messages: list[ChatMessage],
                      tools: list[ToolSpec] | None) -> AsyncIterator[StreamEvent]:
@@ -221,7 +231,8 @@ class OpenAIChatClient:
 
     async def list_models(self) -> list[ProbedModel]:
         try:
-            page = await self._client.models.list()
+            query = {"limit": ANTHROPIC_MODEL_PAGE} if self._anthropic else None
+            page = await self._client.models.list(extra_query=query)
         except openai.APIError as exception:
             raise ChatModelError(f"The model endpoint failed: {exception}") from exception
         return chat_models([model.model_dump() for model in page.data])
