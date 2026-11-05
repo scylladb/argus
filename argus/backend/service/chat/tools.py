@@ -801,9 +801,9 @@ class DiscussionArgs(BaseModel):
     limit: int = Field(20, ge=1, le=50, description="The latest comments to read")
 
 
-@tool("read_discussion", "The discussion of a run: its comments with their authors, oldest first. Comments by "
-                         "Zeus are marked.", DiscussionArgs)
-async def read_discussion(ctx: ToolContext, args: DiscussionArgs) -> dict:
+@tool("get_comments", "The comments of a run with their authors, oldest first. Comments by Zeus are marked.",
+      DiscussionArgs)
+async def get_comments(ctx: ToolContext, args: DiscussionArgs) -> dict:
     run = await resolve_run_reference(ctx.entity, await load_scope(ctx.entity), args.run)
     comments = (await TestRunService().get_run_comments(run.id))[-args.limit:]
     people = await load_people(comment.user_id for comment in comments)
@@ -811,6 +811,27 @@ async def read_discussion(ctx: ToolContext, args: DiscussionArgs) -> dict:
         {"author": person(comment.user_id, people), "zeus": is_zeus(people.get(comment.user_id)),
          "posted_at": posted(comment), "message": truncate(comment.message, DISCUSSION_MESSAGE_LIMIT)}
         for comment in comments]}
+
+
+COMMENT_LIMIT = 5000
+
+
+class PostCommentArgs(BaseModel):
+    run: str = Field(description=RUN_REFERENCE)
+    message: str = Field(min_length=1, max_length=COMMENT_LIMIT,
+                         description="The comment in Markdown; @username mentions notify that user")
+
+
+@tool("post_comment", "Propose posting a comment on a run. A user confirms the card, and the comment is posted "
+                      "as that user.", PostCommentArgs)
+async def post_comment(ctx: ToolContext, args: PostCommentArgs) -> ToolOutcome:
+    scope = await load_scope(ctx.entity)
+    run = await resolve_run_reference(ctx.entity, scope, args.run)
+    test = next((test for test in scope.tests if test.id == run.test_id), None)
+    proposal = {"run_id": str(run.id), "test_id": str(run.test_id),
+                "test": scope.label(test) if test else str(run.test_id), "build_number": run.build_number,
+                "run_url": run_url(run), "message": args.message.strip()}
+    return proposal_outcome(new_action("post_comment", proposal))
 
 
 USER_LIMIT = 50
