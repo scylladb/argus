@@ -129,6 +129,7 @@ class _FakeJenkins:
         self._error = error
         self._job_config = job_config
         self._build_info = build_info or {}
+        self.requested_builds = []
 
     def get_job_info(self, name):  # noqa: ARG002 - signature parity
         if self._error is not None:
@@ -139,6 +140,7 @@ class _FakeJenkins:
         return self._job_config
 
     def get_build_info(self, name, number):  # noqa: ARG002 - signature parity
+        self.requested_builds.append(number)
         return self._build_info
 
 
@@ -182,6 +184,17 @@ def test_validate_sct_version_source_accepts_rolling_upgrade_on_an_image():
         "gce_image_db": "https://www.googleapis.com/compute/v1/projects/debian-cloud/global/images/family/debian-13",
         "new_scylla_repo": "https://downloads.scylladb.com/unstable/scylla/master/deb/unified/latest/scylla.list",
     })
+
+
+def test_validate_sct_version_source_rejects_rolling_upgrade_on_an_image_with_a_version():
+    with pytest.raises(DataValidationError) as exc:
+        JenkinsService.validate_sct_version_source({
+            "gce_image_db": "https://www.googleapis.com/compute/v1/projects/debian-cloud/global/images/family/debian-13",
+            "new_scylla_repo": "https://downloads.scylladb.com/unstable/scylla/master/deb/unified/latest/scylla.list",
+            "scylla_version": "master:latest",
+        })
+    assert "scylla_version" in str(exc.value)
+    assert "rolling_upgrade" in str(exc.value)
 
 
 def test_validate_sct_version_source_rejects_none_set():
@@ -281,9 +294,39 @@ async def test_retrieve_job_parameters_rebuild_uses_last_build():
 
 
 async def test_retrieve_job_parameters_rebuild_specific_build():
-    # A specific build number also uses the build's parameters.
-    params = await _params_service().retrieve_job_parameters("job", 3, from_defaults=False)
+    # A specific build number reads that build, not the last one (nextBuildNumber - 1 = 5).
+    fake = _FakeJenkins(
+        job_info=_JOB_INFO_WITH_DEFAULTS,
+        job_config=CONFIG_WITH_CHOICES,
+        build_info=_BUILD_INFO_WITH_PARAMS,
+    )
+    params = await _service_with(fake).retrieve_job_parameters("job", 3, from_defaults=False)
+    assert fake.requested_builds == [3]
     assert _params_by_name(params)["scylla_version"]["value"] == "5.4:latest"
+
+
+async def test_retrieve_job_parameters_rebuild_accepts_a_definition_without_a_default():
+    job_info = {
+        "nextBuildNumber": 6,
+        "property": [
+            {
+                "_class": "hudson.model.ParametersDefinitionProperty",
+                "parameterDefinitions": [
+                    {"_class": "hudson.model.StringParameterDefinition", "name": "scylla_version",
+                     "defaultParameterValue": None},
+                    {"_class": "hudson.model.StringParameterDefinition", "name": "region",
+                     "defaultParameterValue": None},
+                ],
+            }
+        ],
+    }
+    fake = _FakeJenkins(job_info=job_info, job_config=CONFIG_NO_CHOICES, build_info=_BUILD_INFO_WITH_PARAMS)
+
+    params = await _service_with(fake).retrieve_job_parameters("job", 5, from_defaults=False)
+
+    by_name = _params_by_name(params)
+    assert by_name["scylla_version"]["value"] == "5.4:latest"
+    assert by_name["region"]["value"] == ""
 
 
 async def test_retrieve_job_parameters_rebuild_adds_parameters_the_build_did_not_record():
