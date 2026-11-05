@@ -335,6 +335,27 @@ stays in every plan built from a spec.
   adds the test to the popout.
 - [x] Commit, with the boxes of this task checked.
 
+## Task 6b — The summary in new plan views
+
+**Files:**
+- Modify: `argus/backend/service/planner_service.py`
+  - `VIEW_WIDGET_SETTINGS` becomes highlights (index 0, with the frontend's
+    default action item groups), issues, stat bar, release summary, test
+    dashboard.
+  - `create_view_for_plan` finds the test dashboard by type instead of by
+    list index.
+- Test: `argus/backend/tests/planner_api/test_planner_api.py`
+
+- [x] Write the failing tests: a new plan's view lists the five widgets in
+  order, with the plan's version on the dashboard; a plan without a version
+  turns the dashboard version off.
+- [x] Run them and confirm the failure.
+- [x] Change the default stack and the dashboard lookup.
+- [x] Run the verify sequence.
+- [x] On the dev cluster, give the view of "Base plan for 2024.1" the same
+  widgets, keeping its tests and its existing widget settings.
+- [x] Commit, with the boxes of this task checked.
+
 ## Task 7 — Docs
 
 **Files:**

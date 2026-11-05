@@ -361,6 +361,9 @@ collapsible, onTestClick}`, where the type is `"view"` or `"release"`.
   the issue in the issues API's aggregated shape. (build)
 - The status filter is a set of independent toggles, as in the SCT events
   tab. A count or a bar segment shows only its status. (build)
+- A new release plan's view starts with highlights and action items, the
+  issues, the stat bar, the release summary and the test dashboard, in that
+  order. (build)
 - The release route is `/release/{release_id}/version_summary`. A
   `/release/{release_id}/summary` route answers `/release/stats/summary`
   first and breaks it. (build)
