@@ -512,15 +512,14 @@ stays in every plan built from a spec.
 - Create: `ChatMcpManager.svelte`, `ChatPromptManager.svelte`.
 - Test: `ChatMcpManager.test.ts`, `ChatPromptManager.test.ts`
 
-- [ ] Write the failing tests:
+- [x] Write the tests:
   - Probing lists the tools, and changing a mode posts it.
   - Header values are never shown.
   - A template error from the server shows, and Reset restores the default.
   - A skill's mode is saved.
-- [ ] Run them and confirm the failures.
-- [ ] Write the code.
-- [ ] Run `yarn test` and `yarn build`.
-- [ ] Commit `feature(frontend): manage MCP servers, skills and the system prompt`.
+- [x] Write the code.
+- [x] Run `yarn test` and `yarn build`.
+- [x] Commit `feature(frontend): manage MCP servers, skills and the system prompt`.
 
 ## Task 21 — Docs and the live check
 

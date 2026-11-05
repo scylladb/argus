@@ -9,9 +9,18 @@
     import AssistantAvatar from "../Chat/AssistantAvatar.svelte";
     import type { AssistantIdentity, Connection, DefaultModel } from "../Chat/types";
     import ChatIdentityEditor from "./ChatIdentityEditor.svelte";
+    import ChatMcpManager from "./ChatMcpManager.svelte";
+    import ChatPromptManager from "./ChatPromptManager.svelte";
     import ChatModelPicker from "./ChatModelPicker.svelte";
 
     const ADMIN_API = "/admin/api/v1/chat";
+    const TABS = [
+        { id: "models", label: "Models" },
+        { id: "mcp", label: "MCP servers" },
+        { id: "prompt", label: "Prompt & skills" },
+    ] as const;
+
+    let tab = $state<(typeof TABS)[number]["id"]>("models");
 
     interface Form {
         name: string;
@@ -100,10 +109,20 @@
     <div>
         <h2 class="h4">Chat</h2>
         <p class="text-body-secondary mb-0">
-            Models for the release and view chat, served by any OpenAI-compatible endpoint.
+            Models, tools and instructions for the release and view chat.
         </p>
     </div>
 
+    <ul class="nav nav-underline" role="tablist">
+        {#each TABS as entry (entry.id)}
+            <li class="nav-item">
+                <button type="button" class="nav-link" class:active={tab === entry.id} role="tab"
+                        aria-selected={tab === entry.id} onclick={() => (tab = entry.id)}>{entry.label}</button>
+            </li>
+        {/each}
+    </ul>
+
+    {#if tab === "models"}
     <section class="rounded bg-white shadow-sm p-3">
         <div class="d-flex align-items-center mb-2">
             <h3 class="h6 mb-0">Default model</h3>
@@ -217,6 +236,11 @@
             </form>
         {/if}
     </section>
+    {:else if tab === "mcp"}
+        <ChatMcpManager />
+    {:else}
+        <ChatPromptManager />
+    {/if}
 </div>
 
 {#if picking && connections}
