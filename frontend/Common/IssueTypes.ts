@@ -139,6 +139,12 @@ export const JiraIssueIcon: Record<JiraState, IconDefinition> = {
     new: faDotCircle,
 };
 
+const CLOSED_TRACKER_STATES: ReadonlySet<string> = new Set(["closed", "done", "duplicate", "won't fix"]);
+
+export const isClosedInTracker = function (state: string | null | undefined): boolean {
+    return !!state && CLOSED_TRACKER_STATES.has(state);
+};
+
 export const JIRA_PRIORITIES: readonly string[] = ["Release Blocker", "P0", "P1", "P2", "P3", "P4"];
 
 const JiraPriorityClass: Record<string, string> = {
