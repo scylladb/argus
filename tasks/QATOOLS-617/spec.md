@@ -600,9 +600,16 @@ interface Identity { connection: string; name: string; picture_url: string | nul
 ```
 
 The probe reads `context_length`, then `max_model_len`, then
-`info.meta.context_length`. It reads `tools` and `vision` from `labels`
-(`tool-calling`, `vision`), then from `info.meta.capabilities`. Otherwise
-the value is `null`.
+`info.meta.context_length`, then `info.contextLength`. It reads `tools` and
+`vision` from `labels` (`tool-calling`, `vision`), then from
+`info.meta.capabilities`. Otherwise the value is `null`. It returns one model
+per id: an endpoint that lists a model once per API it serves (a `type` such
+as `openai/chat-completions`) keeps the chat completions entries, and a later
+duplicate only fills what the first entry left unknown.
+
+The stream adapter accepts a tool call's name and arguments in pieces, as
+the value so far, or repeated whole in every chunk, and tells calls without
+an `index` apart by their id.
 
 #### Release summary
 

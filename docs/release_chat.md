@@ -159,8 +159,10 @@ such as OpenWebUI (`https://host/api`), vLLM, or llama.cpp.
    again. Changing `SECRET_KEY` makes stored tokens unreadable; the panel
    says so, and the token has to be entered again.
 2. **Change default model**: pick a connection. Argus asks the endpoint for
-   its models and shows each one's context window and whether it supports
-   tool calling and vision, when the endpoint says. **Test** checks tool
+   its chat models and shows each one's context window and whether it supports
+   tool calling and vision, when the endpoint says. An aggregator such as AIML
+   API lists a model once per API it serves; the list keeps one entry per
+   model, for chat completions. **Test** checks tool
    calling with one short request. **Set as default** makes that model answer
    in every chat.
 
