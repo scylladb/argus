@@ -28,7 +28,7 @@
     const STATE_CLASSES: Record<string, string> = { ...GithubIssueColorMap, ...JiraIssueColorMap };
     const STATE_ICONS = { ...GithubIssueIcon, ...JiraIssueIcon } as Record<string, typeof faJira>;
 
-    const onLatestRun = (issue: SummaryIssue) => issue.status === "open";
+    const onLatestRun = (issue: SummaryIssue) => Boolean(issue.on_latest_run);
 
     const byConcern = (a: SummaryIssue, b: SummaryIssue) =>
         Number(!onLatestRun(a)) - Number(!onLatestRun(b)) ||

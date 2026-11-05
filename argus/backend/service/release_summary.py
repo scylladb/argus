@@ -75,6 +75,7 @@ class IssueEntry(TypedDict):
     state: str | None
     novelty: Literal["new", "existing"]
     status: Literal["open", "fixed"]
+    on_latest_run: bool
     test_ids: list[str]
     run_ids: list[str]
     issue: dict
@@ -237,10 +238,12 @@ class SummaryBuilder:
             entry = self._describe_issue(issue_id)
             first = self._first_run(issue_id)
             status = self._issue_status(issue_id, issue_runs, results) if results is not None else "open"
+            tracked = issue_id in self.data.jira or issue_id in self.data.github
             entries.append(IssueEntry(
                 **entry,
-                novelty="new" if first is not None and is_new(first) else "existing",
+                novelty="new" if tracked and first is not None and is_new(first) else "existing",
                 status=status,
+                on_latest_run=results is not None and self._on_latest_run(issue_id, issue_runs, results),
                 test_ids=sorted({str(run.test_id) for run in issue_runs}),
                 run_ids=sorted({str(run.id) for run in issue_runs}),
                 issue=self._issue_card(issue_id, links_by_issue[issue_id]),
@@ -250,6 +253,10 @@ class SummaryBuilder:
     def _first_run(self, issue_id: UUID) -> SummaryRun | None:
         first_run_id = self.data.first_runs.get(issue_id)
         return self.runs_by_id.get(first_run_id) if first_run_id else None
+
+    def _on_latest_run(self, issue_id: UUID, issue_runs: list[SummaryRun], results: dict[UUID, SummaryRun]) -> bool:
+        return any(any(link.issue_id == issue_id for link in self.links_by_run.get(results[test_id].id, []))
+                   for test_id in {run.test_id for run in issue_runs})
 
     def _issue_status(self, issue_id: UUID, issue_runs: list[SummaryRun], results: dict[UUID, SummaryRun]) -> str:
         for test_id in {run.test_id for run in issue_runs}:
@@ -263,19 +270,15 @@ class SummaryBuilder:
 
     def _issue_card(self, issue_id: UUID, links: list[IssueLink]) -> dict:
         dumped_links = [link.model_dump(mode="json") for link in links]
-        if issue := self.data.jira.get(issue_id):
-            return {**issue.model_dump(mode="json"), "subtype": "jira", "links": dumped_links}
-        if issue := self.data.github.get(issue_id):
-            return {**issue.model_dump(mode="json"), "subtype": "github", "links": dumped_links}
+        tracker = self.data.jira.get(issue_id) or self.data.github.get(issue_id)
+        if tracker is not None:
+            return {**tracker_card(tracker), "links": dumped_links}
         return {"id": str(issue_id), "subtype": "unknown", "links": dumped_links}
 
     def _describe_issue(self, issue_id: UUID) -> dict:
-        if issue := self.data.jira.get(issue_id):
-            return {"id": str(issue_id), "type": "jira", "key": issue.key, "title": issue.summary,
-                    "url": issue.permalink, "state": issue.state}
-        if issue := self.data.github.get(issue_id):
-            return {"id": str(issue_id), "type": "github", "key": f"{issue.owner}/{issue.repo}#{issue.number}",
-                    "title": issue.title, "url": issue.url, "state": issue.state}
+        tracker = self.data.jira.get(issue_id) or self.data.github.get(issue_id)
+        if tracker is not None:
+            return {"id": str(issue_id), **tracker_fields(tracker)}
         link_type = next((link.type for link in self.data.links if link.issue_id == issue_id), None)
         return {"id": str(issue_id), "type": "github" if link_type in ("github", "issues") else "jira",
                 "key": str(issue_id), "title": None, "url": None, "state": None}
@@ -315,8 +318,42 @@ def first_link(links: list[IssueLink]) -> IssueLink:
     return min(links, key=lambda link: as_utc(link.added_on) or LAST)
 
 
+def tracker_fields(issue: JiraIssue | GithubIssue) -> dict:
+    """What a summary shows of an issue from its tracker; read again on every response."""
+    if isinstance(issue, JiraIssue):
+        return {"type": "jira", "key": issue.key, "title": issue.summary, "url": issue.permalink, "state": issue.state}
+    return {"type": "github", "key": f"{issue.owner}/{issue.repo}#{issue.number}", "title": issue.title,
+            "url": issue.url, "state": issue.state}
+
+
+def tracker_card(issue: JiraIssue | GithubIssue) -> dict:
+    return {**issue.model_dump(mode="json"), "subtype": "jira" if isinstance(issue, JiraIssue) else "github"}
+
+
+async def refresh_trackers(summaries: dict[tuple[str, str], Summary]) -> dict[tuple[str, str], Summary]:
+    """The summaries with each issue's tracker state, title and card as the trackers have them now, so an issue
+    closed after the summary was computed shows as closed."""
+    issue_ids = list({UUID(issue["id"]) for summary in summaries.values() for issue in summary["issues"]})
+    trackers: dict[str, JiraIssue | GithubIssue] = {}
+    for batch in chunk(issue_ids):
+        jira, github = await asyncio.gather(JiraIssue.find(id__in=batch).all(), GithubIssue.find(id__in=batch).all())
+        trackers.update({str(issue.id): issue for issue in [*jira, *github]})
+    if not trackers:
+        return summaries
+
+    def refreshed(issue: IssueEntry) -> IssueEntry:
+        tracker = trackers.get(issue["id"])
+        if tracker is None:
+            return issue
+        return {**issue, **tracker_fields(tracker),
+                "issue": {**tracker_card(tracker), "links": issue["issue"].get("links", [])}}
+
+    return {key: {**summary, "issues": [refreshed(issue) for issue in summary["issues"]]}
+            for key, summary in summaries.items()}
+
+
 class ReleaseSummaryService:
-    _recomputes: dict[UUID, asyncio.Task] = {}
+    _recomputes: dict[UUID, tuple[asyncio.Task, datetime]] = {}
 
     async def get(self, release_id: UUID, test_ids: set[UUID] | None = None) -> dict:
         try:
@@ -329,13 +366,13 @@ class ReleaseSummaryService:
         summaries = stored
         if stale:
             try:
-                summaries, generated_at = await self._join_recompute(release)
+                summaries, generated_at = await self._join_recompute(release, invalidated_at)
                 stale = False
             except (DriverException, NoHostAvailable):
                 LOGGER.exception("Failed to recompute the release summary of %s", release_id)
                 if not stored:
                     raise
-        return self._response(release, summaries, generated_at, stale, test_ids)
+        return self._response(release, await refresh_trackers(summaries), generated_at, stale, test_ids)
 
     async def get_for_view(self, view_id: UUID) -> dict:
         tests = await UserViewService().resolve_view_tests(view_id)
@@ -356,19 +393,24 @@ class ReleaseSummaryService:
                      for row in rows if row["family"] is not None and row["payload"]}
         return summaries, as_utc(rows[0]["invalidated_at"]), as_utc(rows[0]["generated_at"])
 
-    async def _join_recompute(self, release: ArgusRelease) -> tuple[dict[tuple[str, str], Summary], datetime]:
+    async def _join_recompute(self, release: ArgusRelease,
+                              invalidated_at: datetime | None) -> tuple[dict[tuple[str, str], Summary], datetime]:
+        """Share a running recompute of the release, unless it started before the change that made the summary
+        stale; then start one that sees the change."""
         release_id = release.id
-        task = self._recomputes.get(release_id)
-        if task is None or task.done():
-            task = asyncio.create_task(self._recompute(release))
-            self._recomputes[release_id] = task
+        running = self._recomputes.get(release_id)
+        if running is None or running[0].done() or (invalidated_at is not None and running[1] <= invalidated_at):
+            now = datetime.now(UTC)
+            started_at = now.replace(microsecond=now.microsecond // 1000 * 1000)
+            task = asyncio.create_task(self._recompute(release, started_at))
+            self._recomputes[release_id] = (task, started_at)
             task.add_done_callback(lambda done: self._recomputes.pop(release_id, None)
-                                   if self._recomputes.get(release_id) is done else None)
-        return await asyncio.shield(task)
+                                   if self._recomputes.get(release_id, (None,))[0] is done else None)
+            running = (task, started_at)
+        return await asyncio.shield(running[0])
 
-    async def _recompute(self, release: ArgusRelease) -> tuple[dict[tuple[str, str], Summary], datetime]:
-        now = datetime.now(UTC)
-        started_at = now.replace(microsecond=now.microsecond // 1000 * 1000)
+    async def _recompute(self, release: ArgusRelease,
+                         started_at: datetime) -> tuple[dict[tuple[str, str], Summary], datetime]:
         summaries = build_summaries(await self._load(release))
         try:
             await self._write(release.id, summaries, started_at)
@@ -449,9 +491,8 @@ class ReleaseSummaryService:
                 entry["versions"].append(summary)
         for entry in families.values():
             entry["versions"].sort(key=lambda summary: version_sort_key(summary["version"]))
-        if wanted is not None:
-            families = {family: entry for family, entry in families.items()
-                        if entry["rollup"] and entry["rollup"]["tests"]}
+        families = {family: entry for family, entry in families.items()
+                    if entry["rollup"] and (wanted is None or entry["rollup"]["tests"])}
         return {
             "release_id": str(release.id),
             "release_name": release.name,

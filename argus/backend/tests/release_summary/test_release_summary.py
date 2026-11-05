@@ -1,3 +1,4 @@
+import asyncio
 import time
 from unittest.mock import patch
 
@@ -8,6 +9,7 @@ from argus.backend.service.release_summary import ReleaseSummaryService
 from argus.backend.tests.release_summary.helpers import (
     by_version,
     create_plan,
+    fake_remote_jira_issue,
     link_github,
     link_jira,
     mocked_issue_service,
@@ -133,6 +135,29 @@ async def test_issue_novelty_and_the_fixed_state(release_manager_service, client
     assert rows[None]["counts"]["issues_fixed"] == 2
     assert rows[None]["counts"]["issues_new"] == 2
     assert rows[None]["counts"]["issues_existing"] == 1
+    latest = {issue["key"]: issue["on_latest_run"] for issue in rows[None]["issues"]}
+    assert latest == {old_key: False, fixed_key: False, open_key: True}
+    assert not any(issue["on_latest_run"] for issue in rows["2030.6.0~rc1"]["issues"])
+
+
+async def test_the_tracker_state_is_read_on_every_response(release_manager_service, client_service, logged_in_user):
+    seeded = await seed_release(release_manager_service, test_count=1)
+    issues = mocked_issue_service()
+    key = new_jira_key()
+    run = await submit_run(client_service, seeded.tests[0], "2030.7.0", "failed")
+    await link_jira(issues, key, seeded.tests[0], run, logged_in_user)
+    before = by_version(await ReleaseSummaryService().get(seeded.release.id), "2030.7.0")[None]["issues"][0]
+    closed = fake_remote_jira_issue(key)
+    closed.fields.status.name = "Closed"
+    closed.fields.summary = "Renamed in Jira"
+    issues.jira.jira.search_issues.return_value = [closed]
+
+    await issues.jira.refresh_stale_issues()
+    after = by_version(await ReleaseSummaryService().get(seeded.release.id), "2030.7.0")[None]["issues"][0]
+
+    assert (before["state"], before["title"]) == ("open", f"Issue {key}")
+    assert (after["state"], after["title"]) == ("closed", "Renamed in Jira")
+    assert after["issue"]["state"] == "closed" and after["issue"]["links"] == before["issue"]["links"]
 
 
 async def test_a_github_issue_follows_the_same_rule(release_manager_service, client_service, logged_in_user):
@@ -201,6 +226,33 @@ async def test_a_mark_during_a_recompute_keeps_the_summary_stale(release_manager
 
     assert recomputed["generated_at"] > raced["generated_at"]
     assert settled["generated_at"] == recomputed["generated_at"]
+
+
+async def test_a_read_after_a_mark_does_not_join_an_older_recompute(release_manager_service, client_service):
+    seeded = await seed_release(release_manager_service, test_count=1)
+    await submit_run(client_service, seeded.tests[0], "2030.9.0", "passed")
+    service = ReleaseSummaryService()
+    load = ReleaseSummaryService._load
+    loading, release_load = asyncio.Event(), asyncio.Event()
+
+    async def slow_load(release):
+        data = await load(release)
+        loading.set()
+        await release_load.wait()
+        return data
+
+    with patch.object(ReleaseSummaryService, "_load", side_effect=slow_load):
+        first = asyncio.create_task(service.get(seeded.release.id))
+        await loading.wait()
+        await submit_run(client_service, seeded.tests[0], "2030.9.1", "failed")
+        await mark_release_summary_stale(seeded.release.id)
+        second = asyncio.create_task(service.get(seeded.release.id))
+        await asyncio.sleep(0.2)
+        release_load.set()
+        early, late = await first, await second
+
+    assert "2030.9.1" not in {version["version"] for family in early["families"] for version in family["versions"]}
+    assert "2030.9.1" in {version["version"] for family in late["families"] for version in family["versions"]}
 
 
 async def edit_regex(release_manager_service, release, regex: str | None) -> None:

@@ -73,7 +73,9 @@ The family row, *All of 2025.1.0*, rolls up the family's versions:
   later version. Otherwise it is open.
 - The row adds the *Fixed issues* count.
 
-The issue list groups issues by their state in Jira or GitHub. Each issue says
+The issue list groups issues by their state in Jira or GitHub, read when the
+summary is shown, so an issue closed in the tracker moves without waiting for
+a refresh. Each issue says
 whether it is linked to the latest run of a test in the family, or on which
 version it was last seen. A closed issue on a latest run is not necessarily
 back: it may have been closed after that run, before any test ran again.
