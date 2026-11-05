@@ -708,9 +708,61 @@ GET /api/v1/views/widgets/release_summary
 | --------- | ---- | ------------|
 | view_id          | string     | View id            |
 
-Returns `{"releases": [...]}`, one release object as above for each release
-that holds a test of the view. Each object keeps only the view's tests, and
-the issues linked to them, and counts them again.
+Returns `{"releases": [...], "findings": [...]}`, one release object as above
+for each release that holds a test of the view. Each object keeps only the
+view's tests, and the issues linked to them, and counts them again.
+
+Both summary routes carry `findings`: the finding memories of the release,
+and for a view also the view's own, as `GET /api/v1/chat/.../memories` returns
+them.
+
+## Chat API
+
+[`release_chat.md`](release_chat.md) describes the chat. Every route sits
+under `/api/v1/chat/{entity_type}/{entity_id}`, where `entity_type` is
+`release` or `view`, and needs a logged-in user.
+
+| Method and path | Does |
+|---|---|
+| `GET ""` | The conversation: every message node, `head`, `busy`, the model, the active `assistant` identity, the context stats, the memory scopes |
+| `DELETE ""` | Admins only: clears the conversation and keeps the memories; returns the empty conversation |
+| `GET /meta` | `{configured, messages, last: {user_id, at}}` for the chat bar |
+| `GET /events` | A `text/event-stream` of the chat, see below |
+| `POST /messages {content}` | Asks a question; returns `{user_node, assistant_node}` at once |
+| `POST /regenerate` | Answers the last question again |
+| `POST /compact` | Summarizes the conversation so far |
+| `POST /undo` | Removes the last question and its answer; returns the conversation |
+| `POST /head {node}` | Switches to another answer; returns the conversation |
+| `POST /stop` | Stops the running answer |
+| `POST /actions/{node}/confirm` | Confirms a proposal card; the card runs in the background |
+| `POST /actions/{node}/dismiss` | Dismisses a proposal card |
+| `POST /actions/{node}/refresh` | Reads the open Zeus tasks of a card from Zeus, at most every 15 s; returns the card |
+| `GET /memories` | The memories in scope |
+| `POST /memories {content, kind, scope?}` | Adds a memory; `kind` is `note` or `finding`; `scope` is a release id in a view chat |
+| `PUT /memories/{id} {content?, kind?}` | Edits a memory |
+| `DELETE /memories/{id}` | Deletes a memory |
+| `GET /memories/history` | Every change, newest first |
+| `POST /memories/history/{revision}/revert` | Restores a memory as it was before that change |
+
+A question while another answer runs is an error that names the asker.
+
+The event stream sends one JSON object per `data:` line. Its `type` is
+`snapshot` (the whole conversation, first on every connect), `node` (a
+message created or changed), `delta` (text appended to a message), `tool`,
+`state` (`head`, `busy`, context stats), `memory` (the memories in scope),
+`presence` (the users with the chat open), or `heartbeat`. A stream lasts at
+most 25 seconds and asks the client to reconnect after 1 second.
+
+The chat model is configured under `/admin/api/v1/chat`, for admins only:
+`GET /connections`, `POST /connection {name, endpoint, token?}`,
+`DELETE /connection/{name}`, `GET /connection/{name}/models`,
+`POST /connection/{name}/test_tools {model}`,
+`POST /default {connection, model, context_window, tools, vision}`,
+`POST /connection/{name}/identity` (multipart: `assistant_name`, optional
+`picture`, optional `remove_picture`), `DELETE /connection/{name}/identity`,
+and `POST /identity/active {connection}` (`null` uses none). No route
+returns a token. `GET /api/v1/chat/identity/{connection}/picture` serves an
+identity's picture to any logged-in user.
 
 ## Email reporting API
 

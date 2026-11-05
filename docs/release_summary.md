@@ -96,9 +96,19 @@ The counts follow the summary's refresh: linking an issue or posting a
 comment marks the summary for a refresh.
 
 The status toggles filter both tabs, each on its own; a count or a bar segment
-shows only its status. On the release dashboard, a click on a
+shows only its status. On the release dashboard and on a view, a click on a
 test name adds the test to the selected tests beside the test dashboard, as a
 click in the test dashboard does.
+
+## Findings
+
+A finding is a memory of the release chat that a user marked as a finding:
+the result of an investigation, or a correction the automation cannot know.
+The summary shows the findings of the release above the families, with
+their author and when they were written. A view shows its own findings and
+those of each release. Findings are read with the summary and are not part
+of the stored figures, so a refresh never removes one.
+[`release_chat.md`](release_chat.md) describes how to add one.
 
 ## When the summary refreshes
 
