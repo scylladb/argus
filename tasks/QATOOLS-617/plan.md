@@ -476,14 +476,13 @@ stays in every plan built from a spec.
 - Modify: `argus/backend/models/chat.py` (`ChatHistory.auto`), `service.py` (`send` and `regenerate` take `auto`), `agent.py` (claim and execute a pending card inside an auto answer, then return the outcome as the tool result), `actions.py` (`claim` records `auto`), `prompt.py` (the auto tool rule), `controller/chat_api.py`.
 - Test: `argus/backend/tests/chat/test_auto_mode.py`
 
-- [ ] Write the failing tests:
+- [x] Write the tests:
   - An auto question's card is confirmed as the asker and executed once, and the model sees the outcome.
   - A question without auto leaves its card pending.
   - A manual confirm of an auto card is refused.
-- [ ] Run them and confirm the failures.
-- [ ] Write the code.
-- [ ] Run the verify sequence.
-- [ ] Commit `feature(chat-mode): confirm cards automatically in auto mode`.
+- [x] Write the code.
+- [x] Run the verify sequence.
+- [x] Commit `feature(chat-mode): confirm cards automatically in auto mode`.
 
 ## Task 19 — Frontend: cards and Auto mode
 

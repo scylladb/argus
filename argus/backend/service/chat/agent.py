@@ -7,6 +7,7 @@ from uuid import UUID
 
 from argus.backend.models.chat import ChatHistory
 from argus.backend.models.web import User
+from argus.backend.service.chat.actions import claim, execute
 from argus.backend.service.chat.config import ResolvedModel
 from argus.backend.service.chat.conversation import node_json, state_event
 from argus.backend.service.chat.entity import ChatEntity
@@ -29,6 +30,7 @@ from argus.backend.service.chat.prompt import (
     build_system_prompt,
     compact_summary,
     node_user_ids,
+    results_text,
     to_messages,
 )
 from argus.backend.service.chat.skills import PromptSetup, SkillService
@@ -85,6 +87,7 @@ class ChatAgent:
         self.hub = hub
         self.history = ChatHistoryService(entity)
         self.box = Toolbox()
+        self.auto = False
 
     def _publish(self, event: dict) -> None:
         self.hub.publish(self.entity.id, event)
@@ -162,7 +165,7 @@ class ChatAgent:
         identity = await ChatIdentityService().active()
         system = build_system_prompt(self.entity, memories, summary, users, datetime.now(UTC), self.model.tools,
                                      assistant_name=identity.name if identity else None, template=setup.template,
-                                     skills=setup.skills_text())
+                                     skills=setup.skills_text(), auto=self.auto)
         messages = to_messages(path, users)
         if messages and messages[0].role == "system":
             system = f"{system}\n\n{messages.pop(0).content}"
@@ -171,6 +174,7 @@ class ChatAgent:
 
     async def answer(self, assistant: ChatHistory) -> None:
         self.busy_node = assistant.node
+        self.auto = bool(assistant.auto)
         current = assistant
 
         async def work(streamed: Streamed) -> None:
@@ -239,7 +243,21 @@ class ChatAgent:
             return tool_node.node
         action = await self._append(tool_node.node, role="action", parent=tool_node.node, user_id=self.user.id,
                                     action=to_json(outcome.action), action_state=outcome.card_state)
+        if self.auto and outcome.card_state == "pending":
+            note = await self._confirm_automatically(action)
+            messages[-1] = ChatMessage("tool", note, tool_call_id=call.id)
+            await self.history.flush(tool_node, content=note)
         return action.node
+
+    async def _confirm_automatically(self, card: ChatHistory) -> str:
+        """Auto mode: confirm the card as the asker and run it inside the answer; the outcome is the tool
+        result the model sees."""
+        card, action = await claim(self.entity, card.node, self.user, "running", auto=True)
+        self._publish_node(card)
+        action = await execute(self.entity, card, action, self.user)
+        self._publish_node(card)
+        return to_json({"status": "confirmed automatically (Auto mode) and done", "kind": action["kind"],
+                        "outcome": results_text(action["kind"], action["results"])})
 
     async def compact(self, summary: ChatHistory) -> None:
         self.busy_node = summary.node

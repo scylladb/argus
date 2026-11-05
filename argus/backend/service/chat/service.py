@@ -64,7 +64,7 @@ class ChatService:
         await self._publish_state(entity, history, model)
         return asked, started
 
-    async def send(self, entity: ChatEntity, content: str, user: User) -> dict:
+    async def send(self, entity: ChatEntity, content: str, user: User, auto: bool = False) -> dict:
         content = content.strip()
         if not content:
             raise ChatHistoryError("Ask a question first")
@@ -78,14 +78,14 @@ class ChatService:
             asked = await history.append(node=question_node, role="user", content=content, user_id=user.id,
                                          parent=state.head)
             answer = await history.append(node=answer_node, role="assistant", status="streaming",
-                                          user_id=user.id, parent=asked.node, model_name=model.model)
+                                          user_id=user.id, parent=asked.node, model_name=model.model, auto=auto)
             return asked, answer
 
         asked, answer = await self._start(entity, user, model, history, answer_node, build)
         tasks.spawn(ChatAgent(entity, user, model, self.hub).answer(answer), name=f"chat-answer-{answer.node}")
         return {"user_node": node_json(asked), "assistant_node": node_json(answer)}
 
-    async def regenerate(self, entity: ChatEntity, user: User) -> dict:
+    async def regenerate(self, entity: ChatEntity, user: User, auto: bool = False) -> dict:
         model = await self._model()
         history = ChatHistoryService(entity)
         answer_node = uuid1()
@@ -95,7 +95,7 @@ class ChatService:
             if question is None:
                 raise ChatHistoryError("There is no question to answer again")
             answer = await history.append(node=answer_node, role="assistant", status="streaming",
-                                          user_id=user.id, parent=question.node, model_name=model.model)
+                                          user_id=user.id, parent=question.node, model_name=model.model, auto=auto)
             return None, answer
 
         _, answer = await self._start(entity, user, model, history, answer_node, build)

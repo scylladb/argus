@@ -29,6 +29,7 @@ def node_json(node: ChatHistory) -> dict:
         "status": node.status,
         "error": node.error,
         "hidden": node.hidden,
+        "auto": bool(node.auto),
         "created_at": as_utc(node.created_at),
         "updated_at": as_utc(node.updated_at),
     }
