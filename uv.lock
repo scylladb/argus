@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.13' and sys_platform == 'emscripten'",
@@ -80,6 +80,7 @@ wheels = [
 [[package]]
 name = "argus-alm"
 source = { editable = "." }
+default-groups = ["health"]
 dependencies = [
     { name = "click" },
     { name = "lz4" },
@@ -138,6 +139,7 @@ web-backend = [
     { name = "itsdangerous" },
     { name = "jinja2" },
     { name = "jira" },
+    { name = "openai" },
     { name = "prometheus-client" },
     { name = "prometheus-fastapi-instrumentator" },
     { name = "pygithub" },
@@ -187,6 +189,7 @@ requires-dist = [
     { name = "numpy", marker = "extra == 'ai-eval'", specifier = ">=2.2" },
     { name = "onnxruntime", marker = "extra == 'ai'", specifier = ">=1.23" },
     { name = "onnxruntime", marker = "extra == 'ai-eval'", specifier = ">=1.23" },
+    { name = "openai", marker = "extra == 'web-backend'", specifier = ">=3.46.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.2.0" },
     { name = "prometheus-client", marker = "extra == 'web-backend'", specifier = ">=0.26.0" },
     { name = "prometheus-fastapi-instrumentator", marker = "extra == 'web-backend'", specifier = ">=8.1.0" },
@@ -1657,6 +1660,23 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/0a/0f/c338cb5500a522c7e671a3bb1276f4562404fbecce8a0e274565aa968484/onnxruntime-1.29.0-cp314-cp314-win_arm64.whl", hash = "sha256:e417ef8628dcce310d2d53023e750ea298ec14d4341ae6dc3a572bfd9bc7fa97", size = 14124294, upload-time = "2026-08-17T22:54:31.015Z" },
     { url = "https://files.pythonhosted.org/packages/b8/e7/61064289a9a1301b25c1f0f574fe98aba31c2d388db3c1dbec664f78621f/onnxruntime-1.29.0-cp314-cp314t-manylinux_2_28_aarch64.whl", hash = "sha256:11264bb58f7b7cf6af835ab10d36838d73680580820fd6f51d90124a1ca8f449", size = 20826174, upload-time = "2026-08-17T22:54:34.283Z" },
     { url = "https://files.pythonhosted.org/packages/60/21/d0c04b561b46e9bff89b5f500fb7415b8ca0669f7902204f76ab06bb0c7e/onnxruntime-1.29.0-cp314-cp314t-manylinux_2_28_x86_64.whl", hash = "sha256:1ea91cef3b971506e51ae9c37c16d027774ec64994a524ec1bdfb027d68a9832", size = 23138547, upload-time = "2026-08-17T22:54:37.491Z" },
+]
+
+[[package]]
+name = "openai"
+version = "3.46.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "httpx2" },
+    { name = "jiter" },
+    { name = "pydantic" },
+    { name = "sniffio" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/34/b6/23cddcb571d6eafe7b4bb58c7e0a068076121b7b001b776179994cca6a03/openai-3.46.0.tar.gz", hash = "sha256:fb34cd8cab6809ad0aa8dc42493fa622aaa87c814fd8e67a6fb3fa1f1e5d952d", size = 2408622, upload-time = "2026-11-05T00:55:55.463Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f4/63/454e6faad68ac903e7669932db8d0a91c95dfca829ec9476e52045b17684/openai-3.46.0-py3-none-any.whl", hash = "sha256:7b650117e9bf539029bf880c2eff94a26f281394f6572284efa5d068d4b1c98e", size = 2438918, upload-time = "2026-11-05T00:55:53.301Z" },
 ]
 
 [[package]]
