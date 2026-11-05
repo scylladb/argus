@@ -32,7 +32,7 @@ stays in every plan built from a spec.
 ## Task 1 — Model connections, the adapter, and the admin API
 
 **Files:**
-- Modify: `pyproject.toml`, `uv.lock` (`uv add openai`)
+- Modify: `pyproject.toml`, `uv.lock` (`openai` and `websockets` in the `web-backend` extra)
 - Create: `argus/backend/util/secrets.py`
 - Create: `argus/backend/models/chat.py` (`ChatConfiguration`, plus the tables of task 2, so that one file holds the chat schema)
 - Modify: `argus/backend/models/web.py` (`USED_MODELS`)
@@ -68,7 +68,7 @@ stays in every plan built from a spec.
 - [ ] Write the failing tests:
   - secrets round trip; a wrong key raises
   - `normalize_model` on the OpenWebUI/Lemonade shape, a plain OpenAI entry and a vLLM `max_model_len`
-  - the `OpenAIChatClient` stream against an `httpx.MockTransport` of SSE chunks with split tool-call deltas and `reasoning_content`
+  - the `OpenAIChatClient` stream against an `httpx2.MockTransport` of streamed chunks with split tool-call deltas and `reasoning_content`
   - YAML and database merge; a name collision rejected; the token never returned; an update without a token keeps the old one
   - default set and resolved; the fallback default
   - `test_tools` with the scripted client
@@ -81,7 +81,7 @@ stays in every plan built from a spec.
 ## Task 2 — Entities, the message tree, and the state table
 
 **Files:**
-- Modify: `argus/backend/models/chat.py` (`ChatState`, `ChatHistory`, `ChatMemory`, `ChatMemoryRevision`)
+- Modify: `argus/backend/models/chat.py` (`ChatState`, `ChatPresence`, `ChatHistory`, `ChatMemory`, `ChatMemoryRevision`)
 - Create: `argus/backend/service/chat/entity.py`, `history.py`
 - Test: `argus/backend/tests/chat/test_history.py`
 
@@ -141,7 +141,8 @@ stays in every plan built from a spec.
 ## Task 4 — The agent, the read tools, and the conversation routes
 
 **Files:**
-- Create: `argus/backend/service/chat/prompts/system.md`, `prompt.py`, `tools.py`, `agent.py`, `service.py`
+- Create: `argus/backend/service/chat/prompts/system.md`, `prompt.py`, `tools.py`, `agent.py`, `tasks.py`, `hub.py`, `service.py`
+- Modify: `argus/backend/service/user.py` (`load_ws_user`: the user resolution of `load_user` on a `HTTPConnection`)
 - Modify: `argus/backend/controller/chat_api.py`
 - Test: `argus/backend/tests/chat/test_prompt.py`, `test_tools.py`, `test_agent.py`, `test_chat_api.py`
 
@@ -160,8 +161,8 @@ stays in every plan built from a spec.
   - `run_tool(ctx, call) -> ToolOutcome{content, action}`. Unknown tools and validation errors come back as error content.
 - `agent.py`:
   - `ChatAgent(entity, user, resolved_model)`.
-  - `run(assistant_node, queue)`, the loop of the spec:
-    - It streams the model and flushes about every second, or every 400 characters.
+  - `run(assistant_node)`, the loop of the spec:
+    - It streams the model, publishes `delta`/`tool`/`node` events to the hub, and flushes the node and `touch`es the state row every 0.5 s.
     - Each tool call gets a `tool` node; each proposal gets an `action` node.
     - At most 8 model calls.
     - It checks `stop_requested` on each flush.
@@ -169,12 +170,19 @@ stays in every plan built from a spec.
   - `compact(...)` uses the same loop with a summarization instruction and no tools, and writes a `summary` node.
 - `service.py`:
   - `ChatService` as in the spec.
-  - The streaming methods start `asyncio.create_task(agent.run(...))` and keep it in a module-level set until done, then yield SSE frames from the queue.
-  - `sse(event, data) -> str`.
+  - `send`, `regenerate` and `compact` take the lock, write the nodes, `tasks.spawn(agent.run(...))`, and return `Started`.
+- `tasks.py`:
+  - `spawn(coro, name)` keeps a strong reference until the task is done and logs its failure.
+  - `shutdown()` cancels the running tasks. It is wired into the app lifespan, so an interrupted node ends `stopped`.
+- `hub.py`, `ChatHub` (a module singleton per worker):
+  - It keeps the sockets of each entity, and one watcher task per entity with a local socket.
+  - The watcher reads `ChatState` for the entity and its releases every 0.5 s. When `changed_at` moves, it reads the partition and pushes the nodes whose `updated_at` moved, plus a `state` event. When `memory_changed_at` moves, it pushes a `memory` event. Every 2 s it reads `ChatPresence` and pushes `presence` when the list changes.
+  - Each socket refreshes its presence row with `USING TTL 45` every 15 s.
+  - `publish` sends to local sockets only and never blocks: a full socket queue drops the socket into resync.
+  - `touch(entity_id, memory=False)` writes `changed_at` or `memory_changed_at`.
 - Routes:
-  - SSE through `StreamingResponse(media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})`.
-  - The others use `APIResponse`.
-  - `ChatNotConfiguredError` maps to an error response.
+  - The commands use `APIResponse`. `ChatBusyError` and `ChatNotConfiguredError` are `APIException`s.
+  - `WS /ws` uses `Depends(load_ws_user)`. It closes with code 4401 without a user and 4404 for an unknown entity. It sends a `snapshot`, then `hub.subscribe` until the socket closes, and answers `ping` and `resync`.
 
 - [ ] Write the failing tests:
   - the prompt holds the memories of the view and of its release, the summary counts, the user prefix, and starts at a summary node
@@ -184,7 +192,10 @@ stays in every plan built from a spec.
   - the 8-call limit
   - an endpoint error marks the node `error` and frees the lock
   - stop
-  - route: the SSE event order on send; 409 while busy; regenerate adds a sibling; undo; set_head; compact; a second user sees the conversation
+  - route: send returns `Started` and the socket gets `node`, `delta` and the final `node`/`state`; a second send while busy is refused; regenerate adds a sibling; undo; set_head; compact
+  - a socket subscribed before a write made through another hub instance (a second worker) gets the changed node from the watcher
+  - presence lists two users with the chat open
+  - a socket without a session closes with 4401
   - not configured
 - [ ] Run them and confirm the failures.
 - [ ] Write the code.
@@ -267,18 +278,21 @@ stays in every plan built from a spec.
   - `frontend/Views/Widgets/ReleaseSummary/ReleaseSummary.svelte`, `types.ts` (the Findings card)
 
 **Internals:**
-- `chatApi.ts`: `streamPost(url, body, onEvent, signal)` reads `response.body` and parses `event:`/`data:` frames.
+- `chatSocket.ts`: `connectChat(url, handlers)`. It reconnects with backoff from 1 s to 30 s, sends `ping` every 20 s, and reports `connected`, so the modal can poll `GET` every 3 s while it is not.
+- `chatState.ts`: `applyEvent(conversation, event)`, a pure reducer over the spec's `ServerEvent`.
 - `chatTree.ts`: `activePath`, `siblingsOf`, `childrenOf`.
 - `markdown.ts`: `renderMarkdown(text)` = `DOMPurify.sanitize(marked.parse(...))`.
 - The modal:
-  - It polls `GET` every 2 s while another user's generation runs, and every 10 s otherwise, with `setInterval` in `onMount` and cleanup in `onDestroy`.
-  - It applies stream events to a local `$state` copy.
+  - It opens the socket while it is open and closes it on destroy.
+  - It applies events to a local `$state` copy through `applyEvent`.
+  - The header shows the presence avatars and the connection state.
   - Tool and action nodes fold into their assistant turn.
   - Answers are collapsed except the one being streamed.
 - Style: a `bg-light-one` inset with borderless `shadow-sm` white cards.
 
 - [ ] Write the failing tests:
-  - the SSE parser over split chunks
+  - `applyEvent` for each event type, deltas followed by a replacing `node`
+  - `connectChat` reconnects after a close, with a fake WebSocket
   - `activePath` and siblings
   - an answer collapsed by default that expands
   - the sibling switcher posts `/head`
@@ -295,7 +309,7 @@ stays in every plan built from a spec.
 
 **Files:**
 - Create: `docs/release_chat.md`
-- Modify: `docs/release_summary.md` (Findings), `docs/api_usage.md` (chat and admin routes), `docs/project/architecture.md` (the chat service, the first SSE route, the model adapter), `docs/INDEX.md`
+- Modify: `docs/release_summary.md` (Findings), `docs/api_usage.md` (chat and admin routes), `docs/project/architecture.md` (the chat service, background tasks, the first WebSocket and its nginx requirement, the model adapter), `docs/INDEX.md`
 
 - [ ] Write the docs: the chat, memories and findings, the requests with examples, how memories shape answers, connections and the default model.
 - [ ] Run `uv run pre-commit run --all-files`.
@@ -314,9 +328,10 @@ stays in every plan built from a spec.
   - ask what failed on the newest rc and compare with the summary
   - try again, switch branches, undo, compact
   - add a finding through the chat and see it in the summary
-  - a second session sees the conversation
+  - a second session sees the answer live and shows both users in presence
+  - with the socket blocked, the modal falls back to polling
 - [ ] View chat: the view's memories and its release's memories reach the answer.
 - [ ] A start proposal card with a rejected setting, dismissed.
 - [ ] The `tools: false` path with Gemma-3-4b-it-GGUF.
 - [ ] Headless Chrome at 1600 and 900 pixels.
-- [ ] Record the results in the pull request body.
+- [ ] Record the results in the pull request body, together with the nginx vhost change for scylladb/qatools `roles/argus` (`Upgrade` and `Connection` headers on `/api/v1/chat/`).
