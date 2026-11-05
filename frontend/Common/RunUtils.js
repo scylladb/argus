@@ -54,6 +54,38 @@ export const buildCleanResourcesCommand = function (backend, regions, runId) {
     return `hydra clean-resources --backend ${backend} --test-id ${runId}`;
 };
 
+/**
+ * Older runs report no resource_type, so the monitor name is the fallback.
+ * @returns {boolean}
+ */
+export const isMonitorResource = function (resource) {
+    return resource.resource_type === "monitor" || /-monitor-node-/.test(resource.name);
+};
+
+// hydra runs sct.py in docker; uv runs it from an SCT checkout without docker.
+const SCT_RUNNERS = ["hydra", "uv run sct.py"];
+
+/**
+ * The SCT commands that reach the monitor of a run: a tunnel while the
+ * monitor node is up (it has no public IP), and the restored monitor once
+ * the run is done and its logs are collected.
+ * @param {string} testId
+ * @param {{ name: string } | undefined} runningMonitor
+ * @param {boolean} runFinished
+ * @returns {{ label: string, commands: string[] }[]}
+ */
+export const buildMonitorCommands = function (testId, runningMonitor, runFinished) {
+    const entries = [];
+    if (runningMonitor) {
+        entries.push(["Grafana", `tunnel -t ${testId} -p 3000 ${runningMonitor.name}`]);
+        entries.push(["Prometheus", `tunnel -t ${testId} -p 9090 ${runningMonitor.name}`]);
+    }
+    if (runFinished) {
+        entries.push(["Restore monitor", `investigate show-monitor ${testId}`]);
+    }
+    return entries.map(([label, args]) => ({ label, commands: SCT_RUNNERS.map((runner) => `${runner} ${args}`) }));
+};
+
 export const getRelocatableScyllaPackage = function(packages) {
     // relocatable package: https://docs.scylladb.com/stable/getting-started/install-scylla/unified-installer.html
     return packages.find((pkg) => pkg.name == "relocatable_pkg");

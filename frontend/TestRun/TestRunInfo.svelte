@@ -12,8 +12,9 @@
     import { InProgressStatuses } from "../Common/TestStatus";
     import { timestampToISODate } from "../Common/DateUtils";
     import { getScyllaPackage, getKernelPackage, getUpgradedScyllaPackage,
-        getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage,
+        getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage, isMonitorResource,
     } from "../Common/RunUtils";
+    import MonitorConnect from "./MonitorConnect.svelte";
     import { clusterTypeLabel, networkTypeLabel, isCloudManagedDbCluster, getDbNodeSetup } from "../Common/CloudSetupUtils";
     import JenkinsBuildModal from "./Jenkins/JenkinsBuildModal.svelte";
     import JenkinsCloneModal from "./Jenkins/JenkinsCloneModal.svelte";
@@ -34,11 +35,11 @@
     let cmd_hydraInvestigateShowMonitor = `hydra investigate show-monitor ${test_run.id}`;
     let cmd_hydraInvestigateShowLogs = `hydra investigate show-logs ${test_run.id}`;
 
-    const locateGrafanaNode = function () {
-        return test_run.allocated_resources.find((node) => {
-            return new RegExp(/-monitor-node-/).test(node.name) && node.state === "running";
-        });
-    };
+    let runningMonitor = $derived(
+        test_run.allocated_resources.find((node) => isMonitorResource(node) && node.state === "running")
+    );
+    let grafanaIp = $derived(runningMonitor?.instance_info.public_ip);
+    let runFinished = $derived(!InProgressStatuses.includes(test_run.status));
 
     let scyllaPackage = $state(getScyllaPackage(test_run.packages));
     run(() => {
@@ -310,12 +311,12 @@
                         Actions
                     </button>
                     <ul class="dropdown-menu">
-                        {#if locateGrafanaNode()}
+                        {#if grafanaIp}
                             <li>
                                 <a
                                     class="dropdown-item"
                                     target="_blank"
-                                    href="http://{locateGrafanaNode().instance_info.public_ip}:3000/"
+                                    href="http://{grafanaIp}:3000/"
                                 ><Fa icon={faSearch} /> Open Grafana</a>
                             </li>
                         {/if}
@@ -364,11 +365,10 @@
                 </div>
             {:else}
                 <div class="btn-group">
-                    {#if locateGrafanaNode()}
+                    {#if grafanaIp}
                         <a
                             target="_blank"
-                            href="http://{locateGrafanaNode().instance_info
-                            .public_ip}:3000/"
+                            href="http://{grafanaIp}:3000/"
                             class="btn btn-outline-warning">Open Grafana</a
                         >
                     {/if}
@@ -386,17 +386,15 @@
                         <button class="btn btn-sm btn-outline-primary" onclick={() => (cloneRequested = true)}
                             ><Fa icon={faCopy} /> Clone</button
                         >
+                    {/if}
+                    <MonitorConnect
+                        testId={test_run.id}
+                        monitor={runningMonitor}
+                        {runFinished}
+                        label={runningMonitor ? (grafanaIp ? "Hydra Tunnel" : "Grafana via tunnel") : "Hydra Show Monitor"}
+                    />
+                    {#if runFinished}
                         {#if navigator.clipboard}
-                            <button
-                                type="button"
-                                class="btn btn-outline-success"
-                                onclick={() => {
-                                    navigator.clipboard.writeText(
-                                        cmd_hydraInvestigateShowMonitor
-                                    );
-                                    sendMessage("success", `\`${cmd_hydraInvestigateShowMonitor}\` has been copied to your clipboard`);
-                                }}><Fa icon={faCopy} /> Hydra Show Monitor</button
-                            >
                             <button
                                 type="button"
                                 class="btn btn-outline-success"

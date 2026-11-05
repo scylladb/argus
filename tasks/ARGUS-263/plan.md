@@ -11,7 +11,7 @@ stays in every plan built from a spec.
 
 - Frontend only. Svelte 5 runes in new components.
 - Copy through `navigator.clipboard.writeText` and a
-  `sendMessage("success", ...)` toast, as `ResourcesInfo.svelte` does.
+  `sendMessage("success", ...)` toast, as the run card does.
 - The popover is a Bootstrap dropdown (`data-bs-toggle="dropdown"`), as the
   run header's mobile *Actions* menu is.
 
@@ -22,31 +22,31 @@ stays in every plan built from a spec.
 - Test: `frontend/Common/RunUtils.test.js`
 
 **Internals:** `isMonitorResource(resource)` and
-`buildMonitorCommands(testId, monitor, runFinished)`, which returns
-`[{ label, command }]`: the Grafana, Prometheus and shell commands for a
-running monitor of a run in progress, else the one `show-monitor` command.
+`buildMonitorCommands(testId, runningMonitor, runFinished)`, which returns
+`[{ label, commands }]`, each command with the `hydra` and the
+`uv run sct.py` prefix: the Grafana and Prometheus tunnels for a running
+monitor, and `show-monitor` for a finished run.
 
-- [ ] Write the failing test: a running monitor, a terminated monitor, a
-  running monitor of a finished run, and the monitor rule.
-- [ ] Run it and confirm the failure.
-- [ ] Write the smallest change that passes it.
+- [x] Write the failing test: a running monitor, a finished run with and
+  without a running monitor, a run in progress without one, and the monitor
+  rule.
+- [x] Run it and confirm the failure.
+- [x] Write the smallest change that passes it.
 
-## Task 2 — Render the Connect popover
+## Task 2 — Render the monitor popover
 
 **Files:**
 - Create: `frontend/TestRun/MonitorConnect.svelte`
-- Modify: `frontend/TestRun/ResourcesInfo.svelte`
 - Modify: `frontend/TestRun/TestRunInfo.svelte`
-- Modify: `frontend/TestRun/TestRun.svelte`, to pass the run status to
-  `ResourcesInfo`
 
 **Internals:** `MonitorConnect` takes `testId`, `monitor`, `runFinished` and
-an optional `label`, and lists each command with a copy button. The
-Resources tab renders it in the name cell of each monitor row. The run header
-picks the running monitor, else the first monitor, shows *Open Grafana* only
-for a running monitor with a public IP, and labels the popover *Grafana via
-tunnel* for a running monitor without one.
+`label`, lists each command with a copy button, and renders nothing when
+there is no command. The run card renders it in the slot of *Hydra Show
+Monitor*, labelled *Grafana via tunnel* for a running monitor without a
+public IP, *Hydra Tunnel* for one with a public IP, and *Hydra Show Monitor*
+otherwise. *Open Grafana* stays only for a public IP.
 
-- [ ] Run `yarn test` and `yarn build`.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of both tasks checked.
+- [x] Run `yarn test` and `yarn build`.
+- [x] Preview the run card in a browser.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of both tasks checked.
