@@ -676,7 +676,10 @@ family. [`release_summary.md`](release_summary.md) defines each number.
           "issues": [
             {"id": "51b2…", "type": "jira", "key": "SCYLLADB-123", "title": "Crash during upgrade",
              "url": "https://scylladb.atlassian.net/browse/SCYLLADB-123", "state": "open",
-             "novelty": "new", "status": "fixed", "test_ids": ["3f1c…"], "run_ids": ["77aa…"]}
+             "novelty": "new", "status": "fixed", "test_ids": ["3f1c…"], "run_ids": ["77aa…"],
+             "issue": {"id": "51b2…", "subtype": "jira", "key": "SCYLLADB-123", "summary": "Crash during upgrade",
+                       "permalink": "https://scylladb.atlassian.net/browse/SCYLLADB-123", "state": "open",
+                       "links": [{"run_id": "77aa…", "test_id": "3f1c…", "added_on": "2026-10-30T08:12:00Z"}]}}
           ]
         },
         "versions": [
@@ -694,7 +697,8 @@ Families come newest first. The versions of a family run from `~dev` through
 the release candidates to the final build. A pending test has `"status":
 "pending"` and no run. On a version row, `issues_fixed` is `0` and every issue
 is `open`. `stale` is `true` when a refresh failed and the response holds the
-last stored figures.
+last stored figures. `issue` holds the issue as `GET /api/v1/issues/get` returns it
+with `aggregateByIssue`, limited to the links on runs of that row.
 
 ```http
 GET /api/v1/views/widgets/release_summary
