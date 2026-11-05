@@ -288,6 +288,19 @@ describe("ReleaseSummary.svelte", () => {
         await waitFor(() => expect(screen.getByText(/could not be refreshed/)).toBeTruthy());
         expect(fetchMock).toHaveBeenCalledTimes(6);
     });
+
+    it("shows the findings of the view and of each release", async () => {
+        const finding = (id: string, content: string) => ({ id, content, updated_by: "u1",
+                                                            updated_at: new Date().toISOString(), source_node: "n1" });
+        fetchMock.mockResolvedValue({ releases: [{ ...RELEASE, findings: [finding("f1", "rc3 failures are infra")] }],
+                                      findings: [finding("f2", "Week1 runs on GCE only")] });
+
+        render(ReleaseSummary, { props: { dashboardObject: { id: "v-3" } } });
+
+        await waitFor(() => expect(screen.getByText("rc3 failures are infra")).toBeTruthy());
+        expect(screen.getByText("Week1 runs on GCE only")).toBeTruthy();
+        expect(screen.getAllByRole("region", { name: "Findings" })).toHaveLength(2);
+    });
 });
 
 describe("the test list counts", () => {
