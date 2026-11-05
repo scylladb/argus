@@ -32,7 +32,7 @@ stays in every plan built from a spec.
 ## Task 1 — Model connections, the adapter, and the admin API
 
 **Files:**
-- Modify: `pyproject.toml`, `uv.lock` (`openai` and `websockets` in the `web-backend` extra)
+- Modify: `pyproject.toml`, `uv.lock` (`openai` in the `web-backend` extra)
 - Create: `argus/backend/util/secrets.py`
 - Create: `argus/backend/models/chat.py` (`ChatConfiguration`, plus the tables of task 2, so that one file holds the chat schema)
 - Modify: `argus/backend/models/web.py` (`USED_MODELS`)
@@ -142,7 +142,6 @@ stays in every plan built from a spec.
 
 **Files:**
 - Create: `argus/backend/service/chat/prompts/system.md`, `prompt.py`, `tools.py`, `agent.py`, `tasks.py`, `hub.py`, `service.py`
-- Modify: `argus/backend/service/user.py` (`load_ws_user`: the user resolution of `load_user` on a `HTTPConnection`)
 - Modify: `argus/backend/controller/chat_api.py`
 - Test: `argus/backend/tests/chat/test_prompt.py`, `test_tools.py`, `test_agent.py`, `test_chat_api.py`
 
@@ -175,14 +174,14 @@ stays in every plan built from a spec.
   - `spawn(coro, name)` keeps a strong reference until the task is done and logs its failure.
   - `shutdown()` cancels the running tasks. It is wired into the app lifespan, so an interrupted node ends `stopped`.
 - `hub.py`, `ChatHub` (a module singleton per worker):
-  - It keeps the sockets of each entity, and one watcher task per entity with a local socket.
+  - It keeps one `asyncio.Queue` per open stream, grouped by entity, and one watcher task per entity with a local stream.
   - The watcher reads `ChatState` for the entity and its releases every 0.5 s. When `changed_at` moves, it reads the partition and pushes the nodes whose `updated_at` moved, plus a `state` event. When `memory_changed_at` moves, it pushes a `memory` event. Every 2 s it reads `ChatPresence` and pushes `presence` when the list changes.
-  - Each socket refreshes its presence row with `USING TTL 45` every 15 s.
-  - `publish` sends to local sockets only and never blocks: a full socket queue drops the socket into resync.
+  - Each stream refreshes its presence row with `USING TTL 45` every 15 s.
+  - `publish` puts to local stream queues only and never blocks: a full queue ends that stream, and the client reconnects into a fresh snapshot.
   - `touch(entity_id, memory=False)` writes `changed_at` or `memory_changed_at`.
 - Routes:
   - The commands use `APIResponse`. `ChatBusyError` and `ChatNotConfiguredError` are `APIException`s.
-  - `WS /ws` uses `Depends(load_ws_user)`. It closes with code 4401 without a user and 4404 for an unknown entity. It sends a `snapshot`, then `hub.subscribe` until the socket closes, and answers `ping` and `resync`.
+  - `GET /events` uses `Depends(api_current_user)` and returns `StreamingResponse(media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})`. It yields the `snapshot`, then the events of `hub.subscribe`, and a `: heartbeat` comment every 15 s. The generator's `finally` unsubscribes, so a client that leaves frees its queue and its presence.
 
 - [ ] Write the failing tests:
   - the prompt holds the memories of the view and of its release, the summary counts, the user prefix, and starts at a summary node
@@ -192,10 +191,10 @@ stays in every plan built from a spec.
   - the 8-call limit
   - an endpoint error marks the node `error` and frees the lock
   - stop
-  - route: send returns `Started` and the socket gets `node`, `delta` and the final `node`/`state`; a second send while busy is refused; regenerate adds a sibling; undo; set_head; compact
-  - a socket subscribed before a write made through another hub instance (a second worker) gets the changed node from the watcher
+  - route: send returns `Started` and the stream gets `node`, `delta` and the final `node`/`state`; a second send while busy is refused; regenerate adds a sibling; undo; set_head; compact
+  - a stream subscribed before a write made through another hub instance (a second worker) gets the changed node from the watcher
   - presence lists two users with the chat open
-  - a socket without a session closes with 4401
+  - the event stream sends a `snapshot` first, and refuses an unknown entity
   - not configured
 - [ ] Run them and confirm the failures.
 - [ ] Write the code.
@@ -278,12 +277,12 @@ stays in every plan built from a spec.
   - `frontend/Views/Widgets/ReleaseSummary/ReleaseSummary.svelte`, `types.ts` (the Findings card)
 
 **Internals:**
-- `chatSocket.ts`: `connectChat(url, handlers)`. It reconnects with backoff from 1 s to 30 s, sends `ping` every 20 s, and reports `connected`, so the modal can poll `GET` every 3 s while it is not.
+- `chatEvents.ts`: `connectChat(url, handlers)` wraps `EventSource`. It parses each `data:` JSON and tracks `live`: true after any event or heartbeat, false after 40 s of silence or an error, so the modal polls `GET` every 3 s while it is not live.
 - `chatState.ts`: `applyEvent(conversation, event)`, a pure reducer over the spec's `ServerEvent`.
 - `chatTree.ts`: `activePath`, `siblingsOf`, `childrenOf`.
 - `markdown.ts`: `renderMarkdown(text)` = `DOMPurify.sanitize(marked.parse(...))`.
 - The modal:
-  - It opens the socket while it is open and closes it on destroy.
+  - It opens the event stream while it is open and closes it on destroy.
   - It applies events to a local `$state` copy through `applyEvent`.
   - The header shows the presence avatars and the connection state.
   - Tool and action nodes fold into their assistant turn.
@@ -292,7 +291,7 @@ stays in every plan built from a spec.
 
 - [ ] Write the failing tests:
   - `applyEvent` for each event type, deltas followed by a replacing `node`
-  - `connectChat` reconnects after a close, with a fake WebSocket
+  - `connectChat` parses events and drops to not-live after silence, with a fake `EventSource`
   - `activePath` and siblings
   - an answer collapsed by default that expands
   - the sibling switcher posts `/head`
@@ -309,7 +308,7 @@ stays in every plan built from a spec.
 
 **Files:**
 - Create: `docs/release_chat.md`
-- Modify: `docs/release_summary.md` (Findings), `docs/api_usage.md` (chat and admin routes), `docs/project/architecture.md` (the chat service, background tasks, the first WebSocket and its nginx requirement, the model adapter), `docs/INDEX.md`
+- Modify: `docs/release_summary.md` (Findings), `docs/api_usage.md` (chat and admin routes), `docs/project/architecture.md` (the chat service, background tasks, the first server-sent event stream and its buffering header, the model adapter), `docs/INDEX.md`
 
 - [ ] Write the docs: the chat, memories and findings, the requests with examples, how memories shape answers, connections and the default model.
 - [ ] Run `uv run pre-commit run --all-files`.
@@ -329,9 +328,9 @@ stays in every plan built from a spec.
   - try again, switch branches, undo, compact
   - add a finding through the chat and see it in the summary
   - a second session sees the answer live and shows both users in presence
-  - with the socket blocked, the modal falls back to polling
+  - with the event stream blocked, the modal falls back to polling
 - [ ] View chat: the view's memories and its release's memories reach the answer.
 - [ ] A start proposal card with a rejected setting, dismissed.
 - [ ] The `tools: false` path with Gemma-3-4b-it-GGUF.
 - [ ] Headless Chrome at 1600 and 900 pixels.
-- [ ] Record the results in the pull request body, together with the nginx vhost change for scylladb/qatools `roles/argus` (`Upgrade` and `Connection` headers on `/api/v1/chat/`).
+- [ ] Record the results in the pull request body.
