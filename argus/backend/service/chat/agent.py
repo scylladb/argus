@@ -31,7 +31,8 @@ from argus.backend.service.chat.prompt import (
     node_user_ids,
     to_messages,
 )
-from argus.backend.service.chat.tools import ToolContext, entity_summaries, run_tool, to_json, tool_specs
+from argus.backend.service.chat.skills import PromptSetup, SkillService
+from argus.backend.service.chat.tools import ToolContext, Toolbox, entity_summaries, run_tool, to_json, tool_specs
 
 LOGGER = logging.getLogger(__name__)
 MAX_MODEL_CALLS = 8
@@ -75,6 +76,7 @@ class ChatAgent:
         self.model = model
         self.hub = hub
         self.history = ChatHistoryService(entity)
+        self.box = Toolbox()
 
     def _publish(self, event: dict) -> None:
         self.hub.publish(self.entity.id, event)
@@ -131,7 +133,9 @@ class ChatAgent:
                 if await self._stop_requested():
                     raise StopRequested
 
-    async def _context(self, path: list[ChatHistory]) -> tuple[str, list[ChatMessage], list[dict]]:
+    async def _context(self, path: list[ChatHistory],
+                       setup: PromptSetup | None = None) -> tuple[str, list[ChatMessage], list[dict]]:
+        setup = setup or await SkillService().prompt_setup()
         memories = await ChatMemoryService().list(self.entity)
         users = await load_users(node_user_ids(path) | {memory["updated_by"] for memory in memories}, self.user)
         try:
@@ -141,7 +145,8 @@ class ChatAgent:
             summary = "The release summary is unavailable right now."
         identity = await ChatIdentityService().active()
         system = build_system_prompt(self.entity, memories, summary, users, datetime.now(UTC), self.model.tools,
-                                     assistant_name=identity.name if identity else None)
+                                     assistant_name=identity.name if identity else None, template=setup.template,
+                                     skills=setup.skills_text())
         messages = to_messages(path, users)
         if messages and messages[0].role == "system":
             system = f"{system}\n\n{messages.pop(0).content}"
@@ -155,9 +160,11 @@ class ChatAgent:
         async def work(streamed: Streamed) -> None:
             nonlocal current
             _, nodes = await self.history.read()
-            system, messages, snapshot = await self._context(active_path(nodes, assistant.parent))
+            setup = await SkillService().prompt_setup()
+            self.box = Toolbox(hidden=frozenset() if setup.on_demand else frozenset({"load_skill"}))
+            system, messages, snapshot = await self._context(active_path(nodes, assistant.parent), setup)
             messages.insert(0, ChatMessage("system", system))
-            tools = tool_specs() if self.model.tools else None
+            tools = tool_specs(self.box) if self.model.tools else None
             snapshot_json = to_json(snapshot)
             await self.history.flush(current, memory_snapshot=snapshot_json)
             for call_number in range(1, MAX_MODEL_CALLS + 1):
@@ -204,7 +211,7 @@ class ChatAgent:
     async def _run_call(self, caller: ChatHistory, call: ToolCall, head: UUID,
                         messages: list[ChatMessage]) -> UUID:
         self._publish({"type": "tool", "node": caller.node, "name": call.name, "state": "running"})
-        outcome = await run_tool(ToolContext(self.entity, self.user, caller.node), call)
+        outcome = await run_tool(ToolContext(self.entity, self.user, caller.node), call, self.box)
         tool_node = await self._append(head, role="tool", parent=head, content=outcome.content,
                                        tool_call_id=call.id, tool_name=call.name, user_id=self.user.id,
                                        status="error" if outcome.error else "done")

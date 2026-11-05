@@ -22,6 +22,7 @@ Today is {date}.
 ## Memories
 
 {memories}
+{skills}
 
 ## Release summary
 
