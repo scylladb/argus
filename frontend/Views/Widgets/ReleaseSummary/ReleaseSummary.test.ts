@@ -258,3 +258,18 @@ describe("ReleaseSummary.svelte", () => {
         expect(screen.getByText("No tested or planned versions yet.")).toBeTruthy();
     });
 });
+
+describe("the test list counts", () => {
+    it("shows the issues and comments of each test's run", async () => {
+        const counted = { ...RELEASE, families: [{ ...RELEASE.families[0], rollup: { ...RELEASE.families[0].rollup,
+            tests: [{ ...test("upgrade", "failed", "2025.1.0~rc1"), issues: 2, comments: 3 },
+                    { ...test("gemini", "passed", "2025.1.0~rc1"), issues: 0, comments: 0 },
+                    test("pending-one", "pending", null)] } }] };
+        fetchMock.mockResolvedValue(counted);
+        render(ReleaseSummary, { props: { dashboardObject: { id: "r-1" }, dashboardObjectType: "release" } });
+        await waitFor(() => expect(screen.getByText("Updated 3 minutes ago")).toBeTruthy());
+
+        expect(await screen.findByLabelText("2 issues")).toBeTruthy();
+        expect(screen.getByLabelText("3 comments")).toBeTruthy();
+    });
+});
