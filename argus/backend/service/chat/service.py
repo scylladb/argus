@@ -3,7 +3,7 @@ from uuid import UUID, uuid1
 from argus.backend.models.chat import ChatHistory, ChatState
 from argus.backend.models.web import User
 from argus.backend.service.chat import tasks
-from argus.backend.service.chat.actions import claim, execute, locate_card, refresh_zeus
+from argus.backend.service.chat.actions import Seed, adjust_start, claim, execute, locate_card, refresh_zeus
 from argus.backend.service.chat.agent import ChatAgent
 from argus.backend.service.chat.config import ChatConfigService, ChatNotConfiguredError, ResolvedModel
 from argus.backend.service.chat.conversation import conversation_json, node_json, state_event
@@ -156,6 +156,11 @@ class ChatService:
             await self._publish_card(entity, card)
 
         tasks.spawn(run(), name=f"chat-action-{node}")
+        return await self._publish_card(entity, card)
+
+    async def adjust(self, entity: ChatEntity, node: UUID, tests: dict[str, dict[str, str]],
+                     seed: Seed | None = None) -> dict:
+        card, _ = await adjust_start(entity, node, replace=tests, seed=seed)
         return await self._publish_card(entity, card)
 
     async def dismiss(self, entity: ChatEntity, node: UUID, user: User) -> dict:

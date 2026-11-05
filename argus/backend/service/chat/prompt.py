@@ -131,6 +131,8 @@ def _result_text(kind: str, result: dict) -> str:
             return f"{result['test']} started as {started}"
         case "link_issue":
             return "the issue is linked"
+        case "edit_plan":
+            return f"the plan {result['plan']} is updated"
         case _:
             return f"{result.get('issue')} is unlinked"
 

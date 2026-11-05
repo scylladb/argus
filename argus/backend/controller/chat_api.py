@@ -1,5 +1,6 @@
 import json
 from collections.abc import AsyncIterator
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -7,6 +8,7 @@ from pydantic import BaseModel, Field
 from starlette.responses import Response, StreamingResponse
 
 from argus.backend.models.web import User, UserRoles
+from argus.backend.service.chat.actions import Seed
 from argus.backend.service.chat.entity import ChatEntity, resolve_entity
 from argus.backend.service.chat.hub import ChatHub, default_hub
 from argus.backend.service.chat.identity import ChatIdentityService
@@ -26,6 +28,12 @@ class MessageRequest(BaseModel):
 
 class HeadRequest(BaseModel):
     node: UUID
+
+
+class StartParamsRequest(BaseModel):
+    tests: dict[str, dict[str, str]]
+    seed: Literal["last_build", "defaults", "build"] | None = None
+    build_number: int | None = None
 
 
 class MemoryCreateRequest(BaseModel):
@@ -175,3 +183,10 @@ async def dismiss_action(node: UUID, entity: ChatEntity = Depends(chat_entity),
 async def refresh_action(node: UUID, entity: ChatEntity = Depends(chat_entity),
                          user: User = Depends(api_current_user)):
     return ok(await ChatService().refresh(entity, node))
+
+
+@router.post("/actions/{node}/params", name="api.chat_api.adjust_action")
+async def adjust_action(node: UUID, payload: StartParamsRequest, entity: ChatEntity = Depends(chat_entity),
+                        user: User = Depends(api_current_user)):
+    seed = Seed.of(payload.seed, payload.build_number) if payload.seed or payload.build_number else None
+    return ok(await ChatService().adjust(entity, node, payload.tests, seed))
