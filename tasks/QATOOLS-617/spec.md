@@ -25,6 +25,8 @@ runs until a user confirms the card. Findings show in the release summary.
 - **Four gunicorn workers share no memory.** The active branch, the
   generation lock, and every message live in the database. An event stream
   on one worker learns about work on another worker through the database.
+- **A graceful shutdown waits for every open response.** A reload, a
+  deploy, or a worker restart must not wait for the event streams.
 - **nginx sits in front of the event stream.** The production vhost lives in
   scylladb/qatools (`roles/argus`) and is not changed by this task. The
   stream turns proxy buffering off with the `X-Accel-Buffering: no` response
@@ -36,7 +38,8 @@ runs until a user confirms the card. Findings show in the release summary.
 - **The database enforces nothing.** One-at-a-time generation, the
   active-branch moves, and single execution of a confirmed action use
   lightweight transactions.
-- **Any logged-in user may chat, confirm an action, and edit memories.** The
+- **Any logged-in user may chat, confirm an action, and edit memories.**
+  Only an admin may clear a whole conversation. The
   existing issue and Jenkins routes check nothing more either.
 - **Endpoint tokens never leave the server.** A token stored in the database
   is encrypted.
@@ -93,8 +96,10 @@ sequenceDiagram
 
 Streams on the asker's worker get every token. Streams on other workers get
 the flushed node about every half second. A client that disconnects does
-not stop the task. A stop request sets a flag on the node, and the task
-reads the flag at each flush.
+not stop the task. A stop request records the busy node in the state row,
+and the task reads it at each flush and before it finishes. One turn can
+span several assistant nodes, so the flag names the turn's lock, not the
+node being written.
 
 A confirmed action and a compaction run the same way: the route answers at
 once, the background task publishes its progress, and every stream sees it.
@@ -148,25 +153,54 @@ The assistant node records the memories it was given, as
 | `get_summary(version?, family?, statuses?)` | the release summary, or the view's per-release summaries | — |
 | `read_release(release?)` | enabled groups and tests with `build_system_id` | — |
 | `read_view()` | the view, its releases, its plan, and its test count | — |
-| `get_runs(test, version?, limit)` | a test's recent runs in compact form (at most 20) | — |
-| `read_run(run_id)` | one run, its issues, and its last 3 comments | — |
+| `get_runs(test, version?, limit)` | a test's recent runs with the version of each, optionally of one version only (at most 20) | — |
+| `read_run(run)` | one run, its issues, its last 3 comments, and for an SCT run its CRITICAL and ERROR counts and first events | — |
+| `get_run_events(run, kind, severities, limit)` | the test's own events (SCT, by severity), or the run's activity in Argus with who did it | — |
 | `get_plan(plan?)` | the plans with tests, groups, labels and target version | — |
 | `read_memory(query?)` | the memories in scope | — |
 | `write_memory(op, memory_id?, content?, kind?, scope?)` | add, edit or delete a memory | — (can be reverted) |
-| `link_issue(run_id, url)` | link an issue to a run | card |
-| `unlink_issue(run_id, issue)` | unlink an issue from a run | card |
+| `link_issue(run, url)` | link an issue to a run | card |
+| `unlink_issue(run, issue)` | unlink an issue from a run | card |
 | `execute_tests(tests, params)` | start tests by reference | card |
 | `execute_plan_tests(plan, labels, match_all, params)` | start a plan's tests that carry the labels | card |
+| `get_users(user_ids)` | the username and full name behind user ids | — |
+| `show_run(run)` | a card that opens the run in a new tab; it needs no confirmation | card, ready |
+| `get_assignees(tests, version?)` | each test's assignee in every active plan that holds it, its own and its group's assignees, and its last run's assignee | — |
+| `investigate_runs(runs, question?)` | queue a Zeus investigation for each of 1–5 runs | card |
+| `get_investigation(run?)` | Zeus's report on a run, from the run's discussion or a chat-queued task; without a run, the state of the chat's investigations | a ready report card for a discussion report |
+| `read_discussion(run, limit)` | a run's comments with their authors; Zeus's comments marked | — |
+
+`investigate_runs` is offered only when `ZEUS_HOST` and `ZEUS_TOKEN` are
+configured. Reading reports needs no connection to Zeus.
+
+**People:** every tool names a user by username and full name instead of an
+id: run assignees, comment authors, plan owners, participants and
+assignees, and memory authors. An email address never reaches the model.
 
 **Scope:** every tool is limited to the entity. A release chat reaches its
 own tests. A view chat reaches the view's tests and, for reads, their
 releases. A run, test or plan outside that scope is refused, with the reason
 returned to the model.
 
-**Resolving a test reference:** the same order the command line tool uses:
-exact `build_system_id`, then `group/test`, then a unique test name. Plan
-labels resolve as the command line tool resolves them: a labelled group fans
-out to its enabled tests.
+**References:** a tool takes whatever the user or the model has at hand.
+Names compare without case, and an ambiguous name answers with its
+candidates.
+
+| Reference | Accepted forms |
+|---|---|
+| Release | id, name, pretty name |
+| Group | id, name, pretty name, `build_system_id`, `release/group` |
+| Test | id, name, pretty name, `build_system_id`, a Jenkins job URL, `group/test`, `release/group/test`, each part by name or pretty name |
+| Run | id, `build_id#number`, any test reference with `#number`, a Jenkins build URL |
+
+A tool that acts on tests (`execute_tests`, `get_assignees`) takes a group or
+a release for its enabled tests, at most 50. A test given where a run is
+needed answers with the test's latest build numbers. Plan labels resolve as
+the command line tool resolves them: a labelled group fans out to its enabled
+tests.
+
+**Run links:** a card links a run by its build, `/test/{build_id}/{number}`,
+and by its plugin, `/tests/{plugin}/{run_id}`, when it has no build number.
 
 ### Validating and running a start
 
@@ -189,9 +223,66 @@ flowchart TD
     CARD -->|Dismiss| DS[dismissed]
 ```
 
-The outcome becomes a `tool` node in the conversation, so the next answer
-knows which jobs started. The card follows each queue item to its build and
-links the run.
+The card keeps the outcome: who confirmed it, and each test's queue item and
+build number, or the error. The next prompt carries a done or dismissed card
+as an `[Argus]` note before the next question, so the next answer knows which
+jobs started. The card links each run as `/test/{build_system_id}/{build}`.
+
+### Queueing a Zeus investigation
+
+Zeus investigates a run when it is asked about it: `POST /investigate {prompt}`
+queues the question and answers with a task id, and Zeus works through its
+queue one question at a time, for up to 30 minutes each. Zeus finds the run
+by its id in the question and picks the matching skill.
+
+```mermaid
+sequenceDiagram
+    participant M as Model
+    participant A as Argus
+    participant U as User
+    participant Z as Zeus
+    M->>A: investigate_runs([run…], question)
+    A->>A: each run inside the chat's scope?
+    A-->>U: card: runs, the question
+    U->>A: Queue (LWT pending → running)
+    loop each run
+        A->>Z: POST /investigate {prompt}
+        Z-->>A: 202 {task_id, "queued"} or 503
+    end
+    A-->>U: card: task per run
+    loop while a task is queued or processing, and the chat is open
+        U->>A: refresh the card (every 30 s)
+        A->>Z: GET /investigate/{task_id} (at most once per 15 s per card)
+        Z-->>A: status, response or error
+        A-->>U: card: status, the report when completed
+    end
+```
+
+The prompt names the run, its test, status and version, the release, the
+chat and the asker, and adds the question when the request has one:
+
+```
+Investigate the test run 7b7fa7f2-… (Artifacts Tests/artifacts-ami-t3_micro-test, failed, 2025.1.0~rc4)
+of the release scylla-2025.1. Requested by Alice Smith from the Argus chat of scylla-2025.1.
+
+Focus on why the AMI did not boot.
+```
+
+Zeus also posts reports on its own: its Jenkins monitor investigates the
+failed builds of the jobs it watches, and posts "queued autoinvestigation"
+and then the report into the run's discussion. `get_investigation` reads
+that report: the latest comments of a Zeus account (a service user with
+"zeus" in its username), without the notice. A long report arrives as
+consecutive comments within 5 minutes; they are joined, with the pieces that
+start with `## nemesis:` after the first one, since comments carry whole
+seconds. The report shows as a ready card with the whole text, and the model
+gets the start of it to summarize.
+
+The card is the only state: its task ids, and each task's last status,
+report and error. No background job follows Zeus. A card refreshes when
+someone has the chat open, and `get_investigation` refreshes the cards it
+reads. The next prompt carries a card's outcome as an `[Argus]` note, with
+the start of a completed report.
 
 ### Failure behavior
 
@@ -199,13 +290,17 @@ links the run.
 |---|---|
 | No connection or no default model | Chat routes answer `chat not configured`, and the anchor bar says so |
 | Another generation is running | The command is refused with the asker's name. The stream already shows the running answer |
-| The stream does not connect, drops, or is buffered (no event or heartbeat for 40 s) | `EventSource` reconnects on its own; until an event arrives, the client polls `GET` every 3 s |
+| The stream does not connect, is closed for good, or is buffered (no event or heartbeat for 30 s) | `EventSource` reconnects on its own; until an event arrives, the client polls `GET` every 3 s |
+| The server shuts down or reloads | Every open stream ends at once; the clients reconnect to the next worker |
 | A lock older than 5 minutes (worker died) | The next send takes it over and marks the abandoned node `error` |
 | The endpoint fails or times out | The assistant node gets `status=error` with the message, the lock is released, and Try again works |
 | The model calls an unknown tool or sends bad arguments | The tool node carries the error and the loop continues, so the model can correct itself |
 | The tool loop reaches 8 model calls | The answer ends with a note that the limit was reached |
 | A tool raises | The error text goes back to the model as the tool result, and the turn continues |
 | Jenkins fails while confirming | The card records the error per test. The other tests still start |
+| Zeus answers 503 or fails while queueing | The card records the error for that run, with Zeus's reason. The other runs are still queued |
+| Zeus cannot be reached while refreshing | The card keeps the last known status and shows when it was last refreshed |
+| Zeus is not configured | The Zeus tools are not offered to the model |
 | A second confirm, or a confirm after dismiss | Refused by the LWT; the card shows its current state |
 | The model has no tool calling | The prompt carries the summary and memories, and no tools are sent |
 | The token cannot be decrypted (`SECRET_KEY` rotated) | The connection shows `token unreadable` in the Admin Panel, and the chat answers `chat not configured` until the token is entered again |
@@ -223,6 +318,11 @@ POST {endpoint}/chat/completions
      # stream chunks: choices[0].delta.{content, reasoning_content, tool_calls[]},
      #                choices[0].finish_reason, usage.{prompt_tokens, completion_tokens}
 Jenkins job config and last build   # parameter definitions, choices, last parameter values
+POST {ZEUS_SCHEMA}://{ZEUS_HOST}/investigate {prompt}      # Authorization: Bearer ZEUS_TOKEN
+     # 202 {task_id, status: "queued"}; 503 {detail} with Retry-After while a dependency is down
+GET  {ZEUS_SCHEMA}://{ZEUS_HOST}/investigate/{task_id}
+     # {task_id, status: queued|processing|completed|failed, prompt, response, error,
+     #  created_at, started_at, completed_at}
 ```
 
 Configuration, `argus_web.yaml`:
@@ -257,6 +357,18 @@ CREATE TABLE chat_configuration_v1 (
     PRIMARY KEY (scope, name)
 );
 
+CREATE TABLE chat_identity_v1 (
+    scope text,                          -- always 'global'
+    connection text,
+    name text,
+    picture blob,                        -- square, at most 1 MB
+    picture_type text,                   -- image/png | image/jpeg | image/gif | image/webp
+    updated_by uuid,
+    updated_at timestamp,
+    active text static,                  -- the connection whose identity the chat shows
+    PRIMARY KEY (scope, connection)
+);
+
 CREATE TABLE chat_state_v1 (
     entity_id uuid PRIMARY KEY,
     entity_type text,                    -- 'release' | 'view'
@@ -264,6 +376,7 @@ CREATE TABLE chat_state_v1 (
     busy timeuuid,                       -- assistant node being generated
     busy_user uuid,
     busy_since timestamp,
+    stop_requested timeuuid,             -- the busy node a user asked to stop
     changed_at timestamp,                -- touched by every write to the conversation
     memory_changed_at timestamp          -- touched by every memory change of this entity
 );
@@ -293,7 +406,7 @@ CREATE TABLE chat_history_v1 (
     prompt_tokens int,
     completion_tokens int,
     memory_snapshot text,                -- JSON [{memory_id, revision}]
-    status text,                         -- streaming | done | error | stopped | stop_requested
+    status text,                         -- streaming | done | error | stopped
     error text,
     hidden boolean,
     created_at timestamp,
@@ -325,10 +438,12 @@ CREATE TABLE chat_memory_revision_v1 (
     before text,
     after text,
     kind text,
+    before_kind text,
     user_id uuid,
     source text,                         -- manual | chat
     source_node timeuuid,
     reverts timeuuid,
+    created_at timestamp,
     PRIMARY KEY (entity_id, revision)
 ) WITH CLUSTERING ORDER BY (revision DESC);
 ```
@@ -345,6 +460,7 @@ event stream carries its progress.
 
 ```
 GET    ""                         -> Conversation
+DELETE ""                         -> Conversation   # admins only: clears the conversation, keeps the memories
 GET    /meta                      -> {configured, messages, last: {user_id, at} | null}
 POST   /messages {content}        -> Started   # queues a generation
 POST   /regenerate                -> Started   # retry the last answer on the active path
@@ -354,6 +470,7 @@ POST   /head {node}               -> Conversation
 POST   /stop                      -> {stopping: node}
 POST   /actions/{node}/confirm    -> Node      # state "running"; results follow on the stream
 POST   /actions/{node}/dismiss    -> Node
+POST   /actions/{node}/refresh    -> Node      # a Zeus card: re-reads its tasks from Zeus
 GET    /events                    -> text/event-stream, see below
 GET    /memories                  -> [Memory]           # own, plus releases' for a view
 POST   /memories {content, kind, scope?}         -> Memory
@@ -366,7 +483,8 @@ POST   /memories/history/{revision}/revert       -> Memory
 ```ts
 interface Started { user_node: Node | null; assistant_node: Node }
 interface Conversation {
-    entity_id: string; entity_type: "release" | "view";
+    entity_id: string; entity_type: "release" | "view"; entity_name: string;
+    scopes: { id: string; type: "release" | "view"; name: string }[];   // where a memory can live
     configured: boolean;
     model: { connection: string; model: string; context_window: number; tools: boolean } | null;
     head: string | null;
@@ -384,19 +502,25 @@ interface Node {
     action: Action | null; model_name: string | null;
     usage: { prompt_tokens: number; completion_tokens: number } | null;
     memory_snapshot: { memory_id: string; revision: string }[];
-    status: "streaming" | "done" | "error" | "stopped" | "stop_requested";
+    status: "streaming" | "done" | "error" | "stopped";
     error: string | null; hidden: boolean; created_at: string; updated_at: string;
 }
 interface Action {
-    kind: "execute_tests" | "link_issue" | "unlink_issue";
+    kind: "execute_tests" | "link_issue" | "unlink_issue" | "zeus_investigation";
     state: "pending" | "running" | "done" | "dismissed";
     proposal: { tests?: { test_id: string; name: string; group: string;
                           build_system_id: string; params: Record<string, string>;
                           overrides: Record<string, string> }[];
-                run_id?: string; test_id?: string; issue_url?: string; issue_id?: string };
+                run_id?: string; test_id?: string; issue_url?: string; issue_id?: string;
+                runs?: { run_id: string; test_id: string; test: string; status: string;
+                         version: string | null; prompt: string }[];
+                question?: string | null };
     rejected: { test: string; reason: string }[];
     confirmed_by: string | null; confirmed_at: string | null;
-    results: { build_system_id?: string; queue_item?: number; issue?: object; error?: string }[];
+    results: { build_system_id?: string; queue_item?: number; issue?: object; error?: string;
+               run_id?: string; task_id?: string | null; status?: string; response?: string | null;
+               started_at?: string | null; completed_at?: string | null }[];
+    refreshed_at?: string | null;          // a Zeus card: when its tasks were last read from Zeus
 }
 interface Memory {
     id: string; entity_id: string; entity_type: "release" | "view"; entity_name: string;
@@ -414,8 +538,9 @@ interface Revision {
 The event stream is a `GET` that `EventSource` opens with the session
 cookie, like the pages. It answers `text/event-stream` with the headers
 `Cache-Control: no-cache` and `X-Accel-Buffering: no`. Each event is one
-`data:` line holding a JSON object with a `type`. A comment line
-(`: heartbeat`) every 15 s keeps proxies from closing an idle stream.
+`data:` line holding a JSON object with a `type`. A `heartbeat` event every
+15 s keeps proxies from closing an idle stream, and tells the client the
+stream is live: `EventSource` hides comment lines from the page.
 
 ```ts
 type ServerEvent =
@@ -426,6 +551,7 @@ type ServerEvent =
   | { type: "state"; head: string | null; busy: Conversation["busy"]; context: Conversation["context"] }
   | { type: "memory"; memories: Memory[] }               // the whole list in scope, after a change
   | { type: "presence"; users: string[] }                // user ids with the chat open
+  | { type: "heartbeat" }
   | { type: "error"; message: string };
 ```
 
@@ -433,6 +559,12 @@ A `delta` appends to the node's text. A `node` event replaces the node,
 so a stream that only sees flushed nodes still converges. Every connect,
 including an automatic reconnect, starts with a fresh `snapshot`, so a
 client that missed events converges without `Last-Event-ID`.
+
+A stream lives at most 25 s. It starts with `retry: 1000`, and when it ends
+`EventSource` reconnects into a fresh snapshot. A server shutdown also ends
+every open stream at once: the app chains the server's SIGTERM and SIGINT
+handlers. A graceful shutdown waits for every open response, so an endless
+stream would hold a reload or a restart forever.
 
 #### Admin API
 
@@ -445,7 +577,15 @@ DELETE /connection/{name}         -> {deleted: name}
 GET    /connection/{name}/models  -> ProbedModel[]
 POST   /connection/{name}/test_tools {model}      -> {tools: boolean, detail: string, latency_ms: number}
 POST   /default {connection, model, context_window, tools, vision}  -> DefaultModel
+POST   /connection/{name}/identity  multipart {assistant_name, picture?, remove_picture?}  -> Identity
+DELETE /connection/{name}/identity  -> {deleted: name}
+POST   /identity/active {connection | null}  -> Identity | null
 ```
+
+`GET /connections` also returns `identities: Identity[]` and
+`active_identity: string | null`. Any logged-in user reads a picture at
+`GET /api/v1/chat/identity/{connection}/picture`, and the conversation
+carries the active identity as `assistant`.
 
 ```ts
 interface Connection { name: string; endpoint: string; source: "config" | "database";
@@ -455,6 +595,8 @@ interface ProbedModel { id: string; name: string; context_window: number | null;
                         tools: boolean | null; vision: boolean | null }   // null: unknown
 interface DefaultModel { connection: string; model: string; context_window: number;
                          tools: boolean; vision: boolean; set_by: string | null; set_at: string | null }
+interface Identity { connection: string; name: string; picture_url: string | null;
+                     updated_by: string | null; updated_at: string | null }
 ```
 
 The probe reads `context_length`, then `max_model_len`, then
@@ -560,7 +702,7 @@ class ChatEntity:
 | A small model invents parameters or test names | Every proposal is resolved and validated on the server, and nothing starts without a user's confirmation |
 | A prompt injection through run data, such as a comment or an issue title, steers the model | Tools that change Argus only propose. The card shows exactly what runs. Memory writes can be reverted and carry `source=chat` |
 | nginx buffers the stream despite the header | The heartbeat never arrives, so the client polls. The live check covers the dev server, which runs without nginx, and a production check follows the deploy |
-| Watchers poll the database: one state-row read every 0.5 s per entity with an open stream, per worker | It stops when the last local stream of the entity closes. Ten open chats on four workers are 80 single-row reads a second |
+| Watchers poll the database: one state-row read every 0.5 s per entity with an open stream, per worker, plus one read per release every 2 s for a view | One watcher serves every stream of an entity in a worker, and stops with its last stream. Ten people in one chat on four workers are at most 8 reads a second. A run with ten clients on one chat kept the other routes at their idle latency |
 | An endpoint is slow, around 30 seconds before the first token on a cold local model | No request timeout below 5 minutes on the stream. The lock covers 5 minutes. The UI shows "waiting for the model" |
 | A rotated `SECRET_KEY` makes stored tokens unreadable | Shown in the Admin Panel. The token is entered again |
 
@@ -629,3 +771,27 @@ room for each:
   entity. No message broker is added to the stack. (build)
 - The model's reasoning is stored and shown collapsed, and never sent back
   to the model. (spec)
+- A tool takes a release, group, test or run by any name, pretty name, id,
+  Jenkins path or URL, or build number the user may have; the model copies
+  what the user wrote instead of looking ids up first. (build)
+- Zeus investigations are queued from a confirmation card, up to 5 runs per
+  card, because Zeus answers one question at a time for up to 30 minutes. (build)
+- Argus reads Zeus's reports from the run discussion where Zeus already posts
+  them, and Zeus's API source stays as it is. A Zeus account is a service
+  user with "zeus" in its username, so no setting names it. (build)
+- A report from the discussion shows in full as a card, and the model gets
+  the start to summarize, so the small model never re-types a long report.
+  (build)
+- A Zeus card follows its tasks only while someone has the chat open or a
+  tool reads it, at most once per 15 s; the task ids on the card are the
+  whole state, so nothing has to survive a restart. (build)
+- An event stream ends after 25 s and on the server's shutdown signal, and
+  the client reconnects into a snapshot. An open stream otherwise held the
+  development server's reload, and with it every page. (build)
+- A confirmed card keeps its outcome on itself instead of a new node. A new
+  node would have to move the active branch while an answer may be
+  streaming. (build)
+- The assistant's name and picture belong to a connection, and one of them
+  is active for every chat. The browser crops the picture to a circle and
+  sends a 256×256 PNG; the server still checks that a picture is square and
+  at most 1 MB, reading the size from the image header. (build)
