@@ -1,5 +1,5 @@
 import logging
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 from uuid import UUID
 from coodie.exceptions import DocumentNotFound
 
@@ -22,6 +22,7 @@ class ReleaseEditPayload(TypedDict):
     enabled: bool
     perpetual: bool
     dormant: bool
+    user_editable: NotRequired[bool]
     priority: int | None
 
 
@@ -174,6 +175,13 @@ class ReleaseManagerService:
         await invalidate_release_snapshots(release.id)
         return True
 
+    async def set_release_user_editable(self, release_id: UUID, user_editable: bool) -> bool:
+        release = await ArgusRelease.get(id=release_id)
+        release.user_editable = user_editable
+        await release.save()
+        await invalidate_release_snapshots(release.id)
+        return True
+
     async def set_release_perpetuality(self, release_id: UUID, perpetual: bool) -> bool:
         release = await ArgusRelease.get(id=release_id)
         release.perpetual = perpetual
@@ -187,6 +195,7 @@ class ReleaseManagerService:
         release.perpetual = payload["perpetual"]
         release.enabled = payload["enabled"]
         release.dormant = payload["dormant"]
+        release.user_editable = payload.get("user_editable", False)
         release.description = payload["description"]
         release.valid_version_regex = payload["valid_version_regex"]
         release.priority = payload.get("priority") or 0

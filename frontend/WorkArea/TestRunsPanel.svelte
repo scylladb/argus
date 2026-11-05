@@ -26,6 +26,7 @@
             parent="#accordionTestRuns"
             removableRuns={workAreaAttached}
             on:testRunRemove
+            on:runDeleted
             on:cloneSelect={(e) => {
                 testRuns = [...testRuns, e.detail.testId];
             }}

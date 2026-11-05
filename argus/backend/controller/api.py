@@ -24,6 +24,7 @@ from argus.backend.error_handlers import APIException
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, User
 from argus.backend.rendering import url_for
 from argus.backend.service.argus_service import ArgusService, ScheduleUpdateRequest
+from argus.backend.service.release_cleanup import ReleaseCleanupService
 from argus.backend.service.results_service import ResultsService
 from argus.backend.service.stats import ReleaseStatsCollector, summarize_release_stats
 from argus.backend.service.testrun import TestRunService
@@ -325,6 +326,26 @@ async def argus_tests(group_id: UUID = Query(..., alias="groupId"),
     return APIResponse({
         "status": "ok",
         "response": result_tests
+    })
+
+
+@router.delete("/group/{group_id}", name="api.delete_group")
+async def delete_group(group_id: UUID, user: User = Depends(api_current_user)):
+    await ReleaseCleanupService().delete_group(group_id=group_id, user=user)
+
+    return APIResponse({
+        "status": "ok",
+        "response": {"deleted": group_id}
+    })
+
+
+@router.delete("/test/{test_id}", name="api.delete_test")
+async def delete_test(test_id: UUID, user: User = Depends(api_current_user)):
+    await ReleaseCleanupService().delete_test(test_id=test_id, user=user)
+
+    return APIResponse({
+        "status": "ok",
+        "response": {"deleted": test_id}
     })
 
 

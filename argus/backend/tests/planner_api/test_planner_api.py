@@ -491,7 +491,7 @@ async def test_search_without_limit_leads_with_add_all_and_returns_the_cli_field
             "build_system_id": test.build_system_id, "enabled": True, "test_metadata": {},
             "release_id": str(release.id), "group_id": str(group.id),
             "release": {"id": str(release.id), "name": release.name, "pretty_name": None, "enabled": True,
-                        "priority": 0, "dormant": False},
+                        "priority": 0, "dormant": False, "user_editable": False},
             "group": {"id": str(group.id), "name": group.name, "pretty_name": None, "enabled": True},
         },
     ]

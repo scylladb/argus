@@ -25,6 +25,7 @@ vi.mock("../../Stores/UserlistSubscriber", () => ({
     },
 }));
 
+import { sendMessage } from "../../Stores/AlertStore";
 import Sidebar from "./Sidebar.svelte";
 
 const MASTER = { id: "master-id", name: "scylla-master", pretty_name: null, enabled: true, dormant: false, priority: 10 };
@@ -59,9 +60,12 @@ const SUMMARY = {
 
 const ok = (response: unknown) => Promise.resolve({ json: () => Promise.resolve({ status: "ok", response }) });
 
-const serve = ({ stats = () => ok(SUMMARY) }: { stats?: () => Promise<unknown> } = {}) => {
-    const fetchMock = vi.fn((url: string) => {
-        if (url === "/api/v1/releases") return ok([MASTER, OLD]);
+const EDITABLE = { ...MASTER, user_editable: true };
+
+const serve = ({ stats = () => ok(SUMMARY), releases = [MASTER, OLD] }: { stats?: () => Promise<unknown>; releases?: unknown[] } = {}) => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (init?.method === "DELETE") return ok({ deleted: url.split("/").pop() });
+        if (url === "/api/v1/releases") return ok(releases);
         if (url.startsWith("/api/v1/release/stats/summary")) return stats();
         if (url.startsWith("/api/v1/groups")) return ok(GROUPS);
         if (url.startsWith("/api/v1/tests")) return ok(TESTS);
@@ -423,5 +427,94 @@ describe("Sidebar", () => {
         await fireEvent.keyDown(document.body, { key: "/" });
         expect(document.activeElement).toBe(searchInput);
         textarea.remove();
+    });
+
+    it("shows no delete buttons on a release that is not user editable", async () => {
+        serve();
+        renderSidebar();
+        await fireEvent.click(await waitFor(() => row("scylla-master")));
+        await waitFor(() => row("Longevity"));
+        expect(screen.queryByRole("button", { name: "Delete Longevity" })).toBeNull();
+
+        await fireEvent.click(row("Longevity"));
+        await waitFor(() => row("alpha-test"));
+        expect(screen.queryByRole("button", { name: "Delete alpha-test" })).toBeNull();
+    });
+
+    it("deletes a test once its name is typed, closes it and reloads the group", async () => {
+        const fetchMock = serve({ releases: [EDITABLE, OLD] });
+        const testListCalls = () => fetchMock.mock.calls.filter(([url]) => url.startsWith("/api/v1/tests")).length;
+        const { onToggleTest } = renderSidebar({ openTests: ["t2"] });
+        await fireEvent.click(await waitFor(() => row("scylla-master")));
+        await fireEvent.click(await waitFor(() => row("Longevity")));
+        await waitFor(() => row("beta-test"));
+
+        await fireEvent.click(screen.getByRole("button", { name: "Delete beta-test" }));
+        const confirm = screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement;
+        expect(confirm.disabled).toBe(true);
+        await fireEvent.input(screen.getByLabelText(/to confirm/), { target: { value: "beta-test" } });
+        expect(confirm.disabled).toBe(false);
+        await fireEvent.click(confirm);
+
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/v1/test/t2", { method: "DELETE" }));
+        expect(onToggleTest).toHaveBeenCalledWith("t2");
+        await waitFor(() => expect(testListCalls()).toBe(2));
+        expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    });
+
+    it("deletes a group by its name, not its display name", async () => {
+        const fetchMock = serve({ releases: [EDITABLE, OLD] });
+        renderSidebar();
+        await fireEvent.click(await waitFor(() => row("scylla-master")));
+        await waitFor(() => row("Longevity"));
+
+        await fireEvent.click(screen.getByRole("button", { name: "Delete Longevity" }));
+        const confirm = screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement;
+        await fireEvent.input(screen.getByLabelText(/to confirm/), { target: { value: "Longevity" } });
+        expect(confirm.disabled).toBe(true);
+        await fireEvent.input(screen.getByLabelText(/to confirm/), { target: { value: "longevity" } });
+        await fireEvent.click(confirm);
+
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/v1/group/g1", { method: "DELETE" }));
+    });
+
+    it("keeps the modal open and reports the error when the deletion fails", async () => {
+        const fetchMock = serve({ releases: [EDITABLE, OLD] });
+        fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+            if (init?.method === "DELETE") {
+                return Promise.resolve({ json: () => Promise.resolve({ status: "error", response: { arguments: ["Release scylla-master is not user editable"] } }) });
+            }
+            if (url === "/api/v1/releases") return ok([EDITABLE, OLD]);
+            if (url.startsWith("/api/v1/release/stats/summary")) return ok(SUMMARY);
+            if (url.startsWith("/api/v1/groups")) return ok(GROUPS);
+            if (url.startsWith("/api/v1/release/assignees")) return ok({});
+            return Promise.reject(new Error(`unexpected ${url}`));
+        });
+        renderSidebar();
+        await fireEvent.click(await waitFor(() => row("scylla-master")));
+        await waitFor(() => row("Longevity"));
+
+        await fireEvent.click(screen.getByRole("button", { name: "Delete Longevity" }));
+        await fireEvent.input(screen.getByLabelText(/to confirm/), { target: { value: "longevity" } });
+        await fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+        await waitFor(() => expect(sendMessage).toHaveBeenCalledWith("error", "Release scylla-master is not user editable", expect.any(String)));
+        expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy();
+    });
+
+    it("closes the open tests of a deleted group without visiting the group first", async () => {
+        const fetchMock = serve({ releases: [EDITABLE, OLD] });
+        const { onToggleTest } = renderSidebar({ openTests: ["t1", "other"] });
+        await fireEvent.click(await waitFor(() => row("scylla-master")));
+        await waitFor(() => row("Longevity"));
+
+        await fireEvent.click(screen.getByRole("button", { name: "Delete Longevity" }));
+        await fireEvent.input(screen.getByLabelText(/to confirm/), { target: { value: "longevity" } });
+        await fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/v1/group/g1", { method: "DELETE" }));
+        expect(fetchMock.mock.calls.some(([url]) => url === "/api/v1/tests?groupId=g1")).toBe(true);
+        expect(onToggleTest).toHaveBeenCalledWith("t1");
+        expect(onToggleTest).not.toHaveBeenCalledWith("other");
     });
 });
