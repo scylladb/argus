@@ -10,8 +10,8 @@ its results. Argus also compares runs of the same test.
 - **Status**: active development.
 - **Users**: ScyllaDB QA engineers and developers who track automated test
   pipelines.
-- **Stack**: Python 3.14 with FastAPI on ScyllaDB, a Svelte 5 frontend, a Go
-  command line tool, and Python AI workers.
+- **Stack**: Python 3.14 with FastAPI on ScyllaDB, a Svelte 5 frontend, and a
+  Go command line tool.
 - **Distribution**: the `argus-alm` package on PyPI, the `pytest-argus-reporter`
   package, and the `argus` CLI as a GitHub release binary.
 - **Deployment**: nginx in front of gunicorn over a unix socket, started by

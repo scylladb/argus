@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 
 import cassandra.cluster
 from fastapi import FastAPI
@@ -20,6 +21,7 @@ from argus.backend.error_handlers import (
     ui_redirect_handler,
 )
 from argus.backend.metrics import build_instrumentator, build_metrics_router
+from argus.backend.plugins.sct.events.processor import start_event_processor
 from argus.backend.rendering import register_app
 from argus.backend.service.user import UserServiceException, api_current_user
 from argus.backend.service.views import UserViewException
@@ -29,6 +31,12 @@ from argus.backend.util.logsetup import RequestLogContextMiddleware, setup_appli
 LOGGER = logging.getLogger(__name__)
 
 SESSION_LIFETIME = 31 * 24 * 60 * 60  # Flask's permanent_session_lifetime default
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.event_model_load = await start_event_processor()
+    yield
 
 
 def create_app(config=None) -> FastAPI:
@@ -58,6 +66,7 @@ def create_app(config=None) -> FastAPI:
         openapi_url=None,
         docs_url=None,
         redoc_url=None,
+        lifespan=lifespan,
     )
     app.state.config = app_config
     register_app(app)

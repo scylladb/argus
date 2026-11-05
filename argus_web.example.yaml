@@ -105,26 +105,22 @@ ZEUS_SCHEMA: http
 ZEUS_HOST: example.com:80
 ZEUS_TOKEN: your-token
 
-# Event summarization (argusAI worker). Disabled by default; read once at worker startup,
-# so changing any of these requires a worker restart. See docs/plans/archive/event-summarization.md.
+# Event summarization of unique SCT ERROR/CRITICAL events. Disabled by default; read once
+# when a gunicorn worker starts, so a change needs a reload (SIGHUP to the master).
+# See docs/plans/archive/event-summarization.md.
 EVENT_SUMMARIZATION_ENABLED: false
 # ANTHROPIC_API_KEY: your-anthropic-key      # required only when summarization is enabled
 # ANTHROPIC_BASE_URL: https://api.anthropic.com  # set for a proxy or compatible endpoint
-ANTHROPIC_SUMMARY_MODEL: claude-sonnet-5      # eval winner (argusAI/eval/baseline)
+ANTHROPIC_SUMMARY_MODEL: claude-sonnet-5      # eval winner (argus/backend/plugins/sct/events/eval/baseline)
 ANTHROPIC_SUMMARY_EFFORT: low                 # thinking depth; empty for models without effort support
-EVENT_SUMMARIZATION_MAX_CONCURRENCY: 4       # bounded executor / rate-limit guard
-# Max events waiting to be summarized before new ones are dropped. Decoupled from
-# concurrency so a burst is buffered, not lost; bounds memory if the API stalls.
+EVENT_SUMMARIZATION_MAX_CONCURRENCY: 4       # concurrent Claude calls per gunicorn worker
+# Max events per gunicorn worker waiting to be summarized before new ones are dropped.
+# Decoupled from concurrency so a burst is buffered, not lost; bounds memory if the API stalls.
 EVENT_SUMMARIZATION_MAX_BACKLOG: 1000
 # Skip events shorter than this many input tokens. Short events are readable in full, so a
 # summary saves nothing. Set 0 to summarize everything.
 EVENT_SUMMARIZATION_MIN_TOKENS: 150
-# Expose Prometheus metrics for the summarization worker on this port (0 = off). The worker
-# is a standalone process, so it serves its own /metrics endpoint (separate from the web app's).
-# Metrics are labeled by model to compare live behaviour against the eval sweep (argusAI/eval):
-# input/output tokens, compression ratio, latency, lag, and ok/failed/dropped counts.
-EVENT_SUMMARIZATION_METRICS_PORT: 9109
-# Pick which versioned prompt to use (a stem from argusAI/prompts/, e.g. v3_compact).
+# Pick which versioned prompt to use (a stem from argus/backend/plugins/sct/events/prompts/, e.g. v3_compact).
 # Also settable via the EVENT_SUMMARIZATION_PROMPT_VERSION env var. Defaults to the winner.
 # EVENT_SUMMARIZATION_PROMPT_VERSION: v3_compact
 # Or supply the full prompt text inline, which overrides the version selection above:

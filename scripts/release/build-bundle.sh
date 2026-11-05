@@ -18,14 +18,14 @@
 #
 # Layout, which is the contract with roles/argus in scylladb/qatools
 # (tasks/QATOOLS-393/spec.md here and there):
-#   argus/ argusAI/ argus_backend.py gunicorn.conf.py templates/ public/
-#             the application, the worker and their assets
+#   argus/ argus_backend.py gunicorn.conf.py templates/ public/
+#             the application and its assets
 #   scripts/migration/   the dated data migrations an operator runs by hand
 #   config/   empty; the deployment links argus_web.yaml here, the first path
 #             the application's loader tries
 #   python/   relocatable CPython. It finds its stdlib next to its own binary.
-#   lib/      every locked dependency of the web-backend and ai extras
-#   bin/      argus-web, argus-cli, argus-ai-worker. Each one resolves its own
+#   lib/      every locked dependency of the web-backend extra
+#   bin/      argus-web, argus-cli. Each one resolves its own
 #             location, so the tree works at any path and through a symlink.
 # A .pth file in python/ adds lib/ and the tree root through relative paths.
 set -euo pipefail
@@ -71,20 +71,16 @@ echo "==> Source tree"
 # git archive keeps build leftovers, caches and untracked files out of the
 # bundle. It reads the last commit, so commit before you build.
 #
-# WHAT A HOST RUNS, and nothing else: the package, the worker, the factory,
+# WHAT A HOST RUNS, and nothing else: the package, the factory,
 # gunicorn's configuration, the templates, the static tree and the dated
-# migration scripts an operator runs by hand. The test suites, the worker's
-# eval harness and its hand-written unit file describe the repository to a
-# developer and stay out. storage/ is not listed on purpose: the deployment
-# links the persistent uploads at that path, and a directory there would stop
-# it.
+# migration scripts an operator runs by hand. The test suites and the event
+# summarization eval harness describe the repository to a developer and stay
+# out. storage/ is not listed on purpose: the deployment links the persistent
+# uploads at that path, and a directory there would stop it.
 git archive --format=tar HEAD -- \
-    argus argusAI argus_backend.py gunicorn.conf.py templates public scripts/migration \
+    argus argus_backend.py gunicorn.conf.py templates public scripts/migration \
     ':(exclude)argus/backend/tests' \
-    ':(exclude)argusAI/eval' \
-    ':(exclude)argusAI/tests' \
-    ':(exclude)argusAI/deployment' \
-    ':(exclude)argusAI/logs' \
+    ':(exclude)argus/backend/plugins/sct/events/eval' \
     | tar -x -C "$BUNDLE"
 
 echo "==> Frontend"
@@ -101,9 +97,8 @@ cp -a "$PYTHON_SRC" "$BUNDLE/python"
 BUNDLE_PYTHON="$BUNDLE/python/bin/python${PYTHON_VERSION}"
 
 echo "==> Dependencies"
-# Both extras: the web application and the argusAI worker run from one tree.
 # --locked, not --frozen: frozen reads uv.lock as it is, locked also checks it
-# against pyproject.toml and fails when an extra gained a package nobody ran
+# against pyproject.toml and fails when the extra gained a package nobody ran
 # `uv lock` for — the bundle would otherwise ship without it and the import
 # would fail on the production host, past the self-check's top-level modules.
 #
@@ -113,7 +108,7 @@ echo "==> Dependencies"
 # link back to this checkout — a path that exists here and on no host.
 # --no-editable exports it as a plain path, which uv builds and installs into
 # lib/ like any other dependency.
-uv export --locked --no-dev --no-editable --no-emit-project --extra web-backend --extra ai \
+uv export --locked --no-dev --no-editable --no-emit-project --extra web-backend \
     --format requirements.txt -o "$DIST/requirements.txt"
 if grep -q '^-e ' "$DIST/requirements.txt"; then
     echo "error: the export still carries an editable requirement:" >&2
@@ -138,9 +133,7 @@ printf 'Metadata-Version: 2.1\nName: argus-alm\nVersion: %s\n' "$VERSION" \
 echo "==> Path wiring"
 SITE="$BUNDLE/python/lib/python${PYTHON_VERSION}/site-packages"
 # site-packages -> python3.13 -> lib -> python -> bundle root. The root is on
-# the path too: argus_backend.py and the argus and argusAI packages live there,
-# and argusAI has no __init__.py, so it resolves as a namespace package from
-# whatever root the path names.
+# the path too: argus_backend.py and the argus package live there.
 cat > "$SITE/argus-bundle.pth" <<'PTH'
 ../../../../lib
 ../../../..
@@ -149,29 +142,24 @@ PTH
 echo "==> Console scripts"
 mkdir -p "$BUNDLE/bin" "$BUNDLE/config"
 # Hand-written shims. `readlink -f` resolves the shim through a symlink, so
-# /opt/argus/current/bin/argus-web finds the release it lives in. The two the
-# application runs through change into the tree, because it reads
-# .argus_version and writes storage/ relative to its working directory. The
-# worker's does not: its sanitizer log lands relative to the working
-# directory, and the unit gives it a writable one of its own.
+# /opt/argus/current/bin/argus-web finds the release it lives in. Both change
+# into the tree, because the application reads .argus_version and writes
+# storage/ relative to its working directory.
 write_shim() {
-    local name="$1" enter="$2"
-    shift 2
+    local name="$1"
+    shift
     {
         printf '#!/bin/sh\n'
         printf '# Generated by scripts/release/build-bundle.sh. Do not edit.\n'
         printf 'set -eu\n'
         printf 'root=$(CDPATH= cd -- "$(dirname -- "$(readlink -f "$0")")/.." && pwd)\n'
-        if [ "$enter" = "cd" ]; then
-            printf 'cd "$root"\n'
-        fi
+        printf 'cd "$root"\n'
         printf 'exec "$root/python/bin/python%s" %s "$@"\n' "$PYTHON_VERSION" "$*"
     } > "$BUNDLE/bin/$name"
     chmod 0755 "$BUNDLE/bin/$name"
 }
-write_shim argus-web cd '-m gunicorn -c "$root/gunicorn.conf.py" '"'"'argus_backend:create_app()'"'"''
-write_shim argus-cli cd '-m argus.backend.cli'
-write_shim argus-ai-worker stay '-m argusAI.event_similarity_processor_v2'
+write_shim argus-web '-m gunicorn -c "$root/gunicorn.conf.py" '"'"'argus_backend:create_app()'"'"''
+write_shim argus-cli '-m argus.backend.cli'
 
 printf '%s\n' "$VERSION" > "$BUNDLE/VERSION"
 git rev-parse HEAD > "$BUNDLE/COMMIT"
@@ -209,7 +197,8 @@ rm -f \
     "$BUNDLE/python/bin"/2to3* \
     "$BUNDLE/python/bin"/*-config
 # Dependency test suites. Nothing imports them, and the self-check below is
-# what proves that: it imports the application and the worker after this runs.
+# what proves that: it imports the application and the event processor after
+# this runs.
 find "$BUNDLE/lib" -type d \( -name tests -o -name testing \) -prune \
     -exec rm -rf {} + 2>/dev/null || true
 # Debug symbols are dead weight in production — but only the interpreter's
@@ -223,7 +212,7 @@ echo "==> Bytecode"
 # The release tree is read-only on the host, so Python cannot write bytecode
 # there: whatever is compiled here is the only bytecode there will be, and
 # every worker start would otherwise recompile the tree from source.
-"$BUNDLE_PYTHON" -m compileall -q -j 0 "$BUNDLE/argus" "$BUNDLE/argusAI" "$BUNDLE/lib" >/dev/null
+"$BUNDLE_PYTHON" -m compileall -q -j 0 "$BUNDLE/argus" "$BUNDLE/lib" >/dev/null
 
 echo "==> Self-check"
 # From another path than the build path, so an absolute path baked into the
@@ -239,8 +228,8 @@ mv "$BUNDLE" "$RELOCATED"
     echo "argus-cli        : ok"
     "$RELOCATED/python/bin/python${PYTHON_VERSION}" -c "
 import sys
-import argus_backend, argusAI.event_similarity_processor_v2
-import cassandra, coodie, onnxruntime, tokenizers, gunicorn, uvicorn
+import argus_backend, argus.backend.plugins.sct.events.processor
+import anthropic, cassandra, coodie, onnxruntime, tiktoken, tokenizers, gunicorn, uvicorn
 # What the gunicorn master runs as the health process, and the package it
 # imports. A link back to the build checkout would resolve here only if this
 # tree had not moved, which is why the check runs from the relocated path.
@@ -252,7 +241,7 @@ assert argus_version() == '$VERSION', repr(argus_version())
 print('health version   :', argus_version())
 print('python           :', sys.version.split()[0])
 print('argus_backend    :', argus_backend.__file__)
-print('argusAI worker   :', argusAI.event_similarity_processor_v2.__file__)
+print('event processor  :', argus.backend.plugins.sct.events.processor.__file__)
 print('qatools_health   :', qatools_health.__file__)
 "
     [ -f "$RELOCATED/public/dist/main.bundle.js" ] || { echo "error: the built frontend is not in the bundle" >&2; exit 1; }

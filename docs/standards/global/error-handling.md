@@ -31,7 +31,7 @@ State what the user can do. Never put a traceback, a host name or a credential
 in a response.
 
 ### Graceful Degradation
-A failure in Jira, GitHub, Jenkins or the AI worker must not fail a run view.
+A failure in Jira, GitHub, Jenkins or the event processing must not fail a run view.
 Show the run without the linked issue.
 
 ### Retry with Backoff

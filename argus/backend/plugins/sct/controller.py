@@ -2,10 +2,11 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, Query
 from pydantic import BaseModel, Field
 
 from argus.backend.models.web import User
+from argus.backend.plugins.sct.events.processor import get_event_processor
 from argus.backend.plugins.sct.service import SCTService, SCTServiceException
 from argus.backend.plugins.sct.testrun import SCTEventSeverity
 from argus.backend.service.user import api_current_user
@@ -265,17 +266,19 @@ async def sct_events_count_by_severity(run_id: UUID, severity: SCTEventSeverity,
 
 
 @router.post("/{run_id}/event/submit", name="api.client_api.sct_api.sct_event_submit")
-async def sct_event_submit(run_id: UUID, payload: EventSubmitRequest,
-                     user: User = Depends(api_current_user)):
+async def sct_event_submit(run_id: UUID, payload: EventSubmitRequest, background_tasks: BackgroundTasks,
+                           user: User = Depends(api_current_user)):
     """
         Submit an event or a collection of events
     """
     event_data = payload.data
     events = event_data if isinstance(event_data, list) else [event_data]
-    result = await SCTService.submit_events(run_id=run_id, raw_events=events)
+    queued = await SCTService.submit_events(run_id=run_id, raw_events=events)
+    if queued:
+        background_tasks.add_task(get_event_processor().process, queued)
     return APIResponse({
         "status": "ok",
-        "response": result
+        "response": True
     })
 
 

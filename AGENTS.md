@@ -13,7 +13,8 @@ FastAPI application through `create_app()`. Shared helpers sit in
 `argus/common`. The client library and its CLI entry points are under
 `argus/client`. Frontend sources are in `frontend/`, built into `public/dist`,
 and the Jinja templates stay in `templates/`. The Go command line tool lives in
-`cli/`, and the AI workers in `argusAI/`. Test suites are grouped in
+`cli/`. The SCT event embedding, deduplication and summarization live in
+`argus/backend/plugins/sct/events/`. Test suites are grouped in
 `argus/backend/tests`, `argus/client/tests`, `pytest-argus-reporter/tests` and
 `cli/`.
 

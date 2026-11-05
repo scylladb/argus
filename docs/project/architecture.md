@@ -112,19 +112,23 @@ worker keeps in memory. A request rebuilds it from three table scans once it is
   Manager or `pass` on Linux. The tool manages `cloudflared` for Cloudflare
   Access.
 
-### AI workers
+### SCT event processing
 
-- **Location**: `argusAI/`
+- **Location**: `argus/backend/plugins/sct/events/`
 - **Purpose**: makes large event sets readable.
-- **Similarity**: `event_similarity_processor_v2.py` embeds SCT `ERROR` and
-  `CRITICAL` events with BGE-Small-EN, 384 dimensions. It writes one table per
-  severity.
-- **Summarization**: `utils/summary_dispatcher.py` calls Claude through the
-  `anthropic` client. `ANTHROPIC_SUMMARY_MODEL` names the model and
-  `ANTHROPIC_API_KEY` authenticates it. A token count gates each call through
-  `EVENT_SUMMARIZATION_MIN_TOKENS`, default 250. `EVENT_SUMMARIZATION_ENABLED`
-  and `EVENT_SUMMARIZATION_PROMPT_VERSION` control the rest. Four workers run
-  at once by default.
+- **Trigger**: the SCT event submit route runs the processor as a FastAPI
+  background task after it answers. The `sct_unprocessed_events` row of each
+  `ERROR` and `CRITICAL` event stays until the processor handles it, and
+  `cli.py process-event-queue`, on a maintenance timer, picks up the rows a
+  background task did not finish.
+- **Similarity**: `processor.py` embeds the events with BGE-Small-EN, 384
+  dimensions, marks duplicates within a run and writes one table per severity.
+- **Summarization**: `summary_dispatcher.py` calls Claude through the
+  `anthropic` client for each unique event. `ANTHROPIC_SUMMARY_MODEL` names the
+  model and `ANTHROPIC_API_KEY` authenticates it. A token count gates each call
+  through `EVENT_SUMMARIZATION_MIN_TOKENS`, default 150.
+  `EVENT_SUMMARIZATION_ENABLED` and `EVENT_SUMMARIZATION_PROMPT_VERSION`
+  control the rest. Four calls run at once per gunicorn worker by default.
 - **Evaluation**: `eval/` holds the baseline, the metrics, the judge, the
   dedup step and the pricing model.
 
@@ -145,7 +149,8 @@ worker keeps in memory. A request rebuilds it from three table scans once it is
    ScyllaDB has no joins, so a read needs no second query.
 4. `cli.py scan-jenkins` reads job and build data from Jenkins.
 5. `cli.py refresh-issues` refreshes the linked Jira and GitHub issues.
-6. The AI workers read new events, embed them and write summaries.
+6. After the SCT event route answers, a background task embeds the new
+   `ERROR` and `CRITICAL` events, marks duplicates and writes summaries.
 7. The browser loads a page template, the bundle for that page fetches from
    the REST API, and the Svelte components render the result.
 
@@ -184,7 +189,8 @@ rules follow.
   on the health process and set its listener. `HEALTH_NGINX_URL` sets the
   URL of the nginx probe. `HEALTH_TOKEN` is the key that `/health` and
   `/metrics` of the health process require.
-- Environment variables control the AI workers.
+- The `EVENT_SUMMARIZATION_*` and `ANTHROPIC_*` keys in `argus_web.yaml`
+  control event summarization.
 
 Never commit a secret. `dev-db/` provides a local database, so no test needs a
 production endpoint.
@@ -193,8 +199,8 @@ production endpoint.
 
 nginx accepts the request. It passes the request over a unix socket to
 gunicorn, which runs 4 uvicorn workers. systemd starts the service. Prometheus
-scrapes the metrics endpoint. The argusAI worker runs as its own systemd
-service from the same release.
+scrapes the metrics endpoint. A systemd timer runs `argus-cli
+process-event-queue` from the same release.
 
 When `HEALTH_ENABLED` is true, the gunicorn master starts the health process
 on `when_ready` and stops it on `on_exit` through a pipe that only the master
