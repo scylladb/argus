@@ -18,7 +18,11 @@ Each answer is built from:
 - a set of tools that read Argus
 
 Tools that change Argus outside the memories propose an action card. Nothing
-runs until a user confirms the card. Findings show in the release summary.
+runs until a user confirms the card, or until the asker's Auto mode confirms
+it. Findings show in the release summary.
+
+Administrators extend the chat: MCP servers add tools, skills add prompt
+text, and the system prompt itself can be edited.
 
 ## Constraints
 
@@ -161,8 +165,14 @@ The assistant node records the memories it was given, as
 | `write_memory(op, memory_id?, content?, kind?, scope?)` | add, edit or delete a memory | — (can be reverted) |
 | `link_issue(run, url)` | link an issue to a run | card |
 | `unlink_issue(run, issue)` | unlink an issue from a run | card |
-| `execute_tests(tests, params)` | start tests by reference | card |
-| `execute_plan_tests(plan, labels, match_all, params)` | start a plan's tests that carry the labels | card |
+| `execute_tests(tests, params, per_test?, seed?, build_number?)` | start tests by reference | card |
+| `execute_plan_tests(plan, labels, match_all, params, per_test?, seed?, dry_run?)` | start a plan's tests that carry the labels; `dry_run` only lists them | card, none on a dry run |
+| `get_job_params(test, seed?, build_number?)` | a job's parameters with their values, choices and descriptions | — |
+| `adjust_run_params(card?, tests?, set, unset, seed?)` | change the parameters of a pending start card | — (rewrites the pending card) |
+| `get_plan_labels(plan)` | every label of a plan with the tests and groups that carry it | — |
+| `edit_plan(plan, …changes)` | add or remove tests, remove groups, assign, unassign, add or remove labels, rename, set the target version or the description, mark completed | card |
+| `load_skill(name)` | the text of an on-demand skill; offered only when one exists | — |
+| `mcp_<server>__<tool>(…)` | a tool of an enabled MCP server, with the server's own schema | — or card, as the admin set it |
 | `get_users(user_ids)` | the username and full name behind user ids | — |
 | `show_run(run)` | a card that opens the run in a new tab; it needs no confirmation | card, ready |
 | `get_assignees(tests, version?)` | each test's assignee in every active plan that holds it, its own and its group's assignees, and its last run's assignee | — |
@@ -284,6 +294,87 @@ someone has the chat open, and `get_investigation` refreshes the cards it
 reads. The next prompt carries a card's outcome as an `[Argus]` note, with
 the start of a completed report.
 
+### Adjusting a start
+
+A start resolves each test's parameters from a **seed**: the last build (the
+default), the job's configured defaults, or a given build number. The
+overrides apply on top: one set for every test, then each test's own.
+
+An override that sets a version source of an SCT job blanks the other
+families' keys, as the command line tool does. A version taken from the last
+build therefore does not clash with a new `scylla_version`.
+
+An SCT job is also checked against the rules of the SCT parameter wizard on
+the run page (`frontend/TestRun/Jenkins/SCTParameterWizard.svelte`), kept
+on the server in one table so the chat and the card use the same rules:
+- `backend` is one of the known backends. The region parameter of its group
+  (`region`, `gce_datacenter`, `azure_region_name`, `oci_region_name`) takes
+  a supported region, and is filled with the first one when a new backend
+  leaves it empty.
+- `provision_type` and the `post_behavior_*` parameters take their known
+  values.
+- Exactly one version source is set, in its format: a version or
+  `branch:latest`, a repository URL, an AMI, a GCE, Azure or OCI image, a
+  rolling upgrade's repository, or a BYO repository and branch that exist on
+  GitHub.
+- An empty `email_recipients` becomes `qa@scylladb.com`.
+
+`get_job_params` returns an SCT job's parameters in the wizard's groups,
+with the allowed values of each, so the model proposes values that pass.
+
+A pending start card can change before anyone confirms it. The model calls
+`adjust_run_params`, or a user edits the overrides in the card. Both
+recompute every test through the same checks and rewrite the card with an
+LWT on `action_state = pending`. A card already confirmed cannot change.
+
+### Editing a plan
+
+`edit_plan` turns its changes into the planner's update diff, with the
+command line tool's rules:
+- Labels give each entity's final set: added and kept labels are set, and an
+  entity left without labels has its options removed.
+- Assigning a test adds it to the plan.
+- The participants become the final assignees minus the owner.
+- An edit that leaves the plan with no tests and no groups is refused.
+
+The card shows the changes line by line and keeps the plan's `last_updated`.
+Confirming applies the diff through the planner service, unless the plan
+changed since the proposal; then the card fails and the model is asked to
+propose again.
+
+### MCP servers
+
+An administrator registers an MCP server by URL, over streamable HTTP or
+SSE, with optional headers that are stored encrypted. Probing the server
+stores its tool list. Each tool is switched `off`, `direct`, or `confirm`;
+a new tool starts `off`.
+
+The chat offers the enabled tools of the enabled servers, from the stored
+list, as `mcp_<server>__<tool>`. A `direct` tool runs at once, and its text
+result goes back to the model. A `confirm` tool proposes an `mcp_call` card;
+confirming it runs the tool once and keeps the result on the card.
+
+### Skills and the system prompt
+
+A skill is a named piece of prompt text with a description and a mode:
+- `always`: its text joins every system prompt.
+- `on_demand`: the prompt lists its name and description, and the model
+  loads the text with `load_skill`.
+- `off`.
+
+The system prompt is a template. An administrator may replace it, and reset
+it to the default. A template must keep the `tool_rules`, `scope`,
+`memories` and `summary` placeholders and use no unknown one; `skills` is
+optional and is appended when missing.
+
+### Auto mode
+
+A user may send a question in Auto mode. A card proposed while answering
+that question is confirmed at once as the asker, with the same LWT as a
+manual confirm, and runs inside the answer. The model receives the outcome
+as the tool result. The card says that it was confirmed automatically. Other
+users' questions are not affected.
+
 ### Failure behavior
 
 | Condition | Behavior |
@@ -303,6 +394,10 @@ the start of a completed report.
 | Zeus is not configured | The Zeus tools are not offered to the model |
 | A second confirm, or a confirm after dismiss | Refused by the LWT; the card shows its current state |
 | The model has no tool calling | The prompt carries the summary and memories, and no tools are sent |
+| A parameter change on a card that is no longer pending | Refused by the LWT; the card shows its current state |
+| The plan changed between an `edit_plan` proposal and its confirmation | The card fails with that reason, and the plan stays as it was |
+| An MCP server cannot be reached, or a call times out after 30 s | The tool result carries the error, and the turn continues |
+| An edited system prompt drops a required placeholder or uses an unknown one | Refused when saved, with the placeholder named |
 | The token cannot be decrypted (`SECRET_KEY` rotated) | The connection shows `token unreadable` in the Admin Panel, and the chat answers `chat not configured` until the token is entered again |
 
 ## Contracts
@@ -409,10 +504,40 @@ CREATE TABLE chat_history_v1 (
     status text,                         -- streaming | done | error | stopped
     error text,
     hidden boolean,
+    auto boolean,                        -- an assistant node answering in Auto mode
     created_at timestamp,
     updated_at timestamp,
     PRIMARY KEY (entity_id, node)
 ) WITH CLUSTERING ORDER BY (node ASC);
+
+CREATE TABLE chat_mcp_server_v1 (
+    scope text,                          -- always 'global'
+    name text,
+    url text,
+    transport text,                      -- streamable_http | sse
+    headers_encrypted text,              -- Fernet, JSON {header: value}
+    enabled boolean,
+    catalog text,                        -- JSON [{name, description, input_schema}]
+    tool_modes text,                     -- JSON {tool: off | direct | confirm}
+    probed_at timestamp,
+    updated_by uuid,
+    updated_at timestamp,
+    PRIMARY KEY (scope, name)
+);
+
+CREATE TABLE chat_skill_v1 (
+    scope text,                          -- always 'global'
+    name text,
+    description text,
+    content text,
+    mode text,                           -- always | on_demand | off
+    updated_by uuid,
+    updated_at timestamp,
+    system_template text static,         -- null: the default template
+    template_updated_by uuid static,
+    template_updated_at timestamp static,
+    PRIMARY KEY (scope, name)
+);
 
 CREATE TABLE chat_memory_v1 (
     entity_id uuid,
@@ -462,8 +587,8 @@ event stream carries its progress.
 GET    ""                         -> Conversation
 DELETE ""                         -> Conversation   # admins only: clears the conversation, keeps the memories
 GET    /meta                      -> {configured, messages, last: {user_id, at} | null}
-POST   /messages {content}        -> Started   # queues a generation
-POST   /regenerate                -> Started   # retry the last answer on the active path
+POST   /messages {content, auto?} -> Started   # queues a generation
+POST   /regenerate {auto?}        -> Started   # retry the last answer on the active path
 POST   /compact                   -> Started
 POST   /undo                      -> Conversation
 POST   /head {node}               -> Conversation
@@ -471,6 +596,7 @@ POST   /stop                      -> {stopping: node}
 POST   /actions/{node}/confirm    -> Node      # state "running"; results follow on the stream
 POST   /actions/{node}/dismiss    -> Node
 POST   /actions/{node}/refresh    -> Node      # a Zeus card: re-reads its tasks from Zeus
+POST   /actions/{node}/params {tests: {test_id: overrides}, seed?}  -> Node   # a pending start card
 GET    /events                    -> text/event-stream, see below
 GET    /memories                  -> [Memory]           # own, plus releases' for a view
 POST   /memories {content, kind, scope?}         -> Memory
@@ -521,7 +647,11 @@ interface Action {
                run_id?: string; task_id?: string | null; status?: string; response?: string | null;
                started_at?: string | null; completed_at?: string | null }[];
     refreshed_at?: string | null;          // a Zeus card: when its tasks were last read from Zeus
+    auto?: boolean;                        // confirmed by the asker's Auto mode
 }
+// kind "edit_plan":  proposal {plan_id, plan, last_updated, diff: PlanDiffPayload, summary: string[]}
+// kind "mcp_call":   proposal {server, tool, arguments}; results [{text, error}]
+// kind "execute_tests" proposal tests also carry {seed, fields: [{name, value, choices?, group?}]}
 interface Memory {
     id: string; entity_id: string; entity_type: "release" | "view"; entity_name: string;
     kind: "note" | "finding"; content: string; revision: string;
@@ -580,6 +710,26 @@ POST   /default {connection, model, context_window, tools, vision}  -> DefaultMo
 POST   /connection/{name}/identity  multipart {assistant_name, picture?, remove_picture?}  -> Identity
 DELETE /connection/{name}/identity  -> {deleted: name}
 POST   /identity/active {connection | null}  -> Identity | null
+GET    /mcp                       -> McpServer[]
+POST   /mcp/server {name, url, transport, headers?, enabled}  -> McpServer   # no headers keeps the old ones
+DELETE /mcp/server/{name}         -> {deleted: name}
+POST   /mcp/server/{name}/probe   -> McpServer   # lists the server's tools now
+POST   /mcp/server/{name}/tools {modes: {tool: "off" | "direct" | "confirm"}}  -> McpServer
+GET    /prompt                    -> {template, default, placeholders, required, updated_by, updated_at}
+PUT    /prompt {template}         -> same
+DELETE /prompt                    -> same      # back to the default template
+GET    /skills                    -> Skill[]
+POST   /skill {name, description, content, mode}  -> Skill   # upsert
+DELETE /skill/{name}              -> {deleted: name}
+```
+
+```ts
+interface McpServer { name: string; url: string; transport: "streamable_http" | "sse"; enabled: boolean;
+                      headers: string[];               // header names only; values never leave the server
+                      tools: { name: string; description: string; mode: "off" | "direct" | "confirm" }[];
+                      probed_at: string | null; updated_by: string | null; updated_at: string | null }
+interface Skill { name: string; description: string; content: string; mode: "always" | "on_demand" | "off";
+                  updated_by: string | null; updated_at: string | null }
 ```
 
 `GET /connections` also returns `identities: Identity[]` and
@@ -802,3 +952,17 @@ room for each:
   is active for every chat. The browser crops the picture to a circle and
   sends a 256×256 PNG; the server still checks that a picture is square and
   at most 1 MB, reading the size from the image header. (build)
+- The chat reaches further only through what an administrator turns on: MCP
+  tools are off until switched on one by one, and each runs directly or
+  through a card. Skills and the system prompt are edited in the Admin
+  Panel, and an edited prompt keeps the placeholders that carry the data
+  and the tool rules. (spec)
+- Plan edits from the chat go through a card that applies the planner's
+  update diff, with the command line tool's rules for labels, assignees and
+  participants; creating, copying and deleting plans stay in the planner.
+  (spec)
+- Start parameters follow the command line tool's seeds and version-source
+  normalisation and the SCT parameter wizard's rules, so a start from the
+  chat, the command line and the run page agree. (spec)
+- Auto mode is a choice of the asker, per question; it never confirms a card
+  for anyone else's question. (spec)
