@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from starlette.responses import RedirectResponse, Response
 
 from argus.backend.controller import (
+    chat_api,
     client_api,
     cost_api,
     health_api,
@@ -35,6 +36,8 @@ from argus.backend.util.encoders import APIResponse
 LOGGER = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1")
+router.include_router(chat_api.identity_router)
+router.include_router(chat_api.router)
 router.include_router(client_api.router)
 router.include_router(cost_api.router)
 router.include_router(health_api.router)

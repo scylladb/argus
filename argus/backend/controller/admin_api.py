@@ -3,11 +3,12 @@ from dataclasses import asdict
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, File, Form, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from argus.backend.models.web import User, UserRoles
 from argus.backend.service.chat.config import ChatConfigService, DefaultModel
+from argus.backend.service.chat.identity import PICTURE_LIMIT, ChatIdentityService, identity_json
 from argus.backend.service.release_manager import ReleaseManagerService
 from argus.backend.service.tunnel_service import TunnelService
 from argus.backend.service.user import UserService, require_roles
@@ -477,6 +478,10 @@ class ChatToolTestRequest(BaseModel):
     model: str = Field(min_length=1)
 
 
+class ChatActiveIdentityRequest(BaseModel):
+    connection: str | None = None
+
+
 class ChatDefaultRequest(BaseModel):
     connection: str = Field(min_length=1)
     model: str = Field(min_length=1)
@@ -488,11 +493,14 @@ class ChatDefaultRequest(BaseModel):
 @router.get("/chat/connections", name="admin.admin_api.chat_connections")
 async def chat_connections(user: User = Depends(admin_user)):
     connections, default = await ChatConfigService().connections()
+    identities, active = await ChatIdentityService().identities()
     return APIResponse({
         "status": "ok",
         "response": {
             "connections": [asdict(connection) for connection in connections],
             "default": asdict(default) if default else None,
+            "identities": [identity_json(identity) for identity in identities],
+            "active_identity": active,
         },
     })
 
@@ -506,6 +514,7 @@ async def chat_save_connection(payload: ChatConnectionRequest, user: User = Depe
 @router.delete("/chat/connection/{name}", name="admin.admin_api.chat_delete_connection")
 async def chat_delete_connection(name: str, user: User = Depends(admin_user)):
     await ChatConfigService().delete_connection(name)
+    await ChatIdentityService().delete(name)
     return APIResponse({"status": "ok", "response": {"deleted": name}})
 
 
@@ -525,3 +534,23 @@ async def chat_test_tools(name: str, payload: ChatToolTestRequest, user: User = 
 async def chat_set_default(payload: ChatDefaultRequest, user: User = Depends(admin_user)):
     default = await ChatConfigService().set_default(DefaultModel(**payload.model_dump()), user)
     return APIResponse({"status": "ok", "response": asdict(default)})
+
+
+@router.post("/chat/connection/{name}/identity", name="admin.admin_api.chat_save_identity")
+async def chat_save_identity(name: str, assistant_name: str = Form(...), picture: UploadFile | None = File(None),
+                             remove_picture: bool = Form(False), user: User = Depends(admin_user)):
+    data = await picture.read(PICTURE_LIMIT + 1) if picture else None
+    identity = await ChatIdentityService().save(name, assistant_name, data, remove_picture, user)
+    return APIResponse({"status": "ok", "response": identity_json(identity)})
+
+
+@router.delete("/chat/connection/{name}/identity", name="admin.admin_api.chat_delete_identity")
+async def chat_delete_identity(name: str, user: User = Depends(admin_user)):
+    await ChatIdentityService().delete(name)
+    return APIResponse({"status": "ok", "response": {"deleted": name}})
+
+
+@router.post("/chat/identity/active", name="admin.admin_api.chat_set_active_identity")
+async def chat_set_active_identity(payload: ChatActiveIdentityRequest, user: User = Depends(admin_user)):
+    identity = await ChatIdentityService().set_active(payload.connection)
+    return APIResponse({"status": "ok", "response": identity_json(identity)})

@@ -19,6 +19,7 @@ from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.release_summary import ROLLUP_VERSION, ReleaseSummary
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, ArgusTestRunComment
 from argus.backend.plugins.loader import all_plugin_models
+from argus.backend.service.chat.memory import ChatMemoryService
 from argus.backend.service.views import UserViewService
 from argus.backend.util.common import chunk, gather_limited, select_rows
 from argus.common.enums import TestStatus
@@ -405,7 +406,9 @@ class ReleaseSummaryService:
                 LOGGER.exception("Failed to recompute the release summary of %s", release_id)
                 if not stored:
                     raise
-        return self._response(release, await refresh_trackers(summaries), generated_at, stale, test_ids)
+        response = self._response(release, await refresh_trackers(summaries), generated_at, stale, test_ids)
+        response["findings"] = await ChatMemoryService.findings(release_id)
+        return response
 
     async def get_for_view(self, view_id: UUID, wait: bool = False) -> dict:
         tests = await UserViewService().resolve_view_tests(view_id)
@@ -414,7 +417,8 @@ class ReleaseSummaryService:
             if test.release_id:
                 by_release[test.release_id].add(test.id)
         releases = [await self.get(release_id, test_ids, wait=wait) for release_id, test_ids in by_release.items()]
-        return {"releases": sorted(releases, key=lambda release: release["release_name"])}
+        return {"releases": sorted(releases, key=lambda release: release["release_name"]),
+                "findings": await ChatMemoryService.findings(view_id)}
 
     @staticmethod
     async def _read(release_id: UUID) -> tuple[dict[tuple[str, str], Summary], datetime | None, datetime | None]:
