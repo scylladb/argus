@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { ResultsRoutes } from "../Common/ResultsRoutes";
     import { createBubbler, stopPropagation } from 'svelte/legacy';
 
     const bubble = createBubbler();
@@ -63,7 +64,7 @@
     async function fetchTestResults(testId: string) {
         try {
             const params = queryString.stringify({testId: testId, startDate, endDate});
-            const res = await fetch(`/api/v1/test-results?${params}`);
+            const res = await fetch(`${ResultsRoutes.test}?${params}`);
             if (res.status !== 200) throw new Error(`HTTP Error ${res.status}`);
 
             const data = await res.json();
@@ -125,7 +126,7 @@
             description: form.description,
         };
         try {
-            const res = await fetch("/api/v1/create-graph-view", {
+            const res = await fetch(ResultsRoutes.createGraphView, {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
                 body: JSON.stringify(payload),
@@ -157,7 +158,7 @@
         };
 
         try {
-            const res = await fetch("/api/v1/update-graph-view", {
+            const res = await fetch(ResultsRoutes.updateGraphView, {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
                 body: JSON.stringify(payload),

@@ -5,7 +5,7 @@ from uuid import UUID
 from argus.backend.models.run_cost_rollup import RunCostRollup
 from argus.backend.models.web import ArgusTest
 from argus.backend.service.client_service import ClientService
-from argus.backend.tests.conftest import get_fake_test_run
+from argus.backend.tests.util import get_fake_test_run
 
 
 async def submitted_run(client_service: ClientService, fake_test: ArgusTest,

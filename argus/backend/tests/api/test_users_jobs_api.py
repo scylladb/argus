@@ -22,7 +22,8 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
-from argus.backend.tests.conftest import g, get_fake_test_run
+from argus.backend.tests.conftest import g
+from argus.backend.tests.util import get_fake_test_run
 
 from coodie.aio import execute_raw
 
