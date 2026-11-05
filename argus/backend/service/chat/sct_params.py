@@ -53,6 +53,7 @@ FORMATS = {
     "byo_scylla_repo": (re.compile(r"^git@github\.com:[\w-]+/[\w-]+\.git$"), "git@github.com:<user>/<repo>.git"),
 }
 BYO_BRANCH = "byo_scylla_branch"
+HTML_TAG = re.compile(r"<[^>]+>")
 EMAIL_DEFAULT = "qa@scylladb.com"
 FIELD_GROUPS = {
     "environment": ("backend", "region", "gce_datacenter", "azure_region_name", "oci_region_name",
@@ -132,7 +133,7 @@ def fields(params: dict[str, str], job: list[dict], sct: bool) -> list[dict]:
         entry = {"name": name, "value": params.get(name, param.get("value")), "group": group_of.get(name, "other")}
         if choices := param.get("choices") or (sct and allowed_values(name, params)):
             entry["choices"] = list(choices)
-        if description := (param.get("description") or "").strip():
+        if description := HTML_TAG.sub("", param.get("description") or "").strip():
             entry["description"] = description[:160]
         result.append(entry)
     order = list(FIELD_GROUPS) + ["other"]

@@ -22,6 +22,8 @@ TOOL_RULES = """- Use the tools to look things up before you answer. Prefer one 
 - Starting tests, and linking or unlinking issues, only proposes the change.
   Argus shows the proposal to the users as a card, and nothing happens until
   one of them confirms it. Tell the user to confirm the card.
+- To change the parameters of a start that waits for confirmation, call
+  adjust_run_params; do not propose the start again.
 - Use write_memory when a user asks you to remember a convention, or to add
   a finding to the release summary (kind "finding").
 - Tools named mcp_... come from servers outside Argus. Those whose
