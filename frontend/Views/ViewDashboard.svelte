@@ -55,6 +55,28 @@
         }
     };
 
+    const handleSummaryTestClick = function (test, event) {
+        const group = Object.values(stats)
+            .map((bucket: any) => bucket?.groups?.[test.group_id])
+            .find((candidate: any) => candidate?.tests?.[test.test_id]);
+        const entry = group?.tests?.[test.test_id];
+        if (!entry) {
+            sendMessage("info", `The test "${test.test_name}" is not in a test dashboard of this view.`,
+                "ViewDashboard::summaryTestClick");
+            return;
+        }
+        handleTestClick({
+            name: entry.test.name,
+            id: entry.test.id,
+            assignees: [],
+            group: group.group.name,
+            status: entry.status,
+            start_time: entry.start_time,
+            last_runs: entry.last_runs,
+            build_system_id: entry.test.build_system_id,
+        });
+    };
+
     const resolveViewTests = async function() {
         if (resolvedTests.length > 0) {
             return resolvedTests;
@@ -156,6 +178,7 @@
                         bind:stats={stats[calculateWidgetStatsKey(widget)]}
                         bind:productVersion={versionDispatch[calculateWidgetVersionKey(widget)]}
                         bind:clickedTests={clickedTests}
+                        onTestClick={widget.type === "releaseSummary" ? handleSummaryTestClick : undefined}
                         on:statsUpdate
                         on:testClick={(e) => handleTestClick(e.detail)}
                         on:versionChange
