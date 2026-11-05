@@ -20,6 +20,7 @@ from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
+from argus.backend.models.release_summary import mark_release_summary_stale
 from argus.backend.models.web import ArgusEventTypes, CriticalEventEmbeddings, ErrorEventEmbeddings, User
 from argus.backend.models.argus_ai import SCTErrorEventEmbedding, SCTCriticalEventEmbedding
 from argus.backend.plugins.sct.testrun import (
@@ -133,6 +134,9 @@ class SCTService:
             # An empty list reads back as null, so the condition compares against null.
             result = await run.update(if_conditions={"packages": stored or None}, **updates)
             if result.applied:
+                if "scylla_version" in updates:
+                    await run.index_version()
+                    await mark_release_summary_stale(run.release_id)
                 return "added"
             LOGGER.info("Run %s packages changed during the submission, retrying", run_id)
         raise SCTServiceException("Concurrent package submissions did not settle", run_id)
@@ -214,6 +218,7 @@ class SCTService:
                     "gemini_status": run.gemini_status,
                 }, user_id=user.id, run_id=run_id, release_id=run.release_id, test_id=run.test_id)
                 await run.save()
+                await mark_release_summary_stale(run.release_id)
         except DocumentNotFound as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
@@ -308,6 +313,7 @@ class SCTService:
             if regression_found:
                 run.status = TestStatus.FAILED.value
                 await run.save()
+                await mark_release_summary_stale(run.release_id)
                 await EventService.create_run_event(kind=ArgusEventTypes.TestRunStatusChanged, body={
                     "message": "[{username}] Setting run status to {status} due to performance metric '{metric}' falling "
                     "below allowed threshold ({threshold_negative}): {delta}% compared to "

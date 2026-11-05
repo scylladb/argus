@@ -21,6 +21,7 @@ from argus.backend.util.config import Config
 from argus.backend.service.run_cost_service import RunCostService
 
 from argus.backend.models.pytest import PytestResultTable
+from argus.backend.models.release_summary import mark_release_summary_stale
 from argus.backend.models.web import (
     ArgusEvent,
     ArgusEventTypes,
@@ -527,6 +528,7 @@ class TestRunService:
                 test_id=run.test_id
             )
 
+        await mark_release_summary_stale(*(run.release_id for run in all_stuck_runs))
         return len(all_stuck_runs)
 
     async def ignore_jobs(self, test_id: UUID, reason: str, user: User):

@@ -20,8 +20,8 @@ mounts the same component for the whole release.
   that lands while a recompute runs, across four workers.
 - Runs carry no index on `scylla_version`. A per-version run read is not
   available.
-- No breaking schema change. The new table and the new `JiraIssue` column
-  are additive.
+- No breaking schema change. The new table is additive, and no existing
+  table changes.
 - The release chat (QATOOLS-617 and later) reads the summary through the same
   service. The summary has to be a plain, serializable document.
 
@@ -65,24 +65,30 @@ sequenceDiagram
     S->>DB: read partition release_summary_v1
     alt fresh
         S-->>API: rows (filtered to test_ids)
-    else stale or empty
+    else stale or never computed
         S->>S: started_at = now
         S->>DB: runs of the release (every plugin, release_id index)
         S->>DB: tests, groups, plans, issue links, issues
         S->>S: build version rows and family rollups
-        S->>DB: write rows, generated_at = started_at, delete gone rows
+        S->>DB: write rows, delete gone rows, then generated_at = started_at
         S-->>API: rows (filtered to test_ids)
     end
     API-->>UI: summary JSON
 ```
 
-- The partition is stale when `invalidated_at > generated_at`, or when it
-  holds no rows. Both columns are static, one value per release.
+- The partition is stale when `invalidated_at >= generated_at`, or when it
+  has no `generated_at`. Both columns are static, one value per release, so a
+  release with no versioned runs is still stored as computed.
+- Both timestamps are stored at millisecond precision, and the recompute
+  rounds its start down to the millisecond. A mark in the same millisecond as
+  the start counts as later.
 - `mark_stale(release_id)` is one blind write, `invalidated_at = now`, with
   no read.
-- A recompute stores `generated_at` as the time it *started*. An invalidation
-  that lands during the recompute is later than that, so the partition stays
-  stale and the next read recomputes again.
+- A recompute stores `generated_at` as the time it *started*, after it wrote
+  the rows. An invalidation that lands during the recompute is not older than
+  that, so the partition stays stale and the next read recomputes again. A
+  recompute never deletes the partition, since that would erase a newer
+  `invalidated_at`.
 - Within one worker, concurrent reads of a stale release share one recompute
   task.
 
@@ -109,6 +115,11 @@ release stats.
 - **The versions of a release:** every version found on a run of the
   release, plus every version that a plan targets. A planned version with no
   runs yet shows all its planned tests as pending.
+- **The release's version pattern:** when the release sets
+  `valid_version_regex`, a run or a plan counts only when the pattern matches
+  its raw version (`re.search`, unanchored, as the dashboard's version filter
+  does). An invalid pattern filters nothing and logs a warning. Editing the
+  pattern already marks the summary stale.
 
 ### The family rollup (QATOOLS-616)
 
@@ -131,14 +142,16 @@ flowchart TD
 
 ### New or existing
 
-- `JiraIssue` gains `first_run_id`, set when Argus creates the issue row on
-  its first link. A dated script fills it for existing rows from each issue's
-  earliest `IssueLink.added_on`.
+- An issue's first run is the run of its earliest link, by
+  `IssueLink.added_on`, across every release. The recompute reads
+  `IssueLink.find(issue_id=...)` for each issue linked in the release, at
+  most 20 reads at a time. A recurring issue has tens of links, a few
+  hundred at most.
 - An issue is *new* on a version when its first run is a run of this release
   on that version. On the family rollup, it is new when its first run is on
   any version of the family. Otherwise the issue is *existing*.
-- A GitHub issue, or a Jira issue with no `first_run_id`, is always
-  *existing*.
+- Jira and GitHub issues follow the same rule, since both link through
+  `IssueLink`.
 
 ### Staleness hooks
 
@@ -180,8 +193,6 @@ CREATE TABLE release_summary_v1 (
     payload text,              -- JSON, one Summary
     PRIMARY KEY (release_id, family, version)
 );
-
-ALTER TABLE jira_issue ADD first_run_id uuid;
 ```
 
 ```python
@@ -226,7 +237,7 @@ class Summary(TypedDict):
     issues: list[IssueEntry]
 ```
 
-`GET /api/v1/release/{release_id}/summary`
+`GET /api/v1/release/{release_id}/version_summary`
 
 ```json
 {"status": "ok", "response": {
@@ -297,10 +308,17 @@ where the type is `"view"` or `"release"`.
   with runs, so it would miss a planned version that has not started. (spec)
 - `~dev` builds fold into their family like release candidates. (spec)
 - A patch version is its own family, and its own rcs fold into it. (spec)
+- A release's `valid_version_regex` limits its summary to the matching
+  versions. Runs of other versions, such as the sources of upgrade tests,
+  would otherwise show up as families of their own. (build)
 - The view widget counts only the view's tests. The release dashboard mounts
   the same component, with no settings, for the whole release. (spec)
-- New or existing comes from the first run recorded on the issue. GitHub
-  issues count as existing: the tracker is deprecated. (spec)
+- New or existing comes from the issue's earliest link, read at recompute
+  time. If those reads become slow, a first-run column on the issue
+  replaces them. (build)
 - `aborted` is its own count, part of `executed` and not of `failed`. (spec)
 - A test that ran on several versions counts once in the rollup, by its
   latest result. (spec)
+- The release route is `/release/{release_id}/version_summary`. A
+  `/release/{release_id}/summary` route answers `/release/stats/summary`
+  first and breaks it. (build)
