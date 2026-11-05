@@ -105,6 +105,16 @@ ZEUS_SCHEMA: http
 ZEUS_HOST: example.com:80
 ZEUS_TOKEN: your-token
 
+# Chat model connections for the release and view chat (docs/release_chat.md).
+# Each entry is an OpenAI-compatible chat completions endpoint; admins can add more
+# in the Admin Panel and pick the default model there. `model` is the fallback default
+# used until an admin picks one.
+# CHAT_MODELS:
+#   - name: local-webui                 # unique name shown in the Admin Panel
+#     endpoint: https://host/api        # base URL; OpenWebUI serves it at <host>/api
+#     token: your-token
+#     model: Gemma-4-12B-it-GGUF        # optional
+
 # Event summarization of unique SCT ERROR/CRITICAL events. Disabled by default; read once
 # when a gunicorn worker starts, so a change needs a reload (SIGHUP to the master).
 # See docs/plans/archive/event-summarization.md.

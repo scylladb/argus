@@ -12,6 +12,7 @@ from argus.backend.models.github_issue import GithubIssue, IssueAssignee, IssueL
 from argus.backend.models.jira import JiraIssue
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.pytest import PytestResultTable, PytestResultTableOld, PytestUserField
+from argus.backend.models.chat import ChatConfiguration
 from argus.backend.models.release_summary import ReleaseSummary, mark_release_summary_stale
 from argus.backend.models.result import (
     ArgusGenericResultMetadata,
@@ -481,6 +482,7 @@ USED_MODELS: list[type[Document]] = [
     ReleaseDistinctVersions,
     ReleaseDistinctImages,
     ReleaseSummary,
+    ChatConfiguration,
     RunConfiguration,
     RunConfigParam,
     RunConfigParamByRun,

@@ -65,7 +65,7 @@ stays in every plan built from a spec.
   - When no default row exists, `resolve()` falls back to the first YAML entry with a `model`, and probes it once per process for its context window and tools.
 - Admin routes as in the spec, named `admin.admin_api.chat_*`.
 
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - secrets round trip; a wrong key raises
   - `normalize_model` on the OpenWebUI/Lemonade shape, a plain OpenAI entry and a vLLM `max_model_len`
   - the `OpenAIChatClient` stream against an `httpx2.MockTransport` of streamed chunks with split tool-call deltas and `reasoning_content`
@@ -74,9 +74,9 @@ stays in every plan built from a spec.
   - `test_tools` with the scripted client
   - admin routes refuse a non-admin
 - [ ] Run them and confirm the failures.
-- [ ] Write the code.
-- [ ] Run the verify sequence.
-- [ ] Commit `feature(chat-mode): connect Argus to OpenAI-compatible chat models`.
+- [x] Write the code.
+- [x] Run the verify sequence.
+- [x] Commit `feature(chat-mode): connect Argus to OpenAI-compatible chat models`.
 
 ## Task 2 — Entities, the message tree, and the state table
 
