@@ -57,10 +57,19 @@ export interface SummaryFamily {
     versions: Summary[];
 }
 
+export interface SummaryFinding {
+    id: string;
+    content: string;
+    updated_by: string;
+    updated_at: string;
+    source_node: string | null;
+}
+
 export interface ReleaseSummaryResponse {
     release_id: string;
     release_name: string;
     generated_at: string | null;
     stale: boolean;
     families: SummaryFamily[];
+    findings?: SummaryFinding[];
 }
