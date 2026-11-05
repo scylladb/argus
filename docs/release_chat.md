@@ -67,16 +67,56 @@ the card names who did.
   enabled tests, up to 50.
 
 Each test starts with the parameters of its last build, overridden by what
-the request asks for. Before the card appears, Argus checks every override
-against the test's own Jenkins job:
+the request asks for. "Start it with the job's defaults" or "rerun it as
+build #41" takes the parameters from there instead. Overrides can differ per
+test: "run both on gce, and the second one in us-west1". Before the card
+appears, Argus checks every override against the test's own Jenkins job:
 
 - the job must have the parameter
 - when the parameter is a choice, the value must be one of its choices
-- a Scylla Cluster Tests job must keep exactly one Scylla version source
+- a Scylla Cluster Tests job follows the rules of the parameter wizard on the
+  run page: a supported backend and a region of that backend, the known
+  values of `provision_type` and the post-test actions, exactly one Scylla
+  version source in its format, and a BYO branch that exists on GitHub.
+  Setting one version source clears the others, and a new backend gets its
+  first supported region when the job leaves it empty.
 
 A test that fails a check is listed on the card under **Left out**, with the
 reason, and does not start. **All parameters** on the card shows every value
 a test will start with. After **Run**, the card links each started run.
+
+A card that waits for confirmation can still change. Ask the assistant
+("use us-west1 for that start instead"), or press **Edit parameters** on the
+card: it lists the job's parameters in the wizard's groups, with a list of
+the allowed values where there is one. Every change is checked again; a
+value Argus refuses keeps the card as it was and shows the reason.
+
+## Plans
+
+The assistant reads the release plans and edits them:
+
+- "Which labels does the week plan have?" lists each label with the tests
+  and groups that carry it.
+- "Which tests would week1 start?" lists them without proposing anything.
+- "Add the label week1 to the upgrade tests of the week plan, and assign them
+  to Alice." proposes the edit as a card.
+
+An edit adds or removes tests, removes groups, assigns or unassigns tests,
+adds or removes labels, renames the plan, or changes its description, target
+version or completion. Assigning a test that is not in the plan adds it, and
+a new assignee becomes a participant. The card lists every change, and
+**Apply** saves them, unless someone changed the plan since the proposal; then
+the card fails and nothing changes. Creating, copying and deleting plans stay
+in the planner.
+
+## Auto mode
+
+**Auto mode** in the question box confirms the cards of your own questions
+for you: a proposed start, plan edit, issue link or tool call runs at once,
+and the answer reports how it went. The card says it was confirmed
+automatically, and for whom. Auto mode applies to the questions you send
+while it is on, in this browser tab; it never confirms a card of someone
+else's question.
 
 The assistant can also propose to link an issue to a run, or to unlink one.
 These need a confirmation on the card too.
@@ -183,6 +223,30 @@ CHAT_MODELS:
     token: your-token
     model: Gemma-4-12B-it-GGUF   # optional: used until an admin picks a default
 ```
+
+### MCP servers
+
+The **MCP servers** tab connects the chat to tools outside Argus. Add a
+server by its URL, over Streamable HTTP or SSE, with any headers it needs,
+such as `Authorization`; header values are stored encrypted and never shown
+again. **Probe** lists the server's tools. Each tool starts **Off**; switch it
+to **Direct**, which runs whenever the model calls it, or **Confirm**, which
+proposes a card first. The chat offers the switched-on tools of the enabled
+servers, named `mcp_<server>__<tool>`.
+
+### Prompt and skills
+
+The **Prompt & skills** tab edits the system prompt. It is a template whose
+placeholders Argus fills for each answer; `{tool_rules}`, `{scope}`,
+`{memories}` and `{summary}` must stay, and a literal brace is written `{{`
+or `}}`. **Reset to default** brings back the prompt Argus ships.
+
+A skill is a piece of instructions with a name:
+
+- **Always**: its text joins every system prompt.
+- **On demand**: the prompt lists its name and description, and the model
+  loads the text when a question needs it.
+- **Off**: kept but unused.
 
 A model without tool calling still answers, from the summary and the
 memories only. It cannot look anything up, propose tests, or write memories.
