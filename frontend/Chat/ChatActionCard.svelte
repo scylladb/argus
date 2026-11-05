@@ -3,6 +3,7 @@
     import {
         faArrowUpRightFromSquare,
         faCheck,
+        faComment,
         faMagnifyingGlass,
         faPlay,
         faSliders,
@@ -56,6 +57,8 @@
                 return `Edit the plan ${action.proposal.plan}`;
             case "mcp_call":
                 return `Call ${action.proposal.tool} on ${action.proposal.server}`;
+            case "post_comment":
+                return `Comment on ${action.proposal.test}${action.proposal.build_number ? ` #${action.proposal.build_number}` : ""}`;
             default:
                 return "Unlink an issue";
         }
@@ -245,6 +248,14 @@
         {#each action.results.filter((entry) => entry.error) as result, index (index)}
             <div class="small text-danger">{result.error}</div>
         {/each}
+    {:else if action.kind === "post_comment"}
+        <div class="markdown-body comment rounded bg-light-one p-2 mb-1 small">
+            {@html renderMarkdown(action.proposal.message ?? "")}
+        </div>
+        <a class="small" href={action.proposal.run_url} target="_blank" rel="noopener">Open run <Fa icon={faArrowUpRightFromSquare} /></a>
+        {#each action.results.filter((entry) => entry.error) as result, index (index)}
+            <div class="small text-danger">{result.error}</div>
+        {/each}
     {:else if action.kind === "mcp_call"}
         <pre class="small rounded bg-light-one p-2 mb-1 arguments">{JSON.stringify(action.proposal.arguments ?? {}, null, 2)}</pre>
         {#each action.results as result, index (index)}
@@ -286,6 +297,8 @@
                     <Fa icon={faMagnifyingGlass} /> Queue
                 {:else if action.kind === "edit_plan"}
                     <Fa icon={faCheck} /> Apply
+                {:else if action.kind === "post_comment"}
+                    <Fa icon={faComment} /> Post
                 {:else}
                     <Fa icon={action.kind === "execute_tests" ? faPlay : faCheck} /> Run
                 {/if}

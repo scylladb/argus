@@ -50,6 +50,23 @@ describe("ChatModal", () => {
             method: "DELETE" }));
     });
 
+    it("folds questions older than 3 days away until asked", async () => {
+        const old = new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString();
+        const nodes = [chatNode("q1", "user", null, { content: "last week's question", created_at: old }),
+                       chatNode("a1", "assistant", "q1", { content: "an old answer", created_at: old })];
+        vi.mocked(fetchJson).mockImplementation(async (url: string) =>
+            url.endsWith("/memories") ? [] : conversation(nodes));
+        render(ChatModal, { props: { entityType: "release", entityId: "r1", entityName: "scylla-2025.1",
+                                     onClose: vi.fn() } });
+
+        expect(await screen.findByText("No questions in the last 3 days.")).toBeTruthy();
+        expect(screen.queryByText("last week's question")).toBeNull();
+        await fireEvent.click(screen.getByRole("button", { name: "Show 1 earlier question" }));
+
+        expect(screen.getByText("last week's question")).toBeTruthy();
+        expect(screen.queryByRole("button", { name: /earlier question/ })).toBeNull();
+    });
+
     it("shows no clear button to other users", async () => {
         vi.mocked(fetchJson).mockImplementation(async (url: string) => url.endsWith("/memories") ? [] : conversation());
         render(ChatModal, { props: { entityType: "release", entityId: "r1", entityName: "scylla-2025.1",
