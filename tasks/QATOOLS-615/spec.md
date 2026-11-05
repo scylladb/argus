@@ -90,7 +90,11 @@ sequenceDiagram
   recompute never deletes the partition, since that would erase a newer
   `invalidated_at`.
 - Within one worker, concurrent reads of a stale release share one recompute
-  task.
+  task, unless that task started before the latest invalidation; such a read
+  starts a recompute that sees the change.
+- Every response reads each listed issue's tracker state, title and card
+  from the Jira and GitHub issue rows, so an issue the tracker refresh closed
+  shows as closed without a recompute.
 
 ### What a version row counts
 
@@ -177,6 +181,7 @@ Each action below calls `mark_stale(release_id)` after its own write.
 | The recompute fails on a read | Return the stored rows with `stale: true`. Return HTTP 500 only when no rows exist |
 | The recompute write fails | Return the computed result. The partition stays stale |
 | An issue row is missing for a link | Count the link under the issue id, with no title, as existing |
+| A stored family has no rollup row (a partial write) | Leave the family out of the response |
 | A run's version does not parse | Leave the run out of every count |
 
 ## Contracts
@@ -217,6 +222,8 @@ class TestEntry(TypedDict):
     build_id: str | None
     build_number: int | None
     version: str | None        # the version of the counted run
+    issues: int                # distinct issues linked to the counted run
+    comments: int              # comments on the counted run
 
 class IssueEntry(TypedDict):
     id: str
@@ -227,6 +234,7 @@ class IssueEntry(TypedDict):
     state: str | None          # tracker state
     novelty: Literal["new", "existing"]
     status: Literal["open", "fixed"]   # always "open" on a version row
+    on_latest_run: bool        # linked to a test's latest run in the family; False on a version row
     test_ids: list[str]
     run_ids: list[str]
     issue: dict                # the issue as the issues API returns it with
@@ -274,7 +282,7 @@ class ReleaseSummaryService:
     async def get(self, release_id: UUID, test_ids: set[UUID] | None = None) -> dict: ...
     async def get_for_view(self, view_id: UUID) -> dict: ...
 
-async def mark_release_summary_stale(release_id: UUID | None) -> None: ...
+async def mark_release_summary_stale(*release_ids: UUID | None) -> None: ...
 ```
 
 Frontend: the view widget type `releaseSummary` in `WIDGET_TYPES`, with no

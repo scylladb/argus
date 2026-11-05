@@ -35,6 +35,7 @@ export interface SummaryIssue {
     state: string | null;
     novelty: "new" | "existing";
     status: "open" | "fixed";
+    on_latest_run?: boolean;
     test_ids: string[];
     run_ids: string[];
     issue: Issue;

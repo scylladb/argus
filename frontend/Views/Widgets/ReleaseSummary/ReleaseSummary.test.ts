@@ -30,7 +30,8 @@ const test = (name: string, status: string, version: string | null): SummaryTest
 const issue = (overrides: Partial<SummaryIssue>): SummaryIssue => {
     const base = {
         id: "i1", type: "jira" as const, key: "SCYLLADB-1", title: "Crash on upgrade", url: "https://jira/SCYLLADB-1",
-        state: "in progress", novelty: "new" as const, status: "open" as const, test_ids: ["upgrade"],
+        state: "in progress", novelty: "new" as const, status: "open" as const,
+        on_latest_run: (overrides.status ?? "open") === "open", test_ids: ["upgrade"],
         run_ids: ["run-upgrade"], ...overrides,
     };
     return {
@@ -165,6 +166,16 @@ describe("ReleaseSummary.svelte", () => {
         const upgrade = within(grid).getByRole("rowheader", { name: /upgrade/ }).closest("tr")!;
         expect(within(upgrade).getByTitle("2025.1.0~rc1: failed, run #7")).toBeTruthy();
         expect(within(upgrade).getByTitle("2025.1.0: passed, run #7")).toBeTruthy();
+    });
+
+    it("marks only the issues linked to a latest run", async () => {
+        const family = { ...ROLLUP, issues: [issue({ title: "Seen on this rc only", on_latest_run: false })] };
+        fetchMock.mockResolvedValue({ ...RELEASE, families: [{ family: "2025.1.0", rollup: family, versions: [RC1, FINAL] }] });
+        render(ReleaseSummary, { props: { dashboardObject: { id: "r-1" }, dashboardObjectType: "release" } });
+        await screen.findByText("Updated 3 minutes ago");
+
+        expect(screen.getByText("Seen on this rc only")).toBeTruthy();
+        expect(screen.queryByText("on latest run")).toBeNull();
     });
 
     it("groups the issues by tracker state and says which are on a latest run", async () => {
