@@ -523,9 +523,9 @@ stays in every plan built from a spec.
 
 ## Task 21 — Docs and the live check
 
-- [ ] `docs/release_chat.md` covers adjusting a start, plan edits, Auto mode, MCP servers, skills and the system prompt. `docs/api_usage.md` gets the new routes; `docs/project/architecture.md` the MCP client and the skills.
-- [ ] `sync-models` on the dev cluster.
-- [ ] Live check on the dev server:
+- [x] `docs/release_chat.md` covers adjusting a start, plan edits, Auto mode, MCP servers, skills and the system prompt. `docs/api_usage.md` gets the new routes; `docs/project/architecture.md` the MCP client and the skills.
+- [x] `sync-models` on the dev cluster.
+- [x] Live check on the dev server:
   - A plan edit applied on a dev plan.
   - A start card adjusted by the model and in the card, then dismissed.
   - A local FastMCP server in the scratchpad: probe it, set the modes, run its read tool directly, and run its write tool through a card.
@@ -533,8 +533,8 @@ stays in every plan built from a spec.
   - The system prompt edited, then reset.
   - Auto mode confirming the MCP write tool or the plan edit.
   - Screenshots at two widths.
-- [ ] The full verify sequence.
-- [ ] Commit `docs(chat-mode): describe MCP servers, skills, run parameters and plan edits`.
+- [x] The full verify sequence.
+- [x] Commit `docs(chat-mode): describe MCP servers, skills, run parameters and plan edits`.
 
 ## Task 9 — Full verify and the live check
 

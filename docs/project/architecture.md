@@ -170,6 +170,11 @@ picture per connection, and which one is active.
 - **Tools**: `tools.py` wraps existing services, limited to the entity's
   tests. Starting tests and linking issues only propose an action card;
   `actions.py` runs it once a user confirms.
+- **Extensions**: `chat_mcp_server_v1` holds the MCP servers an admin
+  registered, with each tool's mode; `service/chat/mcp.py` calls them through
+  the `mcp` SDK, one session per call. `chat_skill_v1` holds the skills and the
+  edited system prompt. The tools of one answer come from a per-answer
+  toolbox: the built-in tools plus the switched-on MCP tools.
 - **Memories**: `chat_memory_v1` and the append-only `chat_memory_revision_v1`.
   Findings are memories that the summary routes add to their response.
 

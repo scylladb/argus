@@ -728,8 +728,8 @@ under `/api/v1/chat/{entity_type}/{entity_id}`, where `entity_type` is
 | `DELETE ""` | Admins only: clears the conversation and keeps the memories; returns the empty conversation |
 | `GET /meta` | `{configured, messages, last: {user_id, at}}` for the chat bar |
 | `GET /events` | A `text/event-stream` of the chat, see below |
-| `POST /messages {content}` | Asks a question; returns `{user_node, assistant_node}` at once |
-| `POST /regenerate` | Answers the last question again |
+| `POST /messages {content, auto?}` | Asks a question; returns `{user_node, assistant_node}` at once. With `auto`, the answer's cards are confirmed as the asker |
+| `POST /regenerate {auto?}` | Answers the last question again |
 | `POST /compact` | Summarizes the conversation so far |
 | `POST /undo` | Removes the last question and its answer; returns the conversation |
 | `POST /head {node}` | Switches to another answer; returns the conversation |
@@ -737,6 +737,7 @@ under `/api/v1/chat/{entity_type}/{entity_id}`, where `entity_type` is
 | `POST /actions/{node}/confirm` | Confirms a proposal card; the card runs in the background |
 | `POST /actions/{node}/dismiss` | Dismisses a proposal card |
 | `POST /actions/{node}/refresh` | Reads the open Zeus tasks of a card from Zeus, at most every 15 s; returns the card |
+| `POST /actions/{node}/params {tests: {test_id: overrides}, seed?, build_number?}` | Changes the overrides of a start card that waits for confirmation; returns the card |
 | `GET /memories` | The memories in scope |
 | `POST /memories {content, kind, scope?}` | Adds a memory; `kind` is `note` or `finding`; `scope` is a release id in a view chat |
 | `PUT /memories/{id} {content?, kind?}` | Edits a memory |
@@ -760,8 +761,13 @@ The chat model is configured under `/admin/api/v1/chat`, for admins only:
 `POST /default {connection, model, context_window, tools, vision}`,
 `POST /connection/{name}/identity` (multipart: `assistant_name`, optional
 `picture`, optional `remove_picture`), `DELETE /connection/{name}/identity`,
-and `POST /identity/active {connection}` (`null` uses none). No route
-returns a token. `GET /api/v1/chat/identity/{connection}/picture` serves an
+`POST /identity/active {connection}` (`null` uses none), `GET /mcp`,
+`POST /mcp/server {name, url, transport, headers?, enabled}`,
+`DELETE /mcp/server/{name}`, `POST /mcp/server/{name}/probe`,
+`POST /mcp/server/{name}/tools {modes: {tool: off | direct | confirm}}`,
+`GET /prompt`, `PUT /prompt {template}`, `DELETE /prompt` (back to the
+default), `GET /skills`, `POST /skill {name, description, content, mode}`, and
+`DELETE /skill/{name}`. No route returns a token or a header value. `GET /api/v1/chat/identity/{connection}/picture` serves an
 identity's picture to any logged-in user.
 
 ## Email reporting API
