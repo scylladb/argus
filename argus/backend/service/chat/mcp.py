@@ -189,6 +189,9 @@ class McpServerService:
             raise ChatMcpError("The URL must be an http or https URL")
         if transport not in TRANSPORTS:
             raise ChatMcpError(f"The transport must be one of {', '.join(TRANSPORTS)}")
+        stored = next((row for row in await self._rows() if row["name"] == name), None)
+        if stored and stored["headers_encrypted"] and stored["url"] != url.strip() and headers is None:
+            raise ChatMcpError("Enter the headers again when the URL changes")
         fields = {"url": url.strip(), "transport": transport, "enabled": enabled, "updated_by": user.id,
                   "updated_at": datetime.now(UTC)}
         if headers is not None:

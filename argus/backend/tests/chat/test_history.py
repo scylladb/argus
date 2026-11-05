@@ -11,6 +11,8 @@ from argus.backend.service.chat.history import (
     ChatHistoryService,
     active_path,
 )
+from argus.backend.service.chat.hub import ChatHub
+from argus.backend.service.chat.service import ChatService
 from argus.backend.tests.chat.helpers import seed_entity_release, seed_view
 
 pytestmark = pytest.mark.docker_required
@@ -213,3 +215,29 @@ async def test_wipe_waits_for_the_running_answer(release_manager_service, logged
 
     with pytest.raises(ChatBusyError):
         await history.wipe()
+
+
+async def test_stop_frees_a_lock_nobody_refreshed(release_manager_service, logged_in_user):
+    history = await history_for_new_release(release_manager_service)
+    abandoned = await history.append(role="assistant", content="half", status="streaming")
+    await history.acquire(logged_in_user, abandoned.node, now=datetime.now(UTC) - timedelta(minutes=6))
+
+    stopped = await ChatService(ChatHub()).stop(history.entity)
+
+    state, nodes = await history.read()
+    assert stopped == abandoned.node and state.busy is None
+    assert next(node for node in nodes if node.node == abandoned.node).status == "error"
+
+
+async def test_a_heartbeat_keeps_only_its_own_lock_fresh(release_manager_service, logged_in_user):
+    history = await history_for_new_release(release_manager_service)
+    holder = uuid1()
+    await history.acquire(logged_in_user, holder, now=datetime.now(UTC) - timedelta(minutes=6))
+
+    await history.heartbeat(uuid1())
+    stale = await history.release_stale()
+    await history.acquire(logged_in_user, holder, now=datetime.now(UTC) - timedelta(minutes=6))
+    await history.heartbeat(holder)
+    kept = not await history.release_stale()
+
+    assert stale is True and kept is True

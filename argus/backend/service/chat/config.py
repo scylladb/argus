@@ -144,7 +144,11 @@ class ChatConfigService:
             raise ChatConfigError(f"The connection {name} is defined in argus_web.yaml and cannot be edited here")
         if not endpoint.startswith(("http://", "https://")):
             raise ChatConfigError("The endpoint must be an http or https URL")
-        fields = {"endpoint": endpoint.rstrip("/"), "updated_by": user.id, "updated_at": datetime.now(UTC)}
+        endpoint = endpoint.rstrip("/")
+        stored = next((row for row in await self._rows() if row["name"] == name), None)
+        if stored and stored["token_encrypted"] and stored["endpoint"] != endpoint and not token:
+            raise ChatConfigError("Enter the token again when the endpoint changes")
+        fields = {"endpoint": endpoint, "updated_by": user.id, "updated_at": datetime.now(UTC)}
         if token:
             fields["token_encrypted"] = encrypt(token)
         await ChatConfiguration(name=name).update(**fields)

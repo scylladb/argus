@@ -43,11 +43,11 @@ async def test_an_endpoint_must_be_http(logged_in_user):
 async def test_saving_without_a_token_keeps_the_old_one(scripted_client, logged_in_user):
     service = ChatConfigService()
     await service.save_connection("db-webui", "https://db.test/api", "sk-first", logged_in_user)
-    await service.save_connection("db-webui", "https://db2.test/api", None, logged_in_user)
+    await service.save_connection("db-webui", "https://db.test/api/", None, logged_in_user)
 
     await service.client_for("db-webui")
 
-    assert scripted_client.credentials == [("https://db2.test/api", "sk-first")]
+    assert scripted_client.credentials == [("https://db.test/api", "sk-first")]
 
 
 async def test_a_token_from_another_secret_key_shows_as_unreadable(logged_in_user, monkeypatch):

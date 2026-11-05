@@ -50,6 +50,7 @@ class Scope:
     releases: dict[UUID, ArgusRelease]
     groups: dict[UUID, ArgusGroup]
     tests: list[ArgusTest]
+    partial: bool = False
 
     def group_name(self, test: ArgusTest) -> str:
         group = self.groups.get(test.group_id)
@@ -173,7 +174,10 @@ async def load_scope(entity: ChatEntity) -> Scope:
         tests = [test for batch in test_batches for test in batch]
     else:
         tests = await UserViewService().resolve_tests_by_id(list(entity.test_ids))
-    return Scope(releases={release.id: release for release in releases}, groups=groups, tests=tests)
+        groups = {group_id: group for group_id, group in groups.items()
+                  if any(test.group_id == group_id for test in tests)}
+    return Scope(releases={release.id: release for release in releases}, groups=groups, tests=tests,
+                 partial=entity.test_ids is not None)
 
 
 def run_url(run) -> str:

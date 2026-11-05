@@ -124,6 +124,23 @@ class ChatHistoryService:
             state = await self.state()
         raise ChatBusyError(f"Answering the question of {describe_user(await self._user(state.busy_user))}")
 
+    async def heartbeat(self, node: UUID) -> None:
+        """Keep a long answer's lock fresh, so it is never taken over as abandoned."""
+        await ChatState(entity_id=self.entity.id).update(if_conditions={"busy": node}, busy_since=datetime.now(UTC))
+
+    async def release_stale(self, now: datetime | None = None) -> bool:
+        """Free a lock no answer has refreshed for STALE_LOCK, left by a worker that died, and mark its node."""
+        now = now or datetime.now(UTC)
+        state = await self.state()
+        if not state.busy or as_utc(state.busy_since) >= now - STALE_LOCK:
+            return False
+        result = await ChatState(entity_id=self.entity.id).update(
+            if_conditions={"busy": state.busy}, busy=None, busy_user=None, busy_since=None, stop_requested=None)
+        if result.applied:
+            await self._abandon(state.busy)
+            await self.touch()
+        return result.applied
+
     async def release(self, node: UUID) -> None:
         result = await ChatState(entity_id=self.entity.id).update(if_conditions={"busy": node}, busy=None,
                                                                   busy_user=None, busy_since=None,
