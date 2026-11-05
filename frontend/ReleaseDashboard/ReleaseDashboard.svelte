@@ -1,5 +1,6 @@
 <script lang="ts">
     import queryString from "query-string";
+    import ChatAnchor from "../Chat/ChatAnchor.svelte";
     import ReleaseStats from "../Stats/ReleaseStats.svelte";
     import ReleaseActivity from "./ReleaseActivity.svelte";
     import Issues from "../Github/Issues.svelte";
@@ -90,8 +91,13 @@
 
 <div class="container-fluid border rounded mt-1 bg-white shadow-sm">
     <div class="row mb-2">
-        <div class="col-8">
+        <div class="col-lg-8">
             <h1 class="display-1">{releaseData.release.name}</h1>
+        </div>
+        <div class="col-lg-4 d-flex align-items-center">
+            <div class="w-100">
+                <ChatAnchor dashboardObject={releaseData.release} dashboardObjectType="release" />
+            </div>
         </div>
     </div>
     <div class="row mb-2">

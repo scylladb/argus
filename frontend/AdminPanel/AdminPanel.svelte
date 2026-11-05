@@ -5,6 +5,7 @@
     import ReleaseManager from "./ReleaseManager.svelte";
     import ViewsManager from "./ViewsManager.svelte";
     import ProxyTunnelManager from "./ProxyTunnelManager.svelte";
+    import ChatConfigManager from "./ChatConfigManager.svelte";
 
     let { currentRoute = $bindable() } = $props();
 
@@ -14,6 +15,7 @@
         releases: { component: ReleaseManager, title: "Releases" },
         views: { component: ViewsManager, title: "Views" },
         "ssh-tunnel": { component: ProxyTunnelManager, title: "SSH Tunnel" },
+        chat: { component: ChatConfigManager, title: "Chat" },
     };
 
     const routeTitle = (route) => routes[route]?.title ?? route;
@@ -84,6 +86,16 @@
                          onclick={(e) => handleRouteClick("ssh-tunnel", e)}
                      >
                          {routeTitle("ssh-tunnel")}
+                     </button>
+                 </li>
+                 <li class="list-group-item">
+                     <button
+                         class:btn-primary={currentRoute == "chat"}
+                         class:btn-outline-primary={currentRoute != "chat"}
+                         class="btn h-100 w-100"
+                         onclick={(e) => handleRouteClick("chat", e)}
+                     >
+                         {routeTitle("chat")}
                      </button>
                  </li>
             </ul>

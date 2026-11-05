@@ -5,9 +5,10 @@
     import { fetchJson } from "../../../Common/ApiUtils";
     import { sendMessage } from "../../../Stores/AlertStore";
     import FamilySummary from "./FamilySummary.svelte";
+    import SummaryFindings from "./SummaryFindings.svelte";
     import SummaryBar from "./SummaryBar.svelte";
     import { updatedAgo } from "./summaryUtils";
-    import type { ReleaseSummaryResponse, SummaryTest } from "./types";
+    import type { ReleaseSummaryResponse, SummaryFinding, SummaryTest } from "./types";
 
     interface Props {
         dashboardObject: { id: string };
@@ -21,6 +22,7 @@
     const HEADER_FAMILIES = 3;
 
     let releases: ReleaseSummaryResponse[] | undefined = $state();
+    let viewFindings: SummaryFinding[] = $state([]);
     let error = $state("");
     let expanded = $state(false);
 
@@ -39,10 +41,11 @@
             if (dashboardObjectType === "release") {
                 releases = [await fetchJson(`/api/v1/release/${dashboardObject.id}/version_summary`)];
             } else {
-                const response: { releases: ReleaseSummaryResponse[] } = await fetchJson(
+                const response: { releases: ReleaseSummaryResponse[]; findings?: SummaryFinding[] } = await fetchJson(
                     `/api/v1/views/widgets/release_summary?view_id=${dashboardObject.id}`,
                 );
                 releases = response.releases;
+                viewFindings = response.findings ?? [];
             }
             if (releases.some((release) => release.stale) && refreshes < REFRESH_TRIES) {
                 refreshes += 1;
@@ -68,6 +71,9 @@
             <span class="spinner-border spinner-border-sm"></span> Loading the release summary…
         </div>
     {:else}
+        {#if viewFindings.length}
+            <SummaryFindings findings={viewFindings} />
+        {/if}
         {#each releases as release (release.release_id)}
             <div class="d-flex flex-wrap align-items-baseline gap-2 mb-2">
                 {#if dashboardObjectType === "view"}
@@ -88,6 +94,9 @@
                 <div class="alert alert-warning py-1 px-2 small">
                     The summary could not be refreshed. It shows the figures stored {updatedAgo(release.generated_at)}.
                 </div>
+            {/if}
+            {#if release.findings?.length}
+                <SummaryFindings findings={release.findings} />
             {/if}
             {#if release.families.length === 0}
                 <div class="text-body-secondary p-2">No tested or planned versions yet.</div>
