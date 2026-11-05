@@ -136,7 +136,9 @@ Located in `docs/`. Single-topic notes, outside the standards.
 - `api_usage.md` — the REST API, written by hand.
 - `generic_results.md` — the generic results submission format.
 - `release_summary.md` — the release summary per version: what each number counts, the
-  family rollup, and when it refreshes.
+  family rollup, findings, and when it refreshes.
+- `release_chat.md` — the shared chat of a release or a view: asking, running tests through
+  confirmation cards, memories and findings, context compaction, and setting up the model.
 - `argus_status_page.md` — the status page.
 - `pypi-guide.md` — publishing the Python packages.
 - `plans/archive/` — design documents from earlier work, kept as a historical record.
