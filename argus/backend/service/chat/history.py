@@ -144,6 +144,8 @@ class ChatHistoryService:
         root = next((node for node in reversed(path) if node.role in TURN_ROOTS), None)
         if root is None:
             raise ChatHistoryError("There is nothing to undo")
+        if any(not node.hidden for node in children_of(nodes).get(state.head, [])):
+            raise ChatHistoryError("Undo works at the end of a branch; this is a fork point")
         await self._hide_subtree(nodes, root)
         if not await self.move_head(state.head, root.parent):
             raise ChatHistoryError("The conversation changed meanwhile; try again")
@@ -159,6 +161,19 @@ class ChatHistoryService:
         if not await self.move_head(state.head, leaf.node):
             raise ChatHistoryError("The conversation changed meanwhile; try again")
         return leaf.node
+
+    async def fork(self, node: UUID) -> UUID:
+        """Move the head to the end of an earlier turn, so the next question starts a new branch there."""
+        state = await self.ensure_idle()
+        nodes = await self.nodes()
+        target = next((candidate for candidate in nodes if candidate.node == node and not candidate.hidden), None)
+        if target is None:
+            raise ChatHistoryError(f"No message {node} in this conversation")
+        if target.role == "user" or target.status == "streaming":
+            raise ChatHistoryError("A fork starts after a finished answer")
+        if not await self.move_head(state.head, target.node):
+            raise ChatHistoryError("The conversation changed meanwhile; try again")
+        return target.node
 
     async def wipe(self) -> None:
         await self.ensure_idle()

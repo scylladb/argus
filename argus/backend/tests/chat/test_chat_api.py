@@ -67,6 +67,28 @@ async def test_try_again_undo_and_head(chat_client: TestClient, base, chat_model
     assert all(node["hidden"] for node in undone["nodes"])
 
 
+async def test_a_fork_starts_a_branch_after_an_earlier_answer(chat_client: TestClient, base, chat_model):
+    chat_model.turns = [text_turn("one"), text_turn("two"), text_turn("branch")]
+    first = ok(chat_client.post(f"{base}/messages", json={"content": "q1"}))
+    wait_idle(chat_client, base)
+    second = ok(chat_client.post(f"{base}/messages", json={"content": "q2"}))
+    wait_idle(chat_client, base)
+
+    forked = ok(chat_client.post(f"{base}/fork", json={"node": first["assistant_node"]["node"]}))
+    refused_undo = chat_client.post(f"{base}/undo").json()
+    refused_fork = chat_client.post(f"{base}/fork", json={"node": second["user_node"]["node"]}).json()
+    branch = ok(chat_client.post(f"{base}/messages", json={"content": "q2 instead"}))
+    wait_idle(chat_client, base)
+    back = ok(chat_client.post(f"{base}/head", json={"node": second["assistant_node"]["node"]}))
+
+    assert forked["head"] == first["assistant_node"]["node"]
+    assert refused_undo["status"] == "error" and "fork point" in refused_undo["response"]["arguments"][0]
+    assert refused_fork["status"] == "error"
+    assert branch["user_node"]["parent"] == first["assistant_node"]["node"]
+    assert back["head"] == second["assistant_node"]["node"]
+    assert not any(node["hidden"] for node in back["nodes"])
+
+
 async def test_an_empty_question_and_a_missing_model_are_errors(api_client: TestClient, base, clean_chat_config):
     empty = api_client.post(f"{base}/messages", json={"content": "  "}).json()
     unconfigured = api_client.post(f"{base}/messages", json={"content": "q"}).json()
