@@ -732,7 +732,8 @@ under `/api/v1/chat/{entity_type}/{entity_id}`, where `entity_type` is
 | `POST /regenerate {auto?}` | Answers the last question again |
 | `POST /compact` | Summarizes the conversation so far |
 | `POST /undo` | Removes the last question and its answer; returns the conversation |
-| `POST /head {node}` | Switches to another answer; returns the conversation |
+| `POST /head {node}` | Switches to another answer or branch, at its newest message; returns the conversation |
+| `POST /fork {node}` | Moves to the end of an earlier answer, so the next question starts a new branch; returns the conversation |
 | `POST /stop` | Stops the running answer |
 | `POST /actions/{node}/confirm` | Confirms a proposal card; the card runs in the background |
 | `POST /actions/{node}/dismiss` | Dismisses a proposal card |

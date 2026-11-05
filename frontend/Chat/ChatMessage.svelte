@@ -1,6 +1,6 @@
 <script lang="ts">
     import Fa from "svelte-fa";
-    import { faChevronLeft, faChevronRight, faCompress } from "@fortawesome/free-solid-svg-icons";
+    import { faChevronLeft, faChevronRight, faCodeBranch, faCompress } from "@fortawesome/free-solid-svg-icons";
     import type { User } from "../Common/UserTypes";
     import { getPicture } from "../Common/UserUtils";
     import AssistantAvatar from "./AssistantAvatar.svelte";
@@ -22,10 +22,12 @@
         onDismiss: (node: string) => Promise<void>;
         onRefresh?: (node: string) => Promise<void>;
         onAdjust?: (node: string, testId: string, overrides: Record<string, string>) => Promise<string | null>;
+        forkNode?: string | null;
+        onFork?: (node: string) => Promise<void>;
     }
 
     let { turn, nodes, users, memories, assistant = null, initiallyExpanded = false, onSetHead, onConfirm, onDismiss,
-          onRefresh, onAdjust }: Props = $props();
+          onRefresh, onAdjust, forkNode = null, onFork }: Props = $props();
 
     let expandedByUser = $state<boolean | null>(null);
 
@@ -105,9 +107,17 @@
                         </button>
                     </span>
                 {/if}
+                {#if forkNode && onFork && !streaming}
+                    <button type="button" class="btn btn-sm btn-link text-body-secondary text-decoration-none p-0 ms-auto"
+                            title="Ask the next question from here, on a new branch; the later messages stay on theirs"
+                            onclick={() => forkNode && onFork?.(forkNode)}>
+                        <Fa icon={faCodeBranch} /> Fork
+                    </button>
+                {/if}
                 <button
                     type="button"
-                    class="btn btn-sm btn-link ms-auto p-0"
+                    class="btn btn-sm btn-link p-0"
+                    class:ms-auto={!(forkNode && onFork && !streaming)}
                     aria-expanded={expanded}
                     onclick={() => (expandedByUser = !expanded)}
                 >
