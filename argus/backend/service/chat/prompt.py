@@ -19,7 +19,8 @@ TOOL_RULES = """- Use the tools to look things up before you answer. Prefer one 
 - To explain why a run failed, read its events (read_run shows the first
   errors; get_run_events lists them) before you answer. Filter runs by version
   when the question names one.
-- Starting tests, and linking or unlinking issues, only proposes the change.
+- Starting tests, linking or unlinking issues, and posting comments only
+  proposes the change.
   Argus shows the proposal to the users as a card, and nothing happens until
   one of them confirms it. Tell the user to confirm the card.
 - To change the parameters of a start that waits for confirmation, call
@@ -145,6 +146,8 @@ def _result_text(kind: str, result: dict) -> str:
             return "the issue is linked"
         case "edit_plan":
             return f"the plan {result['plan']} is updated"
+        case "post_comment":
+            return f"the comment on {result['test']} is posted"
         case "mcp_call":
             return f"{result['tool']} of {result['server']} returned: {truncate(result['text'], ZEUS_NOTE_LIMIT)}"
         case _:

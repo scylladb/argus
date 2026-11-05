@@ -3,10 +3,14 @@ from uuid import uuid1
 
 import pytest
 
+from argus.backend.service.chat import tasks as chat_tasks
 from argus.backend.service.chat.entity import resolve_entity
+from argus.backend.service.chat.history import ChatHistoryService
+from argus.backend.service.chat.hub import ChatHub
 from argus.backend.service.chat.llm import ToolCall
+from argus.backend.service.chat.service import ChatService
 from argus.backend.service.chat.tools import TOOLS, ToolContext, run_tool
-from argus.backend.tests.chat.helpers import seed_entity_release
+from argus.backend.tests.chat.helpers import seed_entity_release, text_turn, tool_turn
 from argus.backend.tests.release_summary.helpers import submit_run
 
 pytestmark = pytest.mark.docker_required
@@ -39,7 +43,7 @@ async def call(ctx, name: str, **arguments):
 
 
 async def test_the_discussion_names_its_authors_and_marks_zeus(ctx, discussed, chat_people, zeus_user):
-    outcome = await call(ctx, "read_discussion", run=str(discussed.run))
+    outcome = await call(ctx, "get_comments", run=str(discussed.run))
 
     comments = json.loads(outcome.content)["comments"]
     assert sorted((comment["author"]["name"], comment["zeus"]) for comment in comments) == [
@@ -73,4 +77,25 @@ async def test_no_report_is_said_plainly(release_manager_service, client_service
 
 def test_reading_reports_needs_no_zeus_connection():
     assert TOOLS["get_investigation"].available()
-    assert TOOLS["read_discussion"].available()
+    assert TOOLS["get_comments"].available()
+
+
+async def test_a_comment_is_posted_once_confirmed(discussed, chat_model, chat_people, testrun_service):
+    bob = chat_people[1]
+    entity = await resolve_entity("release", discussed.release.id)
+    service = ChatService(ChatHub())
+    chat_model.turns = [tool_turn(("post_comment", {"run": str(discussed.run), "message": "Same OOM as rc0."})),
+                        text_turn("Confirm the card to post it")]
+    await service.send(entity, "comment that it is the same OOM", bob)
+    await chat_tasks.drain()
+    _, nodes = await ChatHistoryService(entity).read()
+    card = next(node for node in nodes if node.role == "action")
+    before = len(await testrun_service.get_run_comments(discussed.run))
+
+    await service.confirm(entity, card.node, bob)
+    await chat_tasks.drain()
+
+    comments = await testrun_service.get_run_comments(discussed.run)
+    assert json.loads(card.action)["proposal"]["message"] == "Same OOM as rc0."
+    assert len(comments) == before + 1
+    assert [(comment.message, comment.user_id) for comment in comments].count(("Same OOM as rc0.", bob.id)) == 1

@@ -90,6 +90,15 @@ async def test_a_seed_picks_where_the_parameters_come_from(ctx, seeded, jenkins)
     jenkins.retrieve_job_parameters.assert_any_call(seeded.tests[0].build_system_id, 7, from_defaults=False)
 
 
+@pytest.mark.parametrize("version", ["master:latest", "branch-2025.1:latest", "master:1234",
+                                     "master:2025-11-01T10:00:00Z", "2025.1", "2025.1.0~rc1", "2025.1.0-rc2"])
+async def test_every_wizard_version_form_is_accepted(ctx, seeded, jenkins, version):
+    params = params_of(await call(ctx, "execute_tests", tests=[seeded.tests[0].name],
+                                  params={"scylla_version": version}))
+
+    assert (params["scylla_version"], params["scylla_repo"]) == (version, "")
+
+
 async def test_overrides_follow_the_wizard(ctx, seeded, jenkins):
     params = params_of(await call(ctx, "execute_tests", tests=[seeded.tests[0].name],
                                   params={"scylla_version": "2025.1.0", "backend": "gce"}))
@@ -102,6 +111,7 @@ async def test_overrides_follow_the_wizard(ctx, seeded, jenkins):
 @pytest.mark.parametrize(("overrides", "reason"), [
     ({"region": "mars-1"}, "not a supported region"),
     ({"scylla_ami_id": "not-an-ami"}, "scylla_ami_id must be"),
+    ({"scylla_version": "latest"}, "branch:latest"),
     ({"byo_scylla_repo": "git@github.com:someone/scylla.git", "byo_scylla_branch": "gone"}, "not found"),
 ])
 async def test_a_value_the_wizard_refuses_rejects_the_test(ctx, seeded, jenkins, overrides, reason):
@@ -130,6 +140,8 @@ async def test_job_params_come_in_the_wizard_groups(ctx, seeded, jenkins):
     assert environment["region"]["choices"][0] == "eu-west-1"
     assert environment["provision_type"]["description"] == "How the instances are provisioned"
     assert groups["post_test"][0]["choices"] == ["destroy", "keep", "keep-on-failure"]
+    version = next(field for field in groups["scylla"] if field["name"] == "scylla_version")
+    assert "master:latest" in version["format"]
 
 
 async def test_a_dry_run_lists_the_labelled_tests(ctx, seeded, jenkins, logged_in_user):
