@@ -155,7 +155,7 @@ class ChatHub:
                     memory_changed = memory_changed or stamps != release_stamps
                     release_stamps = stamps
                 if memory_changed:
-                    self.publish(entity.id, {"type": "memory", "memories": await ChatMemoryService().list(entity)})
+                    self.publish(entity.id, {"type": "memory", "memories": await ChatMemoryService().in_scope(entity)})
                 if loop.time() >= presence_due:
                     presence_due = loop.time() + self.presence_seconds
                     users = await self._refresh_presence(entity)

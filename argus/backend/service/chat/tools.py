@@ -483,7 +483,7 @@ class ReadMemoryArgs(BaseModel):
 @tool("read_memory", "The memories of this chat: conventions (notes) and findings, with their ids.",
       ReadMemoryArgs)
 async def read_memory(ctx: ToolContext, args: ReadMemoryArgs) -> dict:
-    memories = await ChatMemoryService().list(ctx.entity)
+    memories = await ChatMemoryService().in_scope(ctx.entity)
     if args.query:
         memories = [memory for memory in memories if args.query.lower() in memory["content"].lower()]
     people = await load_people(memory["updated_by"] for memory in memories)

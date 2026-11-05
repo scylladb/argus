@@ -83,7 +83,7 @@ class ChatMemoryService:
                 return memory, name
         raise ChatMemoryError(f"No memory {memory_id} in the scope of {entity.name}")
 
-    async def list(self, entity: ChatEntity) -> list[dict]:
+    async def in_scope(self, entity: ChatEntity) -> list[dict]:
         names = await self.scope_names(entity)
         partitions = await gather_limited(ChatMemory.find(entity_id=owner).all() for owner in names)
         return [memory_json(memory, names[memory.entity_id][1])
