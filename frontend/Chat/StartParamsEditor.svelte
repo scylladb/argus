@@ -84,7 +84,7 @@
             <div class="small fw-semibold text-body-secondary mt-1">{GROUP_NAMES[group] ?? group}</div>
             {#each entries as field (field.name)}
                 {@const id = `param-${test.test_id}-${field.name}`}
-                <div class="row g-1 align-items-center py-1" class:overridden={field.name in draft}>
+                <div class="row g-1 mx-0 align-items-center py-1" class:overridden={field.name in draft}>
                     <label class="col-5 small font-monospace text-break" for={id} title={field.description ?? ""}>
                         {field.name}
                     </label>
@@ -129,6 +129,7 @@
 <style>
     .fields {
         max-height: 22rem;
+        overflow-x: hidden;
         overflow-y: auto;
     }
     .filter {
