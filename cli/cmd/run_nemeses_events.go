@@ -184,6 +184,9 @@ Time filtering with --before and --after accepts:
   - RFC3339 / ISO-8601 datetimes (e.g. 2024-03-24T12:00:00Z)
   - Date strings (e.g. 2024-03-24, interpreted as UTC midnight)
 
+Each event shows its summary when it has one, and its message otherwise.
+Use --raw to show the original message of every event.
+
 Only SCT runs have per-event records; for other plugin types use
 "argus run activity" instead.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
@@ -198,6 +201,7 @@ Only SCT runs have per-event records; for other plugin types use
 		beforeRaw, _ := cmd.Flags().GetString("before")
 		afterRaw, _ := cmd.Flags().GetString("after")
 		limit, _ := cmd.Flags().GetInt("limit")
+		raw, _ := cmd.Flags().GetBool("raw")
 
 		log.Debug().
 			Str("run_id", runID).
@@ -247,7 +251,7 @@ Only SCT runs have per-event records; for other plugin types use
 		allEvents = deduplicateEvents(allEvents)
 
 		log.Info().Str("run_id", runID).Int("total_events", len(allEvents)).Msg("SCT events fetched successfully")
-		return out.Write(models.SCTEventsResponse{RunID: runID, Events: allEvents})
+		return out.Write(models.SCTEventsResponse{RunID: runID, Events: allEvents, Raw: raw})
 	},
 }
 
@@ -479,6 +483,7 @@ func init() {
 	runEventsCmd.Flags().String("before", "", "Only events before this time (Unix timestamp, RFC3339, or YYYY-MM-DD)")
 	runEventsCmd.Flags().String("after", "", "Only events after this time (Unix timestamp, RFC3339, or YYYY-MM-DD)")
 	runEventsCmd.Flags().Int("limit", 100, "Maximum events per severity level to return")
+	runEventsCmd.Flags().Bool("raw", false, "Show the original message of each event instead of its summary")
 	_ = runEventsCmd.MarkFlagRequired("run-id")
 
 	// run nemeses

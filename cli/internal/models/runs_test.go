@@ -2,6 +2,7 @@ package models_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/scylladb/argus/cli/internal/models"
@@ -29,38 +30,87 @@ func TestSCTEventDecodeSummary(t *testing.T) {
 	}
 }
 
-func TestSCTEventsResponseJSONSummary(t *testing.T) {
-	resp := models.SCTEventsResponse{
+func marshalEvents(t *testing.T, resp models.SCTEventsResponse) []map[string]any {
+	t.Helper()
+	raw, err := json.Marshal(resp)
+	require.NoError(t, err)
+	var got []map[string]any
+	require.NoError(t, json.Unmarshal(raw, &got))
+	return got
+}
+
+func TestSCTEventsResponseJSONPrefersSummary(t *testing.T) {
+	got := marshalEvents(t, models.SCTEventsResponse{
 		RunID: "run-1",
 		Events: []models.SCTEvent{
 			{EventID: "e1", Message: "full text", Summary: "short text"},
 			{EventID: "e2", Message: "full text"},
+			{EventID: "e3"},
 		},
-	}
-	raw, err := json.Marshal(resp)
-	require.NoError(t, err)
+	})
+	require.Len(t, got, 3)
 
-	var got []map[string]any
-	require.NoError(t, json.Unmarshal(raw, &got))
-	require.Len(t, got, 2)
-	assert.Equal(t, "short text", got[0]["summary"])
-	assert.Equal(t, "full text", got[0]["message"])
+	assert.Equal(t, "short text", got[0]["message"])
+	assert.Equal(t, true, got[0]["summarized"])
+	assert.NotContains(t, got[0], "summary")
+	assert.Equal(t, "e1", got[0]["event_id"])
+
+	assert.Equal(t, "full text", got[1]["message"])
 	assert.NotContains(t, got[1], "summary")
+	assert.NotContains(t, got[1], "summarized")
+
+	assert.Equal(t, "", got[2]["message"])
+	assert.NotContains(t, got[2], "summary")
+	assert.NotContains(t, got[2], "summarized")
 }
 
-func TestSCTEventsResponseRowsSummary(t *testing.T) {
-	resp := models.SCTEventsResponse{
+func TestSCTEventsResponseJSONRaw(t *testing.T) {
+	got := marshalEvents(t, models.SCTEventsResponse{
+		RunID: "run-1",
+		Raw:   true,
 		Events: []models.SCTEvent{
 			{EventID: "e1", Message: "full text", Summary: "short text"},
 			{EventID: "e2", Message: "full text"},
 		},
+	})
+	require.Len(t, got, 2)
+	for _, e := range got {
+		assert.Equal(t, "full text", e["message"])
+		assert.NotContains(t, e, "summary")
+		assert.NotContains(t, e, "summarized")
 	}
-	require.Equal(t, "Summary", resp.Headers()[len(resp.Headers())-1])
+}
 
-	rows := resp.Rows()
-	require.Len(t, rows, 2)
-	assert.Equal(t, []string{"full text", "short text"}, rows[0][len(rows[0])-2:])
-	assert.Equal(t, []string{"full text", ""}, rows[1][len(rows[1])-2:])
+func TestSCTEventsResponseRows(t *testing.T) {
+	long := strings.Repeat("x", 250)
+	events := []models.SCTEvent{
+		{EventID: "e1", Message: "full text", Summary: "short text"},
+		{EventID: "e2", Message: "full text"},
+		{EventID: "e3", Message: "full text", Summary: long},
+	}
+	tests := []struct {
+		name string
+		raw  bool
+		want []string
+	}{
+		{"summary by default", false, []string{"short text", "full text", long[:200] + "..."}},
+		{"message with raw", true, []string{"full text", "full text", "full text"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := models.SCTEventsResponse{Events: events, Raw: tt.raw}
+			headers := resp.Headers()
+			require.Len(t, headers, 7)
+			assert.Equal(t, "Message", headers[6])
+
+			rows := resp.Rows()
+			require.Len(t, rows, len(tt.want))
+			for i, row := range rows {
+				require.Len(t, row, 7)
+				assert.Equal(t, tt.want[i], row[6])
+			}
+		})
+	}
 }
 
 func TestNemesisRunInfoDecodeDescription(t *testing.T) {
