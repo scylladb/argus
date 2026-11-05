@@ -155,6 +155,9 @@ class ChatService:
         state = await history.state()
         if state.busy is None:
             return None
+        if await history.release_stale():
+            await self._after_tree_change(entity)
+            return state.busy
         await ChatState(entity_id=entity.id).update(stop_requested=state.busy)
         return state.busy
 

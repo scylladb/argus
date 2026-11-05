@@ -11,7 +11,7 @@ from argus.backend.service.chat.llm import ToolCall
 from argus.backend.service.chat.service import ChatService
 from argus.backend.service.chat.tools import ToolContext, run_tool
 from argus.backend.service.planner_service import CreatePlanPayload, PlanDiffPayload, PlanningService
-from argus.backend.tests.chat.helpers import seed_entity_release, text_turn, tool_turn
+from argus.backend.tests.chat.helpers import seed_entity_release, seed_view, text_turn, tool_turn
 from argus.backend.tests.release_summary.helpers import unique
 
 pytestmark = pytest.mark.docker_required
@@ -133,3 +133,22 @@ async def test_a_plan_changed_after_the_proposal_is_not_edited(seeded, plan, cha
 
     assert "changed since" in action["results"][0]["error"]
     assert (await PlanningService().get_plan(plan.id)).target_version == "2037.1"
+
+
+async def test_a_view_chat_edits_plan_groups_only_test_by_test(seeded, logged_in_user):
+    payload = CreatePlanPayload(
+        name=unique("plan"), description="", owner=logged_in_user.id, participants=[], target_version="2037.1",
+        release_id=seeded.release.id, tests=[], groups=[seeded.group.id], assignments={}, options={})
+    plan = await PlanningService().create_plan(payload, logged_in_user)
+    view = await seed_view(logged_in_user, [seeded.tests[0]])
+    ctx = ToolContext(entity=await resolve_entity("view", view.id), user=logged_in_user, node=uuid1())
+
+    labelled = await call(ctx, "edit_plan", plan=plan.name, add_labels={seeded.group.name: ["week1"]})
+    removed = await call(ctx, "edit_plan", plan=plan.name, remove_groups=[seeded.group.name])
+    one_test = await call(ctx, "edit_plan", plan=plan.name, add_labels={seeded.tests[0].name: ["week1"]})
+    outside = await call(ctx, "edit_plan", plan=plan.name, add_labels={seeded.tests[1].name: ["week1"]})
+
+    assert labelled.error and "outside this view" in labelled.content
+    assert removed.error and "outside this view" in removed.content
+    assert one_test.action["proposal"]["diff"]["options_set"] == {str(seeded.tests[0].id): {"labels": ["week1"]}}
+    assert outside.error

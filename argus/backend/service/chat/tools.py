@@ -813,12 +813,12 @@ async def get_comments(ctx: ToolContext, args: DiscussionArgs) -> dict:
         for comment in comments]}
 
 
-COMMENT_LIMIT = 5000
+POST_COMMENT_LIMIT = 5000
 
 
 class PostCommentArgs(BaseModel):
     run: str = Field(description=RUN_REFERENCE)
-    message: str = Field(min_length=1, max_length=COMMENT_LIMIT,
+    message: str = Field(min_length=1, max_length=POST_COMMENT_LIMIT,
                          description="The comment in Markdown; @username mentions notify that user")
 
 

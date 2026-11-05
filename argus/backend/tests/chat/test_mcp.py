@@ -173,3 +173,16 @@ async def test_a_disabled_server_offers_no_tools(chat_client: TestClient, chat_m
 
     assert not any(tool.name.startswith("mcp_") for tool in chat_model.requests[0].tools)
     assert json.loads(json.dumps(fake_mcp.calls)) == []
+
+
+@pytest.mark.docker_required
+@pytest.mark.usefixtures("chat_model")
+def test_a_new_url_needs_the_headers_again(chat_client: TestClient, fake_mcp):
+    register(chat_client, {})
+
+    moved = chat_client.post(f"{API}/mcp/server", json={"name": "jira", "url": "https://elsewhere.test/mcp"})
+    toggled = chat_client.post(f"{API}/mcp/server", json={"name": "jira", "url": "https://mcp.test/mcp",
+                                                         "enabled": False})
+
+    assert moved.json()["status"] == "error"
+    assert ok(toggled)["headers"] == ["Authorization"]

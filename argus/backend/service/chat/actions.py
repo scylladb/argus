@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -332,11 +333,14 @@ async def locate_card(entity: ChatEntity, node: UUID) -> ChatHistory:
 async def claim(entity: ChatEntity, node: UUID, user: User, state: str,
                 auto: bool = False) -> tuple[ChatHistory, dict]:
     card = await locate_card(entity, node)
+    if card.hidden:
+        raise ChatActionError("This card belongs to an undone question")
     stored_state = card.action_state
     result = await card.update(if_conditions={"action_state": "pending"}, action_state=state)
     if not result.applied:
         current = (result.existing or {}).get("action_state") or stored_state
         raise ChatActionError(f"This card is already {current}")
+    card = await locate_card(entity, node)
     action = json.loads(card.action)
     now = datetime.now(UTC)
     if state == "running":
@@ -397,6 +401,10 @@ async def execute(entity: ChatEntity, card: ChatHistory, action: dict, user: Use
                 results = [{"issue": proposal["issue_key"], "error": None}]
             case kind:
                 results = [{"error": f"Unknown action {kind}"}]
+    except asyncio.CancelledError:
+        action["results"] = [{"error": "The server stopped while this card ran; check which of it started"}]
+        await ChatHistoryService(entity).flush(card, action=_json(action), action_state="done")
+        raise
     except Exception as exception:  # noqa: BLE001 - the card records the failure
         LOGGER.warning("The chat action %s failed", card.node, exc_info=True)
         results = [{"error": str(exception)}]

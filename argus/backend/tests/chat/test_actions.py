@@ -1,3 +1,4 @@
+import asyncio
 import json
 from unittest.mock import MagicMock, patch
 from uuid import uuid1
@@ -213,3 +214,34 @@ async def test_a_confirmed_link_submits_the_issue(seeded, issues, chat_model, lo
                                           test_id=seeded.tests[0].id, run_id=seeded.run, user=logged_in_user)
     _, nodes = await ChatHistoryService(entity).read()
     assert next(node for node in nodes if node.node == card.node).action_state == "done"
+
+
+async def test_a_card_under_an_undone_question_cannot_be_confirmed(seeded, jenkins, chat_model, logged_in_user):
+    entity, service, card = await card_from_chat(seeded, chat_model, logged_in_user, "execute_tests",
+                                                 {"tests": [seeded.tests[0].name]})
+
+    await service.undo(entity)
+    with pytest.raises(ChatActionError, match="undone"):
+        await service.confirm(entity, card.node, logged_in_user)
+    jenkins.build_job.assert_not_called()
+
+
+async def test_a_shutdown_while_a_card_runs_closes_the_card(seeded, jenkins, chat_model, logged_in_user):
+    started = asyncio.Event()
+
+    async def hang(**_):
+        started.set()
+        await asyncio.Event().wait()
+
+    jenkins.build_job.side_effect = hang
+    entity, service, card = await card_from_chat(seeded, chat_model, logged_in_user, "execute_tests",
+                                                 {"tests": [seeded.tests[0].name]})
+
+    await service.confirm(entity, card.node, logged_in_user)
+    await started.wait()
+    await chat_tasks.shutdown()
+
+    _, nodes = await ChatHistoryService(entity).read()
+    closed = next(node for node in nodes if node.node == card.node)
+    assert closed.action_state == "done"
+    assert "server stopped" in json.loads(closed.action)["results"][0]["error"]

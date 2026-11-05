@@ -58,3 +58,15 @@ def test_a_non_admin_is_refused(api_client: TestClient):
     response = api_client.get(f"{API}/connections")
 
     assert response.status_code == 403
+
+
+def test_a_new_endpoint_needs_the_token_again(api_client: TestClient):
+    ok(api_client.post(f"{API}/connection", json={"name": "db-webui", "endpoint": "https://db.test/api",
+                                                   "token": "sk-secret"}))
+
+    moved = api_client.post(f"{API}/connection", json={"name": "db-webui", "endpoint": "https://other.test/api"})
+    renamed_token = api_client.post(f"{API}/connection", json={"name": "db-webui", "endpoint": "https://other.test/api",
+                                                               "token": "sk-other"})
+
+    assert moved.json()["status"] == "error"
+    assert ok(renamed_token)["endpoint"] == "https://other.test/api"

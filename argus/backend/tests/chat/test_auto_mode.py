@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 from unittest.mock import MagicMock, patch
@@ -69,4 +70,22 @@ async def test_without_auto_mode_the_card_waits(chat_client: TestClient, chat_mo
     card = next(node for node in conversation["nodes"] if node["role"] == "action")
     assert card["action"]["state"] == "pending"
     assert "Auto mode is on" not in chat_model.requests[0].messages[0].content
+    jenkins.build_job.assert_not_called()
+
+
+async def test_stop_before_the_tools_run_starts_nothing(chat_client: TestClient, chat_model, jenkins, seeded):
+    base = f"/api/v1/chat/release/{seeded.release.id}"
+    paused = asyncio.Event()
+    chat_model.turns = [[paused, *tool_turn(("execute_tests", {"tests": [seeded.tests[0].name]}))],
+                        text_turn("Started")]
+
+    ok(chat_client.post(f"{base}/messages", json={"content": "start it", "auto": True}))
+    ok(chat_client.post(f"{base}/stop"))
+    paused.set()
+    deadline = time.monotonic() + 10
+    while (conversation := ok(chat_client.get(base)))["busy"] is not None and time.monotonic() < deadline:
+        time.sleep(0.05)
+
+    assert not any(node["role"] in ("tool", "action") for node in conversation["nodes"])
+    assert next(node for node in conversation["nodes"] if node["role"] == "assistant")["status"] == "stopped"
     jenkins.build_job.assert_not_called()
