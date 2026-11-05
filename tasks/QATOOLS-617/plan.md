@@ -102,15 +102,15 @@ stays in every plan built from a spec.
     - `set_head(node)`: moves to the newest visible leaf below `node`.
   - Helpers: `siblings(nodes, node)`, `node_json(row) -> dict`.
 
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - append and read in order
   - the active path after a retry, a branch switch and an undo
   - a second `acquire` raises `ChatBusyError`; a stale lock is taken over; `release` frees it
   - `move_head` with a wrong expected value is not applied
   - a view entity resolves its tests and releases; an unknown id raises
-- [ ] Run them and confirm the failures.
-- [ ] Write the code.
-- [ ] Run the verify sequence.
+- [x] Run them and confirm the failures.
+- [x] Write the code.
+- [x] Run the verify sequence.
 
 ## Task 3 — Memories, their routes, and findings in the summary
 
@@ -129,14 +129,14 @@ stays in every plan built from a spec.
   - `findings(entity_id)` returns `kind=finding` entries.
 - `ChatMemoryError(APIException)`.
 
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - create, edit, delete, and history in order with authors
   - revert of each action
   - a view sees its releases' memories, and a write to a release outside the view is refused
   - the summary routes return `findings`, and a recompute (a new run, then a read) keeps them
-- [ ] Run them and confirm the failures.
-- [ ] Write the code.
-- [ ] Run the verify sequence.
+- [x] Run them and confirm the failures.
+- [x] Write the code.
+- [x] Run the verify sequence.
 
 ## Task 4 — The agent, the read tools, and the conversation routes
 
@@ -181,9 +181,9 @@ stays in every plan built from a spec.
   - `touch(entity_id, memory=False)` writes `changed_at` or `memory_changed_at`.
 - Routes:
   - The commands use `APIResponse`. `ChatBusyError` and `ChatNotConfiguredError` are `APIException`s.
-  - `GET /events` uses `Depends(api_current_user)` and returns `StreamingResponse(media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})`. It yields the `snapshot`, then the events of `hub.subscribe`, and a `: heartbeat` comment every 15 s. The generator's `finally` unsubscribes, so a client that leaves frees its queue and its presence.
+  - `GET /events` uses `Depends(api_current_user)` and returns `StreamingResponse(media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})`. It yields `retry: 1000`, the `snapshot`, then the events of the subscription, and a `heartbeat` event every 10 s. A stream ends after 25 s, or at once when `close_streams_on_exit` sees the server's shutdown signal. The generator's `finally` unsubscribes, so a client that leaves frees its queue and its presence.
 
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - the prompt holds the memories of the view and of its release, the summary counts, the user prefix, and starts at a summary node
   - each read tool on seeded data; out-of-scope refused
   - the agent with a scripted turn of text writes the user and assistant nodes, usage and the memory snapshot
@@ -196,10 +196,10 @@ stays in every plan built from a spec.
   - presence lists two users with the chat open
   - the event stream sends a `snapshot` first, and refuses an unknown entity
   - not configured
-- [ ] Run them and confirm the failures.
-- [ ] Write the code.
-- [ ] Run the verify sequence.
-- [ ] Commit tasks 2–4: `feature(chat-mode): add the shared chat with memories`.
+- [x] Run them and confirm the failures.
+- [x] Write the code.
+- [x] Run the verify sequence.
+- [x] Committed tasks 2–4 in `feature(chat-mode): add the shared chat of releases and views`.
 
 ## Task 5 — Actions: start tests and link issues with confirmation
 
@@ -221,10 +221,10 @@ stays in every plan built from a spec.
 - `confirm_action(entity, node, user)`:
   - Moves `action_state` from `pending` to `running` with an LWT on the history row.
   - Runs `build_job(build_system_id, params, requested_by=user)` 5 at a time, or `IssueService().submit` / `delete`.
-  - Stores the results, sets `done`, and appends a `tool` node with the outcome under the action node.
+  - Stores the results on the card and sets `done`; the prompt turns a done or dismissed card into an `[Argus]` note.
 - `dismiss_action` moves the state from `pending` to `dismissed` with an LWT.
 
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - reference resolution order and ambiguity
   - label resolution, with a group fan-out and the available labels on no match
   - `backend=gce` against choices without gce is rejected with a reason
@@ -234,10 +234,10 @@ stays in every plan built from a spec.
   - confirm builds each job once, as the confirming user; a second confirm and a confirm after dismiss are refused
   - Jenkins errors are recorded per test
   - link and unlink through the card
-- [ ] Run them and confirm the failures.
-- [ ] Write the code.
-- [ ] Run the verify sequence.
-- [ ] Commit `feature(chat-mode): start tests and link issues from the chat`.
+- [x] Run them and confirm the failures.
+- [x] Write the code.
+- [x] Run the verify sequence.
+- [x] Committed in `feature(chat-mode): add the shared chat of releases and views`, with its frontend in `feature(frontend): add the chat modal and the chat admin panel`.
 
 ## Task 6 — Admin Panel: connections and the model picker
 
@@ -259,10 +259,10 @@ stays in every plan built from a spec.
   - editable context and tools where the probe found nothing
   - "Set as default"
   - a warning when tools are off
-- [ ] Write the failing tests: rendering the merged list; the probe on select; set default posts the chosen model; the token is never prefilled.
+- [x] Write the failing tests: rendering the merged list; the probe on select; set default posts the chosen model; the token is never prefilled.
 - [ ] Run them and confirm the failures.
-- [ ] Write the code.
-- [ ] Run `yarn test` and `yarn build`.
+- [x] Write the code.
+- [x] Run `yarn test` and `yarn build`.
 
 ## Task 7 — The chat modal, the anchor, and the findings card
 
@@ -289,7 +289,7 @@ stays in every plan built from a spec.
   - Answers are collapsed except the one being streamed.
 - Style: a `bg-light-one` inset with borderless `shadow-sm` white cards.
 
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - `applyEvent` for each event type, deltas followed by a replacing `node`
   - `connectChat` parses events and drops to not-live after silence, with a fake `EventSource`
   - `activePath` and siblings
@@ -300,9 +300,9 @@ stays in every plan built from a spec.
   - the anchor with the "not configured" state
   - the summary findings card
 - [ ] Run them and confirm the failures.
-- [ ] Write the code.
-- [ ] Run `yarn test` and `yarn build`.
-- [ ] Commit tasks 6–7: `feature(frontend): add the chat modal and the chat model picker`.
+- [x] Write the code.
+- [x] Run `yarn test` and `yarn build`.
+- [x] Committed tasks 6–7 in `feature(frontend): add the chat modal and the chat admin panel`.
 
 ## Task 8 — Docs
 
@@ -310,27 +310,98 @@ stays in every plan built from a spec.
 - Create: `docs/release_chat.md`
 - Modify: `docs/release_summary.md` (Findings), `docs/api_usage.md` (chat and admin routes), `docs/project/architecture.md` (the chat service, background tasks, the first server-sent event stream and its buffering header, the model adapter), `docs/INDEX.md`
 
-- [ ] Write the docs: the chat, memories and findings, the requests with examples, how memories shape answers, connections and the default model.
-- [ ] Run `uv run pre-commit run --all-files`.
-- [ ] Commit `docs(chat-mode): describe the release and view chat`.
+- [x] Write the docs: the chat, memories and findings, the requests with examples, how memories shape answers, connections and the default model.
+- [x] Run `uv run pre-commit run --all-files`.
+- [x] Commit `docs(chat-mode): describe the release and view chat`.
+
+## Task 10 — Queue Zeus investigations from the chat
+
+**Files:**
+- Create: `argus/backend/service/zeus_client.py`, `argus/backend/service/chat/people.py`
+- Modify: `argus/backend/service/chat/actions.py` (propose, confirm and refresh a `zeus_investigation` card), `tools.py` (`investigate_runs`, `get_investigation`, offered only when Zeus is configured), `prompt.py` (the card note), `service.py` and `controller/chat_api.py` (`POST /actions/{node}/refresh`)
+- Modify: `frontend/Chat/ChatActionCard.svelte`, `ChatMessage.svelte`, `ChatModal.svelte`, `types.ts`
+- Test: `argus/backend/tests/chat/test_zeus.py`, `frontend/Chat/ChatActionCard.test.ts`
+
+**Internals:**
+- `ZeusClient`: reads `ZEUS_SCHEMA`, `ZEUS_HOST` and `ZEUS_TOKEN` from the config; `configured()`, `investigate(prompt) -> task_id`, `status(task_id) -> dict`. `ZeusError` carries Zeus's `detail`.
+- `zeus_prompt(run, test, release, entity, user, question)`.
+- `refresh_zeus(entity, card, force=False)`: skipped when `refreshed_at` is younger than 15 s and not forced; reads every task that is not completed or failed, stores the status, the report and the error, and flushes the card.
+- `Tool.available`: a callable that hides a tool from the model.
+- `load_people(ids)` and `person(id, people)`: one batched user read per tool call; `get_users` and `get_assignees` (active plans as the run assignment reads them, the test's and the group's assignees, the last run); the run, plan and memory tools name people with them.
+
+- [x] Write the failing tests:
+  - `ZeusClient` against an `httpx` mock transport: the bearer token, 202, 503 with its detail, status
+  - a proposal for runs in scope, with the prompt; a run outside the chat refused; more than 5 runs refused
+  - confirm queues each run once; a 503 for one run is recorded and the others are queued
+  - refresh stores a completed report; a second refresh within 15 s reads nothing; a failed Zeus call keeps the last status
+  - `get_investigation` returns the reports and refreshes stale cards
+  - the tools are hidden without Zeus configuration
+  - the prompt note of a done card carries the start of the report
+  - the card in the frontend shows each task's status and the report, and refreshes while a task is open
+  - `get_users` names stored users and marks unknown ids; `get_assignees` follows a group's plan assignment; `read_run` and `get_runs` name the assignee
+  - `get_run_events` lists an SCT run's errors by severity and names who changed a run; `read_run` carries the error digest; `get_runs` shows and filters the version
+- [x] Run them and confirm the failures.
+- [x] Write the code.
+- [x] Run the verify sequence.
+- [x] Committed in `feature(chat-mode): add the shared chat of releases and views`, with its frontend in `feature(frontend): add the chat modal and the chat admin panel`.
+
+## Task 11 — Wide references and `show_run`
+
+**Files:**
+- Modify: `argus/backend/service/chat/resolve.py` (`Scope.find_releases`, `find_groups`, `find_tests`, `resolve_release`, `resolve_group`, `resolve_tests`, `resolve_run_reference`, `run_url`; `run_in_scope` moves here), `tools.py` (every tool takes a reference string; `show_run`), `actions.py`, `agent.py` (`ToolOutcome.card_state`), `prompt.py`
+- Modify: `frontend/Chat/ChatActionCard.svelte`, `types.ts`
+- Test: `argus/backend/tests/chat/test_references.py`, the renamed arguments in `test_tools.py`, `test_actions.py`, `test_zeus.py`, `frontend/Chat/ChatActionCard.test.ts`
+
+- [x] Write the failing tests: every form of each reference; a shared name asks for its group; a group or a release expands to its enabled tests; a run by id, `build_id#n`, `group/test#n`, `pretty name #n`, a Jenkins build URL; a test without a number lists its builds; `run_url` falls back to the plugin route; the show-run card opens in a new tab and asks for nothing.
+- [x] Run them and confirm the failures.
+- [x] Write the code.
+- [x] Run the verify sequence.
+- [x] Committed in `feature(chat-mode): add the shared chat of releases and views`, with its frontend in `feature(frontend): add the chat modal and the chat admin panel`.
+
+## Task 12 — Zeus reports from the run discussion
+
+**Files:**
+- Modify: `argus/backend/service/chat/tools.py` (`read_discussion`, `get_investigation` reads the discussion and returns a `zeus_report` card; `is_zeus`, `discussion_report`), `prompt.py`
+- Modify: `frontend/Chat/ChatActionCard.svelte`, `types.ts`
+- Test: `argus/backend/tests/chat/test_discussion.py`, `test_zeus.py`, `frontend/Chat/ChatActionCard.test.ts`
+
+- [x] Write the failing tests: the discussion names its authors and marks Zeus; the latest report joins its pieces and skips the notice; the card is ready and carries the whole report; no report is said plainly; reading needs no Zeus connection; the card renders the report with its author and the run link.
+- [x] Run them and confirm the failures.
+- [x] Write the code.
+- [x] Run the verify sequence.
+- [x] Committed in `feature(chat-mode): add the shared chat of releases and views`, with its frontend in `feature(frontend): add the chat modal and the chat admin panel`.
+
+## Task 13 — The assistant's identity
+
+**Files:**
+- Create: `argus/backend/service/chat/identity.py` (`ChatIdentityService`, `picture_dimensions`, `check_picture`, `identity_json`)
+- Modify: `argus/backend/models/chat.py` (`ChatIdentity`), `controller/admin_api.py`, `controller/chat_api.py` (`identity_router`), `controller/api.py`, `service/chat/agent.py`, `conversation.py`, `hub.py`, `service.py`, `prompt.py`, `prompts/system.md`
+- Create: `frontend/AdminPanel/ChatIdentityEditor.svelte`, `AvatarCropper.svelte`, `avatarCrop.ts`, `frontend/Chat/AssistantAvatar.svelte`
+- Modify: `frontend/AdminPanel/ChatConfigManager.svelte`, `frontend/Chat/ChatMessage.svelte`, `ChatModal.svelte`, `types.ts`
+- Test: `argus/backend/tests/chat/test_identity.py`, `frontend/AdminPanel/avatarCrop.test.ts`, `ChatConfigManager.test.ts`, `frontend/Chat/ChatMessage.test.ts`
+
+- [x] Write the tests: the size of each picture format comes from its header; a picture that is not square, too large or not an image is refused; an active identity names the assistant in the conversation and the system prompt, and its picture is served; an identity needs a known connection and a name, and goes with its connection; the crop stays on the picture and zooms around the middle; the panel shows each identity and makes one active; the editor saves a name.
+- [x] Write the code.
+- [x] Run the verify sequence and `sync-models` on the dev cluster.
+- [x] Committed in `feature(chat-mode): add the shared chat of releases and views`, with its frontend in `feature(frontend): add the chat modal and the chat admin panel`.
 
 ## Task 9 — Full verify and the live check
 
-- [ ] `uv run pre-commit run --all-files`, `uv run pytest`, `yarn test`, `yarn build`.
-- [ ] Run `sync-models` on the dev cluster.
-- [ ] On the running dev server, set up the model:
+- [x] `uv run pre-commit run --all-files`, `uv run pytest`, `yarn test`, `yarn build`.
+- [x] Run `sync-models` on the dev cluster.
+- [x] On the running dev server, set up the model:
   - add the `https://ai.komachi.sh/api` connection in the Admin Panel
   - probe it
   - set Gemma-4-12B-it-GGUF as the default
   - test tool calling
-- [ ] Release chat on `scylla-2025.1`:
+- [x] Release chat on `scylla-2025.1`:
   - ask what failed on the newest rc and compare with the summary
   - try again, switch branches, undo, compact
   - add a finding through the chat and see it in the summary
   - a second session sees the answer live and shows both users in presence
   - with the event stream blocked, the modal falls back to polling
-- [ ] View chat: the view's memories and its release's memories reach the answer.
-- [ ] A start proposal card with a rejected setting, dismissed.
-- [ ] The `tools: false` path with Gemma-3-4b-it-GGUF.
-- [ ] Headless Chrome at 1600 and 900 pixels.
+- [x] View chat: the view's memories and its release's memories reach the answer.
+- [ ] A start proposal card with a rejected setting, dismissed. (Proposal and dismiss checked; no rejection, because SCT's `backend` is a free-text parameter with no choices.)
+- [x] The `tools: false` path with Gemma-3-4b-it-GGUF.
+- [x] Headless Chrome at 1600 and 900 pixels.
 - [ ] Record the results in the pull request body.
