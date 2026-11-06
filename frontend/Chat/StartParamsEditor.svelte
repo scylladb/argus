@@ -101,7 +101,15 @@
                             </select>
                         {:else}
                             <input {id} class="form-control form-control-sm font-monospace" value={valueOf(field)}
+                                   list={field.suggestions?.length ? `${id}-suggestions` : undefined}
                                    oninput={(event) => setValue(field, (event.currentTarget as HTMLInputElement).value)} />
+                            {#if field.suggestions?.length}
+                                <datalist id="{id}-suggestions">
+                                    {#each field.suggestions as suggestion (suggestion)}
+                                        <option value={suggestion}></option>
+                                    {/each}
+                                </datalist>
+                            {/if}
                         {/if}
                     </div>
                     <div class="col-1 text-end">

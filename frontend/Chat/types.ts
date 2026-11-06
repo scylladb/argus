@@ -14,7 +14,9 @@ export interface JobField {
     value: string | null;
     group: string;
     choices?: string[];
+    suggestions?: string[];
     description?: string;
+    format?: string;
 }
 
 export interface ProposedTest {
