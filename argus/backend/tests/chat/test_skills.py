@@ -72,6 +72,9 @@ async def test_load_skill_returns_an_on_demand_skill(chat_client: TestClient, ch
     ("{tool_rules} {scope} {memories} {summary} {secret}", "Unknown placeholder {secret}"),
     ("{tool_rules} {scope} {summary}", "must keep {memories}"),
     ("{tool_rules} {scope} {memories} {summary} {", "stray brace"),
+    ("{tool_rules} {scope} {memories} {summary} {date[999]}", "plain name"),
+    ("{tool_rules} {scope} {memories} {summary} {date:>99999}", "plain name"),
+    ("{tool_rules} {scope} {memories} {summary} {}", "plain name"),
 ])
 @pytest.mark.usefixtures("chat_model")
 def test_a_broken_template_is_refused(chat_client: TestClient, template, error):

@@ -66,11 +66,15 @@ def check_template(template: str) -> None:
     if len(template) > TEMPLATE_LIMIT:
         raise ChatSkillError(f"The system prompt must be at most {TEMPLATE_LIMIT} characters")
     try:
-        names = {re.split(r"[.\[]", name)[0] for _, name, _, _ in string.Formatter().parse(template)
-                 if name is not None}
+        fields = [(name, spec, conversion) for _, name, spec, conversion in string.Formatter().parse(template)
+                  if name is not None]
     except ValueError as exception:
         raise ChatSkillError(f"The system prompt has a stray brace ({exception}); write {{{{ and }}}} for a "
                              "literal brace") from exception
+    if odd := [name for name, spec, conversion in fields if not NAME_RE.match(name) or spec or conversion]:
+        raise ChatSkillError(f"A placeholder is a plain name in braces, such as {{memories}}; not "
+                             f"{', '.join('{' + name + '}' for name in odd)}")
+    names = {name for name, _, _ in fields}
     if unknown := sorted(names - set(PLACEHOLDERS)):
         raise ChatSkillError(f"Unknown placeholder {', '.join('{' + name + '}' for name in unknown)}; the "
                              f"placeholders are {', '.join('{' + name + '}' for name in PLACEHOLDERS)}")

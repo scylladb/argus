@@ -20,6 +20,7 @@ from argus.backend.service.chat.resolve import (
     ToolScopeError,
     load_scope,
     resolve_run_reference,
+    run_in_scope,
     run_url,
 )
 from argus.backend.service.issue_service import IssueService
@@ -371,36 +372,14 @@ async def execute(entity: ChatEntity, card: ChatHistory, action: dict, user: Use
         match action["kind"]:
             case "execute_tests":
                 jenkins = JenkinsService()
-                results = await gather_limited((_start_job(jenkins, test, user) for test in proposal["tests"]),
-                                               limit=JOB_CONCURRENCY)
-            case "link_issue":
-                issue = await IssueService().submit(issue_url=proposal["issue_url"], test_id=UUID(proposal["test_id"]),
-                                                    run_id=UUID(proposal["run_id"]), user=user)
-                results = [{"issue": issue, "error": None}]
-            case "zeus_investigation":
-                results = await _queue_investigations(action)
-            case "post_comment":
-                await TestRunService().post_run_comment(test_id=UUID(proposal["test_id"]),
-                                                        run_id=UUID(proposal["run_id"]), message=proposal["message"],
-                                                        reactions={}, mentions=[], user=user)
-                results = [{"test": proposal["test"], "error": None}]
-            case "mcp_call":
-                text, failed = await McpServerService().call(proposal["server"], proposal["tool"],
-                                                             proposal["arguments"])
-                results = [{"server": proposal["server"], "tool": proposal["tool"],
-                            "text": text[:MCP_RESULT_LIMIT], "error": text[:500] if failed else None}]
-            case "edit_plan":
-                plan = await ArgusReleasePlan.get(id=UUID(proposal["plan_id"]))
-                if plan_stamp(plan) != proposal["last_updated"]:
-                    raise ChatActionError("The plan changed since this was proposed; ask for the edit again")
-                await PlanningService().update_plan(plan_diff_payload(proposal["diff"]), user)
-                results = [{"plan": proposal["plan"], "error": None}]
-            case "unlink_issue":
-                await IssueService().delete(issue_id=UUID(proposal["issue_id"]), run_id=UUID(proposal["run_id"]),
-                                            user=user)
-                results = [{"issue": proposal["issue_key"], "error": None}]
-            case kind:
-                results = [{"error": f"Unknown action {kind}"}]
+                scope = await load_scope(entity)
+                results = await gather_limited((_recheck_and_start(jenkins, scope, test, user)
+                                                for test in proposal["tests"]), limit=JOB_CONCURRENCY)
+            case "link_issue" | "unlink_issue" | "post_comment" | "zeus_investigation" | "edit_plan":
+                await _check_card_scope(entity, action)
+                results = await _execute_in_scope(action, user)
+            case _:
+                results = await _execute_in_scope(action, user)
     except asyncio.CancelledError:
         action["results"] = [{"error": "The server stopped while this card ran; check which of it started"}]
         await ChatHistoryService(entity).flush(card, action=_json(action), action_state="done")
@@ -411,3 +390,67 @@ async def execute(entity: ChatEntity, card: ChatHistory, action: dict, user: Use
     action["results"] = results
     await ChatHistoryService(entity).flush(card, action=_json(action), action_state="done")
     return action
+
+
+async def _recheck_and_start(jenkins: JenkinsService, scope: Scope, entry: dict, user: User) -> dict:
+    """Start a confirmed test with the parameters its card showed, once the test is still in the chat's scope and
+    its overrides still pass the job's current parameters."""
+    test = next((test for test in scope.tests if str(test.id) == entry["test_id"]), None)
+    reason = "The test is no longer in this chat's scope" if test is None else None
+    if test is not None:
+        _, rejected = await _check_start(jenkins, scope, test, entry["overrides"],
+                                         Seed.of(entry.get("seed"), entry.get("build_number")))
+        reason = rejected["reason"] if rejected else None
+    if reason:
+        return {"build_system_id": entry["build_system_id"], "test": entry["test"], "queue_item": None,
+                "build_number": None, "error": f"Not started: {reason}"}
+    return await _start_job(jenkins, entry, user)
+
+
+async def _check_card_scope(entity: ChatEntity, action: dict) -> None:
+    """A card confirmed later acts only on what the chat still reaches."""
+    proposal = action["proposal"]
+    if action["kind"] == "edit_plan":
+        plan = await ArgusReleasePlan.get(id=UUID(proposal["plan_id"]))
+        if not entity.reaches_release(plan.release_id):
+            raise ToolScopeError(f"The plan {proposal['plan']} is outside {entity.name}")
+    elif action["kind"] == "zeus_investigation":
+        proposal["runs"] = [run for run in proposal["runs"] if entity.reaches_test(UUID(run["test_id"]))]
+        if not proposal["runs"]:
+            raise ToolScopeError(f"None of these runs is in {entity.name} any more")
+    else:
+        await run_in_scope(entity, UUID(proposal["run_id"]))
+
+
+async def _execute_in_scope(action: dict, user: User) -> list[dict]:
+    proposal = action["proposal"]
+    match action["kind"]:
+        case "link_issue":
+            issue = await IssueService().submit(issue_url=proposal["issue_url"], test_id=UUID(proposal["test_id"]),
+                                                run_id=UUID(proposal["run_id"]), user=user)
+            results = [{"issue": issue, "error": None}]
+        case "zeus_investigation":
+            results = await _queue_investigations(action)
+        case "post_comment":
+            await TestRunService().post_run_comment(test_id=UUID(proposal["test_id"]),
+                                                    run_id=UUID(proposal["run_id"]), message=proposal["message"],
+                                                    reactions={}, mentions=[], user=user)
+            results = [{"test": proposal["test"], "error": None}]
+        case "mcp_call":
+            text, failed = await McpServerService().call(proposal["server"], proposal["tool"],
+                                                         proposal["arguments"])
+            results = [{"server": proposal["server"], "tool": proposal["tool"],
+                        "text": text[:MCP_RESULT_LIMIT], "error": text[:500] if failed else None}]
+        case "edit_plan":
+            plan = await ArgusReleasePlan.get(id=UUID(proposal["plan_id"]))
+            if plan_stamp(plan) != proposal["last_updated"]:
+                raise ChatActionError("The plan changed since this was proposed; ask for the edit again")
+            await PlanningService().update_plan(plan_diff_payload(proposal["diff"]), user)
+            results = [{"plan": proposal["plan"], "error": None}]
+        case "unlink_issue":
+            await IssueService().delete(issue_id=UUID(proposal["issue_id"]), run_id=UUID(proposal["run_id"]),
+                                        user=user)
+            results = [{"issue": proposal["issue_key"], "error": None}]
+        case kind:
+            results = [{"error": f"Unknown action {kind}"}]
+    return results
