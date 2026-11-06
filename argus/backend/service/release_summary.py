@@ -64,6 +64,7 @@ class TestEntry(TypedDict):
     version: str | None
     issues: int
     comments: int
+    start_time: str | None
 
 
 class IssueEntry(TypedDict):
@@ -76,6 +77,8 @@ class IssueEntry(TypedDict):
     novelty: Literal["new", "existing"]
     status: Literal["open", "fixed"]
     on_latest_run: bool
+    open_test_ids: list[str]
+    latest_test_ids: list[str]
     test_ids: list[str]
     run_ids: list[str]
     issue: dict
@@ -128,9 +131,21 @@ def count(tests: list[TestEntry], issues: list[IssueEntry]) -> Counts:
     )
 
 
+def filter_issue(issue: IssueEntry, test_ids: set[str]) -> IssueEntry:
+    """The issue as the given tests alone see it: its status, its latest-run mark, its tests, runs and links."""
+    links = [link for link in issue["issue"].get("links", []) if str(link.get("test_id")) in test_ids]
+    open_tests = sorted(test_ids.intersection(issue.get("open_test_ids", issue["test_ids"])))
+    latest_tests = sorted(test_ids.intersection(issue.get("latest_test_ids", [])))
+    return {**issue, "status": "open" if open_tests else "fixed", "on_latest_run": bool(latest_tests),
+            "open_test_ids": open_tests, "latest_test_ids": latest_tests,
+            "test_ids": sorted(test_ids.intersection(issue["test_ids"])),
+            "run_ids": sorted({str(link["run_id"]) for link in links}) or issue["run_ids"],
+            "issue": {**issue["issue"], "links": links}}
+
+
 def filter_summary(summary: Summary, test_ids: set[str]) -> Summary:
     tests = [entry for entry in summary["tests"] if entry["test_id"] in test_ids]
-    issues = [issue for issue in summary["issues"] if test_ids.intersection(issue["test_ids"])]
+    issues = [filter_issue(issue, test_ids) for issue in summary["issues"] if test_ids.intersection(issue["test_ids"])]
     return Summary(version=summary["version"], counts=count(tests, issues), tests=tests, issues=issues)
 
 
@@ -219,6 +234,7 @@ class SummaryBuilder:
             version=str(run.version) if run else None,
             issues=self.data.issue_counts.get(run.id, 0) if run else 0,
             comments=self.data.comment_counts.get(run.id, 0) if run else 0,
+            start_time=run.start_time.isoformat() if run and run.start_time else None,
         )
 
     def _test_entries(self, results: dict[UUID, SummaryRun], planned: set[UUID]) -> list[TestEntry]:
@@ -237,14 +253,20 @@ class SummaryBuilder:
         for issue_id, issue_runs in runs_by_issue.items():
             entry = self._describe_issue(issue_id)
             first = self._first_run(issue_id)
-            status = self._issue_status(issue_id, issue_runs, results) if results is not None else "open"
+            test_ids = sorted({str(run.test_id) for run in issue_runs})
+            if results is None:
+                open_tests, latest_tests = test_ids, []
+            else:
+                open_tests, latest_tests = self._issue_tests(issue_id, issue_runs, results)
             tracked = issue_id in self.data.jira or issue_id in self.data.github
             entries.append(IssueEntry(
                 **entry,
                 novelty="new" if tracked and first is not None and is_new(first) else "existing",
-                status=status,
-                on_latest_run=results is not None and self._on_latest_run(issue_id, issue_runs, results),
-                test_ids=sorted({str(run.test_id) for run in issue_runs}),
+                status="open" if open_tests else "fixed",
+                on_latest_run=bool(latest_tests),
+                open_test_ids=open_tests,
+                latest_test_ids=latest_tests,
+                test_ids=test_ids,
                 run_ids=sorted({str(run.id) for run in issue_runs}),
                 issue=self._issue_card(issue_id, links_by_issue[issue_id]),
             ))
@@ -254,19 +276,21 @@ class SummaryBuilder:
         first_run_id = self.data.first_runs.get(issue_id)
         return self.runs_by_id.get(first_run_id) if first_run_id else None
 
-    def _on_latest_run(self, issue_id: UUID, issue_runs: list[SummaryRun], results: dict[UUID, SummaryRun]) -> bool:
-        return any(any(link.issue_id == issue_id for link in self.links_by_run.get(results[test_id].id, []))
-                   for test_id in {run.test_id for run in issue_runs})
-
-    def _issue_status(self, issue_id: UUID, issue_runs: list[SummaryRun], results: dict[UUID, SummaryRun]) -> str:
+    def _issue_tests(self, issue_id: UUID, issue_runs: list[SummaryRun],
+                     results: dict[UUID, SummaryRun]) -> tuple[list[str], list[str]]:
+        """The tests that keep the issue open in the family, and those whose latest run carries it. A test keeps
+        it open until it ran again to a final status on a later version without it."""
+        open_tests, latest_tests = set(), set()
         for test_id in {run.test_id for run in issue_runs}:
             result = results[test_id]
             if any(link.issue_id == issue_id for link in self.links_by_run.get(result.id, [])):
-                return "open"
+                open_tests.add(str(test_id))
+                latest_tests.add(str(test_id))
+                continue
             linked_versions = [run.version.sort_key() for run in issue_runs if run.test_id == test_id]
             if result.status not in FINAL or result.version.sort_key() <= max(linked_versions):
-                return "open"
-        return "fixed"
+                open_tests.add(str(test_id))
+        return sorted(open_tests), sorted(latest_tests)
 
     def _issue_card(self, issue_id: UUID, links: list[IssueLink]) -> dict:
         dumped_links = [link.model_dump(mode="json") for link in links]
@@ -352,10 +376,17 @@ async def refresh_trackers(summaries: dict[tuple[str, str], Summary]) -> dict[tu
             for key, summary in summaries.items()}
 
 
+def _log_failure(task: asyncio.Task) -> None:
+    if not task.cancelled() and (exception := task.exception()) is not None:
+        LOGGER.error("The background recompute of a release summary failed", exc_info=exception)
+
+
 class ReleaseSummaryService:
     _recomputes: dict[UUID, tuple[asyncio.Task, datetime]] = {}
 
-    async def get(self, release_id: UUID, test_ids: set[UUID] | None = None) -> dict:
+    async def get(self, release_id: UUID, test_ids: set[UUID] | None = None, wait: bool = False) -> dict:
+        """The release's summary. A stale one with stored rows comes back at once, marked stale, while a
+        recompute runs in the background; ``wait`` waits for that recompute instead."""
         try:
             release = await ArgusRelease.get(id=release_id)
         except DocumentNotFound as exception:
@@ -364,9 +395,11 @@ class ReleaseSummaryService:
         stored, invalidated_at, generated_at = await self._read(release_id)
         stale = generated_at is None or (invalidated_at is not None and invalidated_at >= generated_at)
         summaries = stored
-        if stale:
+        if stale and stored and not wait:
+            self._recompute_task(release, invalidated_at)
+        elif stale:
             try:
-                summaries, generated_at = await self._join_recompute(release, invalidated_at)
+                summaries, generated_at = await asyncio.shield(self._recompute_task(release, invalidated_at))
                 stale = False
             except (DriverException, NoHostAvailable):
                 LOGGER.exception("Failed to recompute the release summary of %s", release_id)
@@ -374,13 +407,13 @@ class ReleaseSummaryService:
                     raise
         return self._response(release, await refresh_trackers(summaries), generated_at, stale, test_ids)
 
-    async def get_for_view(self, view_id: UUID) -> dict:
+    async def get_for_view(self, view_id: UUID, wait: bool = False) -> dict:
         tests = await UserViewService().resolve_view_tests(view_id)
         by_release: dict[UUID, set[UUID]] = defaultdict(set)
         for test in tests:
             if test.release_id:
                 by_release[test.release_id].add(test.id)
-        releases = [await self.get(release_id, test_ids) for release_id, test_ids in by_release.items()]
+        releases = [await self.get(release_id, test_ids, wait=wait) for release_id, test_ids in by_release.items()]
         return {"releases": sorted(releases, key=lambda release: release["release_name"])}
 
     @staticmethod
@@ -393,8 +426,7 @@ class ReleaseSummaryService:
                      for row in rows if row["family"] is not None and row["payload"]}
         return summaries, as_utc(rows[0]["invalidated_at"]), as_utc(rows[0]["generated_at"])
 
-    async def _join_recompute(self, release: ArgusRelease,
-                              invalidated_at: datetime | None) -> tuple[dict[tuple[str, str], Summary], datetime]:
+    def _recompute_task(self, release: ArgusRelease, invalidated_at: datetime | None) -> asyncio.Task:
         """Share a running recompute of the release, unless it started before the change that made the summary
         stale; then start one that sees the change."""
         release_id = release.id
@@ -406,12 +438,13 @@ class ReleaseSummaryService:
             self._recomputes[release_id] = (task, started_at)
             task.add_done_callback(lambda done: self._recomputes.pop(release_id, None)
                                    if self._recomputes.get(release_id, (None,))[0] is done else None)
+            task.add_done_callback(_log_failure)
             running = (task, started_at)
-        return await asyncio.shield(running[0])
+        return running[0]
 
     async def _recompute(self, release: ArgusRelease,
                          started_at: datetime) -> tuple[dict[tuple[str, str], Summary], datetime]:
-        summaries = build_summaries(await self._load(release))
+        summaries = await asyncio.to_thread(build_summaries, await self._load(release))
         try:
             await self._write(release.id, summaries, started_at)
         except (DriverException, NoHostAvailable):

@@ -111,8 +111,11 @@ change. These actions mark it for a refresh:
 - a release plan changes
 - a release, a group or a test is edited, enabled or disabled, or moves
 
-A refresh reads every run of the release once. If a refresh fails, the summary
-shows the last stored figures with a note.
+A refresh reads every run of the release once, in the background: the summary
+shows the last stored figures with a "Refreshing" note and updates itself when
+the refresh lands. If the refresh does not land, the note says so. Versions
+written as `2026.4.0-rc1` or `2022.1~rc5` count as `2026.4.0~rc1` and
+`2022.1.0~rc5`.
 
 ## API
 
