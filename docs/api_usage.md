@@ -645,6 +645,132 @@ them. `to_investigate` counts the failed, test error and error tests nobody has
 investigated. `start_time` is `null` for a test that never ran. A dormant
 release answers `{"dormant": true}` unless it has a stored snapshot.
 
+```http
+GET /api/v1/release/{release_id}/version_summary
+```
+
+Returns the release summary: the test and issue counts of each tested or
+planned version of the release, grouped by family, with a rolled-up row per
+family. [`release_summary.md`](release_summary.md) defines each number.
+
+```json
+{
+  "response": {
+    "release_id": "1a2c714b-8d73-4891-a901-c3013dfd794a",
+    "release_name": "scylla-2025.1",
+    "generated_at": "2026-11-05T10:00:00+00:00",
+    "stale": false,
+    "families": [
+      {
+        "family": "2025.1.0",
+        "rollup": {
+          "version": null,
+          "counts": {"executed": 40, "passed": 36, "failed": 3, "aborted": 1, "in_progress": 0, "pending": 2,
+                     "issues_new": 2, "issues_existing": 1, "issues_fixed": 1},
+          "tests": [
+            {"test_id": "3f1c9a52-7d4e-4b8a-9c21-5e6f7a8b9c0d", "group_id": "b197bc8c-71ce-4832-910f-f6daf47857b0",
+             "test_name": "longevity-100gb-4h", "group_name": "Longevity", "status": "passed",
+             "run_id": "9d0c…", "build_id": "scylla-2025.1/longevity/longevity-100gb-4h", "build_number": 12,
+             "version": "2025.1.0"}
+          ],
+          "issues": [
+            {"id": "51b2…", "type": "jira", "key": "SCYLLADB-123", "title": "Crash during upgrade",
+             "url": "https://scylladb.atlassian.net/browse/SCYLLADB-123", "state": "open",
+             "novelty": "new", "status": "fixed", "test_ids": ["3f1c…"], "run_ids": ["77aa…"],
+             "issue": {"id": "51b2…", "subtype": "jira", "key": "SCYLLADB-123", "summary": "Crash during upgrade",
+                       "permalink": "https://scylladb.atlassian.net/browse/SCYLLADB-123", "state": "open",
+                       "links": [{"run_id": "77aa…", "test_id": "3f1c…", "added_on": "2026-10-30T08:12:00Z"}]}}
+          ]
+        },
+        "versions": [
+          {"version": "2025.1.0~rc0", "counts": {}, "tests": [], "issues": []},
+          {"version": "2025.1.0", "counts": {}, "tests": [], "issues": []}
+        ]
+      }
+    ]
+  },
+  "status": "ok"
+}
+```
+
+Families come newest first. The versions of a family run from `~dev` through
+the release candidates to the final build. A pending test has `"status":
+"pending"` and no run. On a version row, `issues_fixed` is `0` and every issue
+is `open`. `stale` is `true` when a refresh failed and the response holds the
+last stored figures. `issue` holds the issue as `GET /api/v1/issues/get` returns it
+with `aggregateByIssue`, limited to the links on runs of that row.
+
+```http
+GET /api/v1/views/widgets/release_summary
+```
+
+| Parameter | Type | Description |
+| --------- | ---- | ------------|
+| view_id          | string     | View id            |
+
+Returns `{"releases": [...], "findings": [...]}`, one release object as above
+for each release that holds a test of the view. Each object keeps only the
+view's tests, and the issues linked to them, and counts them again.
+
+Both summary routes carry `findings`: the finding memories of the release,
+and for a view also the view's own, as `GET /api/v1/chat/.../memories` returns
+them.
+
+## Chat API
+
+[`release_chat.md`](release_chat.md) describes the chat. Every route sits
+under `/api/v1/chat/{entity_type}/{entity_id}`, where `entity_type` is
+`release` or `view`, and needs a logged-in user.
+
+| Method and path | Does |
+|---|---|
+| `GET ""` | The conversation: every message node, `head`, `busy`, the model, the active `assistant` identity, the context stats, the memory scopes |
+| `DELETE ""` | Admins only: clears the conversation and keeps the memories; returns the empty conversation |
+| `GET /meta` | `{configured, messages, last: {user_id, at}}` for the chat bar |
+| `GET /events` | A `text/event-stream` of the chat, see below |
+| `POST /messages {content, auto?}` | Asks a question; returns `{user_node, assistant_node}` at once. With `auto`, the answer's cards are confirmed as the asker |
+| `POST /regenerate {auto?}` | Answers the last question again |
+| `POST /compact` | Summarizes the conversation so far |
+| `POST /undo` | Removes the last question and its answer; returns the conversation |
+| `POST /head {node}` | Switches to another answer or branch, at its newest message; returns the conversation |
+| `POST /fork {node}` | Moves to the end of an earlier answer, so the next question starts a new branch; returns the conversation |
+| `POST /stop` | Stops the running answer |
+| `POST /actions/{node}/confirm` | Confirms a proposal card; the card runs in the background |
+| `POST /actions/{node}/dismiss` | Dismisses a proposal card |
+| `POST /actions/{node}/refresh` | Reads the open Zeus tasks of a card from Zeus, at most every 15 s; returns the card |
+| `POST /actions/{node}/params {tests: {test_id: overrides}, seed?, build_number?}` | Changes the overrides of a start card that waits for confirmation; returns the card |
+| `GET /memories` | The memories in scope |
+| `POST /memories {content, kind, scope?}` | Adds a memory; `kind` is `note` or `finding`; `scope` is a release id in a view chat |
+| `PUT /memories/{id} {content?, kind?}` | Edits a memory |
+| `DELETE /memories/{id}` | Deletes a memory |
+| `GET /memories/history` | Every change, newest first |
+| `POST /memories/history/{revision}/revert` | Restores a memory as it was before that change |
+
+A question while another answer runs is an error that names the asker.
+
+The event stream sends one JSON object per `data:` line. Its `type` is
+`snapshot` (the whole conversation, first on every connect), `node` (a
+message created or changed), `delta` (text appended to a message), `tool`,
+`state` (`head`, `busy`, context stats), `memory` (the memories in scope),
+`presence` (the users with the chat open), or `heartbeat`. A stream lasts at
+most 25 seconds and asks the client to reconnect after 1 second.
+
+The chat model is configured under `/admin/api/v1/chat`, for admins only:
+`GET /connections`, `POST /connection {name, endpoint, token?}`,
+`DELETE /connection/{name}`, `GET /connection/{name}/models`,
+`POST /connection/{name}/test_tools {model}`,
+`POST /default {connection, model, context_window, tools, vision}`,
+`POST /connection/{name}/identity` (multipart: `assistant_name`, optional
+`picture`, optional `remove_picture`), `DELETE /connection/{name}/identity`,
+`POST /identity/active {connection}` (`null` uses none), `GET /mcp`,
+`POST /mcp/server {name, url, transport, headers?, enabled}`,
+`DELETE /mcp/server/{name}`, `POST /mcp/server/{name}/probe`,
+`POST /mcp/server/{name}/tools {modes: {tool: off | direct | confirm}}`,
+`GET /prompt`, `PUT /prompt {template}`, `DELETE /prompt` (back to the
+default), `GET /skills`, `POST /skill {name, description, content, mode}`, and
+`DELETE /skill/{name}`. No route returns a token or a header value. `GET /api/v1/chat/identity/{connection}/picture` serves an
+identity's picture to any logged-in user.
+
 ## Email reporting API
 
 ```http

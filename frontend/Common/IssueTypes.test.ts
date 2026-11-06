@@ -8,6 +8,7 @@ import {
     getAssignees,
     getKey,
     getAssigneesRich,
+    isClosedInTracker,
     label2color,
     labelTextColor,
     resolveFirstUserForAggregation,
@@ -195,6 +196,19 @@ const FEATURE_LABEL: Label = { id: "2", name: "feature", color: "00ff00", descri
 
 const hueOf = (color: string) => Number(/^hsl\((\d+), /.exec(color)?.[1]);
 const hueDistance = (lhs: number, rhs: number) => Math.min(Math.abs(lhs - rhs), 360 - Math.abs(lhs - rhs));
+
+describe("isClosedInTracker", () => {
+    it("reads closed, done, duplicate and won't fix as closed and the rest as open", () => {
+        expect(["closed", "done", "duplicate", "won't fix"].map((state) => isClosedInTracker(state))).toEqual(
+            [true, true, true, true]);
+        expect(["open", "todo", "in progress", "in review", "ready for merge", "blocked", "new"].map(
+            (state) => isClosedInTracker(state))).toEqual([false, false, false, false, false, false, false]);
+    });
+
+    it("reads a missing state as open", () => {
+        expect(isClosedInTracker(null)).toBe(false);
+    });
+});
 
 describe("label2color", () => {
     it.each([BUG_LABEL, FEATURE_LABEL])("returns an hsl() string for label '$name'", (label) => {

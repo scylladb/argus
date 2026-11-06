@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from starlette.responses import RedirectResponse, Response
 
 from argus.backend.controller import (
+    chat_api,
     client_api,
     cost_api,
     health_api,
@@ -24,6 +25,7 @@ from argus.backend.error_handlers import APIException
 from argus.backend.models.web import ArgusGroup, ArgusRelease, ArgusTest, User
 from argus.backend.rendering import url_for
 from argus.backend.service.argus_service import ArgusService, ScheduleUpdateRequest
+from argus.backend.service.release_summary import ReleaseSummaryService
 from argus.backend.service.results_service import ResultsService
 from argus.backend.service.stats import ReleaseStatsCollector, summarize_release_stats
 from argus.backend.service.testrun import TestRunService
@@ -34,6 +36,8 @@ from argus.backend.util.encoders import APIResponse
 LOGGER = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1")
+router.include_router(chat_api.identity_router)
+router.include_router(chat_api.router)
 router.include_router(client_api.router)
 router.include_router(cost_api.router)
 router.include_router(health_api.router)
@@ -144,6 +148,14 @@ async def release_versions(release_id: UUID, user: User = Depends(api_current_us
     return APIResponse({
         "status": "ok",
         "response": distinct_versions
+    })
+
+
+@router.get("/release/{release_id}/version_summary", name="api.release_version_summary")
+async def release_version_summary(release_id: UUID, user: User = Depends(api_current_user)):
+    return APIResponse({
+        "status": "ok",
+        "response": await ReleaseSummaryService().get(release_id)
     })
 
 

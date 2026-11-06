@@ -17,6 +17,8 @@ import ViewNemesisStats from "../Views/Widgets/ViewNemesisStats.svelte";
 import ViewGraphedStats from "../Views/Widgets/ViewGraphedStats.svelte";
 import PytestOverviewWidget from "../Views/Widgets/PytestWidget/PytestOverviewWidget.svelte";
 import ViewCosts from "../Views/Widgets/ViewCosts.svelte";
+import ReleaseSummary from "../Views/Widgets/ReleaseSummary/ReleaseSummary.svelte";
+import ChatAnchor from "../Chat/ChatAnchor.svelte";
 
 export class Widget {
     constructor(position = -1, type = "testDashboard", settings = {}) {
@@ -219,6 +221,16 @@ export const WIDGET_TYPES = {
                 displayName: "Days",
             },
         },
+    },
+    releaseSummary: {
+        type: ReleaseSummary,
+        friendlyName: "Release summary per version",
+        settingDefinitions: {},
+    },
+    chat: {
+        type: ChatAnchor,
+        friendlyName: "Chat",
+        settingDefinitions: {},
     },
 };
 

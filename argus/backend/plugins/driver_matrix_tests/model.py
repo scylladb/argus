@@ -10,6 +10,7 @@ from xml.etree import ElementTree
 from pydantic import Field
 from coodie.exceptions import DocumentNotFound
 
+from argus.backend.models.release_summary import mark_release_summary_stale
 from argus.backend.models.web import ArgusRelease, ReleaseDistinctVersions
 from argus.backend.plugins.core import PluginModelBase
 from argus.backend.plugins.driver_matrix_tests.udt import TestCollection, TestSuite, TestCase, EnvironmentInfo
@@ -231,6 +232,7 @@ class DriverTestRun(PluginModelBase):
         run.scylla_version = env.get("scylla-version")
 
         await run.save()
+        await mark_release_summary_stale(run.release_id)
         return run
 
     def parse_build_environment(self, raw_env: str) -> dict[str, str]:
@@ -397,6 +399,7 @@ class DriverTestRun(PluginModelBase):
 
         run.status = run._determine_run_status().value
         await run.save()
+        await mark_release_summary_stale(run.release_id)
         return run
 
     def get_resources(self) -> list:

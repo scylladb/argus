@@ -1,0 +1,213 @@
+import json
+
+import httpx2
+import pytest
+
+from argus.backend.service.chat.llm import (
+    ChatMessage,
+    ChatModelError,
+    Finished,
+    OpenAIChatClient,
+    ReasoningDelta,
+    TextDelta,
+    ToolCall,
+    ToolCallsReady,
+    ToolSpec,
+    Usage,
+    chat_models,
+    normalize_model,
+)
+
+
+def chunk(delta: dict | None = None, finish: str | None = None, usage: dict | None = None) -> str:
+    body = {"id": "c1", "object": "chat.completion.chunk", "created": 1, "model": "m",
+            "choices": [] if delta is None else [{"index": 0, "delta": delta, "finish_reason": finish}]}
+    if usage:
+        body["usage"] = usage
+    return f"data: {json.dumps(body)}\n\n"
+
+
+def client_for(handler) -> OpenAIChatClient:
+    return OpenAIChatClient("http://model.test/api", "sk-test",
+                            http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(handler)))
+
+
+def test_the_lemonade_shape_reads_context_and_labels():
+    model = normalize_model({"id": "Gemma-4-12B-it-GGUF", "name": "Gemma-4-12B-it-GGUF", "context_length": 65536,
+                             "max_context_window": 262144, "labels": ["chat", "tool-calling", "vision"]})
+
+    assert (model.context_window, model.tools, model.vision) == (65536, True, True)
+
+
+def test_labels_without_tool_calling_mean_no_tools():
+    model = normalize_model({"id": "Gemma-3-4b-it-GGUF", "context_length": 65536, "labels": ["chat", "vision"]})
+
+    assert (model.tools, model.vision) == (False, True)
+
+
+def test_a_plain_openai_entry_leaves_everything_unknown():
+    model = normalize_model({"id": "gpt-x", "object": "model", "owned_by": "openai"})
+
+    assert (model.name, model.context_window, model.tools, model.vision) == ("gpt-x", None, None, None)
+
+
+def test_vllm_max_model_len_is_the_context_window():
+    assert normalize_model({"id": "qwen", "max_model_len": 32768}).context_window == 32768
+
+
+def test_openwebui_capabilities_give_vision():
+    model = normalize_model({"id": "g", "info": {"meta": {"capabilities": {"vision": True}}}})
+
+    assert (model.tools, model.vision) == (None, True)
+
+
+async def test_the_stream_yields_text_reasoning_tool_calls_and_usage():
+    seen = {}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen["body"] = json.loads(request.content)
+        seen["auth"] = request.headers["authorization"]
+        body = "".join([
+            chunk({"role": "assistant"}),
+            chunk({"reasoning_content": "Think"}),
+            chunk({"content": "Look"}),
+            chunk({"tool_calls": [{"index": 0, "id": "call_a", "type": "function",
+                                   "function": {"name": "read_run", "arguments": "{\"run"}}]}),
+            chunk({"tool_calls": [{"index": 0, "function": {"arguments": "_id\": \"42\"}"}}]}),
+            chunk({}, finish="tool_calls"),
+            chunk(usage={"prompt_tokens": 70, "completion_tokens": 7, "total_tokens": 77}),
+            "data: [DONE]\n\n",
+        ])
+        return httpx2.Response(200, headers={"content-type": "text/event-stream"}, content=body.encode())
+
+    tools = [ToolSpec("read_run", "Read a run", {"type": "object", "properties": {"run_id": {"type": "string"}}})]
+    history = [ChatMessage("user", "status?"),
+               ChatMessage("assistant", "", tool_calls=[ToolCall("call_0", "get_summary", "{}")]),
+               ChatMessage("tool", "{\"ok\": true}", tool_call_id="call_0")]
+
+    events = [event async for event in client_for(handler).stream("m", history, tools)]
+
+    assert events == [
+        ReasoningDelta("Think"),
+        TextDelta("Look"),
+        Usage(70, 7),
+        ToolCallsReady([ToolCall("call_a", "read_run", "{\"run_id\": \"42\"}")]),
+        Finished("tool_calls"),
+    ]
+    assert seen["auth"] == "Bearer sk-test"
+    assert seen["body"]["stream_options"] == {"include_usage": True}
+    assert seen["body"]["tools"][0]["function"]["name"] == "read_run"
+    assert seen["body"]["messages"][1] == {"role": "assistant", "content": None, "tool_calls": [
+        {"id": "call_0", "type": "function", "function": {"name": "get_summary", "arguments": "{}"}}]}
+    assert seen["body"]["messages"][2] == {"role": "tool", "tool_call_id": "call_0", "content": "{\"ok\": true}"}
+
+
+def stream_of(*chunks: str):
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        body = "".join([*chunks, chunk({}, finish="tool_calls"), "data: [DONE]\n\n"])
+        return httpx2.Response(200, headers={"content-type": "text/event-stream"}, content=body.encode())
+
+    return client_for(handler)
+
+
+async def calls_of(client: OpenAIChatClient) -> list[ToolCall]:
+    events = [event async for event in client.stream("m", [ChatMessage("user", "hi")], None)]
+    return next(event.calls for event in events if isinstance(event, ToolCallsReady))
+
+
+async def test_a_name_repeated_in_every_chunk_is_one_name():
+    piece = lambda arguments: chunk({"tool_calls": [{"index": 0, "id": "toolu_1", "type": "function",
+                                                      "function": {"name": "read_run", "arguments": arguments}}]})
+
+    calls = await calls_of(stream_of(piece(""), piece("{\"run\": "), piece("\"CDC#7\"}")))
+
+    assert calls == [ToolCall("toolu_1", "read_run", "{\"run\": \"CDC#7\"}")]
+
+
+async def test_cumulative_arguments_are_not_repeated():
+    piece = lambda arguments: chunk({"tool_calls": [{"index": 0, "function": {"arguments": arguments}}]})
+    start = chunk({"tool_calls": [{"index": 0, "id": "c1", "function": {"name": "read_", "arguments": ""}}]})
+    rest = chunk({"tool_calls": [{"index": 0, "function": {"name": "run"}}]})
+
+    calls = await calls_of(stream_of(start, rest, piece("{\"run\""), piece("{\"run\": \"7\"}")))
+
+    assert calls == [ToolCall("c1", "read_run", "{\"run\": \"7\"}")]
+
+
+async def test_calls_without_an_index_are_told_apart_by_id():
+    whole = lambda call_id, name, arguments: chunk({"tool_calls": [
+        {"id": call_id, "type": "function", "function": {"name": name, "arguments": arguments}}]})
+
+    calls = await calls_of(stream_of(whole("a", "read_run", {"run": "7"}), whole("b", "get_time", "{}")))
+
+    assert calls == [ToolCall("a", "read_run", "{\"run\": \"7\"}"), ToolCall("b", "get_time", "{}")]
+
+
+def test_a_model_listed_once_per_api_is_one_chat_model():
+    def entry(model_id: str, endpoint: str, context: int | None = None) -> dict:
+        info = {"name": f"Name of {model_id}", **({"contextLength": context} if context else {})}
+        return {"id": model_id, "type": endpoint, "info": info, "aliases": [], "tags": []}
+
+    models = chat_models([entry("claude", "anthropic/messages", 200000), entry("claude", "openai/chat-completions"),
+                          entry("claude", "anthropic/batches"), entry("video", "internal/video-generations/submit"),
+                          entry("gpt", "openai/chat-completions", 128000), entry("gpt", "openai/chat-completions")])
+
+    assert [(model.id, model.name, model.context_window) for model in models] == [
+        ("claude", "Name of claude", None), ("gpt", "Name of gpt", 128000)]
+
+
+async def test_an_endpoint_error_is_a_chat_model_error():
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(401, json={"detail": "bad key"})
+
+    with pytest.raises(ChatModelError):
+        [event async for event in client_for(handler).stream("m", [ChatMessage("user", "hi")], None)]
+
+
+async def test_list_models_keeps_the_extra_fields():
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        assert request.url.path == "/api/models"
+        return httpx2.Response(200, json={"object": "list", "data": [
+            {"id": "b", "object": "model", "created": 1, "owned_by": "x", "context_length": 4096,
+             "labels": ["tool-calling"]},
+            {"id": "a", "object": "model", "created": 1, "owned_by": "x"},
+        ]})
+
+    models = await client_for(handler).list_models()
+
+    assert [(model.id, model.context_window, model.tools) for model in models] == [("a", None, None),
+                                                                                    ("b", 4096, True)]
+
+
+async def test_the_anthropic_api_gets_its_own_headers_on_the_model_list():
+    seen = {}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen["path"], seen["query"] = request.url.path, dict(request.url.params)
+        seen["version"], seen["key"] = request.headers.get("anthropic-version"), request.headers.get("x-api-key")
+        return httpx2.Response(200, json={"data": [
+            {"type": "model", "id": "claude-sonnet-5-5", "display_name": "Claude Sonnet 5.5",
+             "created_at": "2026-09-01T00:00:00Z"}], "has_more": False, "first_id": "claude-sonnet-5-5",
+            "last_id": "claude-sonnet-5-5"})
+
+    client = OpenAIChatClient("https://api.anthropic.com/v1", "sk-ant-test",
+                              http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(handler)))
+
+    models = await client.list_models()
+
+    assert (seen["path"], seen["query"]) == ("/v1/models", {"limit": "1000"})
+    assert (seen["version"], seen["key"]) == ("2023-06-01", "sk-ant-test")
+    assert [(model.id, model.name) for model in models] == [("claude-sonnet-5-5", "Claude Sonnet 5.5")]
+
+
+async def test_other_endpoints_get_no_anthropic_headers():
+    seen = {}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen["headers"], seen["query"] = dict(request.headers), dict(request.url.params)
+        return httpx2.Response(200, json={"object": "list", "data": []})
+
+    await client_for(handler).list_models()
+
+    assert "anthropic-version" not in seen["headers"] and "x-api-key" not in seen["headers"]
+    assert seen["query"] == {}

@@ -27,16 +27,17 @@ model, and optionally its own router, through the plugin layer.
 - **Entry point**: `argus_backend.py`. `create_app()` returns the FastAPI
   application.
 - **Layers**:
-  - `controller/` — 18 modules. One router per feature: `testrun_api.py`,
+  - `controller/` — 19 modules. One router per feature: `testrun_api.py`,
     `client_api.py`, `view_api.py`, `planner_api.py`, `admin_api.py`,
     `notification_api.py`, `replay_api.py`, `ssh_api.py`, `cost_api.py`,
     `health_api.py`, `auth.py`.
-  - `service/` — 30 modules. The business logic each router calls.
-  - `models/` — 13 modules. `web.py` holds the core entities. `jira.py`,
+  - `service/` — 31 modules and the `chat/` package. The business logic each router calls.
+  - `models/` — 15 modules. `web.py` holds the core entities. `jira.py`,
     `github_issue.py`, `pytest.py`, `result.py`, `plan.py`, `view_widgets.py`,
     `ssh_key.py`, `run_config.py`, `run_cost.py`, `run_cost_rollup.py`,
+    `release_summary.py`, `chat.py`,
     `runtime_store.py` and `argus_ai.py` hold the rest.
-  - `util/` — 7 modules of shared helpers.
+  - `util/` — 9 modules of shared helpers.
   - `rendering.py` — the template helpers the `.j2` files expect.
   - `db.py` — session setup.
   - `cli.py` — maintenance commands: `sync-models`, `refresh-issues`,
@@ -135,6 +136,49 @@ worker keeps in memory. A request rebuilds it from three table scans once it is
 - **Distribution**: `argus-alm` on PyPI, with the console commands
   `argus-client-generic` and `argus-driver-matrix-client`.
   `pytest-argus-reporter` ships as its own package.
+
+The release summary (`service/release_summary.py`, table
+`release_summary_v1`) holds one row per version of a release and one rolled-up
+row per family. Two static timestamps on the partition decide freshness: every
+release action writes `invalidated_at`, and a recompute writes `generated_at`
+as the time it started. A read recomputes the whole release when
+`invalidated_at` is not older than `generated_at`, from one read of its runs,
+plans and issue links. [`docs/release_summary.md`](../release_summary.md)
+defines the numbers.
+
+The release and view chat (`service/chat/`, `controller/chat_api.py`, tables
+`chat_*_v1`) answers with a language model through any OpenAI-compatible chat
+completions endpoint. `llm.py` is the only module that knows the wire format;
+the rest uses Argus's own message and stream types, so another API shape is
+another adapter. Connections come from `CHAT_MODELS` in `argus_web.yaml` and
+from `chat_configuration_v1`, whose tokens are Fernet-encrypted with a key
+derived from `SECRET_KEY`. `chat_identity_v1` holds the assistant's name and
+picture per connection, and which one is active.
+
+- **Message tree**: `chat_history_v1` holds every message of an entity, with
+  its parent. `chat_state_v1` holds the active branch (`head`) and a lock that
+  lets one answer run at a time, both moved with lightweight transactions.
+- **Background tasks**: a command such as a question returns at once, and the
+  answer runs as an asyncio task in the worker (`service/chat/tasks.py`). The
+  app's lifespan cancels running tasks at shutdown.
+- **Events**: the first server-sent event stream in Argus. Each worker keeps a
+  hub of its open streams (`service/chat/hub.py`), and one watcher per entity
+  polls the entity's state row every 0.5 s to pick up what other workers
+  wrote. A stream lasts 25 s and ends at once on the shutdown signal, so a
+  restart never waits for it; the response turns nginx buffering off with
+  `X-Accel-Buffering: no`.
+- **Tools**: `tools.py` wraps existing services, limited to the entity's
+  tests. Starting tests and linking issues only propose an action card;
+  `actions.py` runs it once a user confirms.
+- **Extensions**: `chat_mcp_server_v1` holds the MCP servers an admin
+  registered, with each tool's mode; `service/chat/mcp.py` calls them through
+  the `mcp` SDK, one session per call. `chat_skill_v1` holds the skills and the
+  edited system prompt. The tools of one answer come from a per-answer
+  toolbox: the built-in tools plus the switched-on MCP tools.
+- **Memories**: `chat_memory_v1` and the append-only `chat_memory_revision_v1`.
+  Findings are memories that the summary routes add to their response.
+
+[`docs/release_chat.md`](../release_chat.md) describes the feature.
 
 ## Data Flow
 

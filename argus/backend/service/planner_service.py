@@ -124,6 +124,31 @@ class PlanningService:
     VIEW_WIDGET_SETTINGS = [
         {
             "position": 1,
+            "type": "chat",
+            "filter": [],
+            "settings": {}
+        },
+        {
+            "position": 2,
+            "type": "highlights",
+            "filter": [],
+            "settings": {
+                "index": 0,
+                "defaultGroupItems": [
+                    "dtest - release",
+                    "dtest - debug",
+                    "dtest - release with raft",
+                    "dtest - release with topology changes",
+                    "SCT investigations",
+                    "Drivers",
+                    "SBOM",
+                    "Azure image publish",
+                    "Release Notes",
+                ],
+            }
+        },
+        {
+            "position": 3,
             "type": "githubIssues",
             "filter": [],
             "settings": {
@@ -132,7 +157,7 @@ class PlanningService:
             }
         },
         {
-            "position": 2,
+            "position": 4,
             "type": "releaseStats",
             "filter": [],
             "settings": {
@@ -142,7 +167,13 @@ class PlanningService:
             }
         },
         {
-            "position": 3,
+            "position": 5,
+            "type": "releaseSummary",
+            "filter": [],
+            "settings": {}
+        },
+        {
+            "position": 6,
             "type": "testDashboard",
             "filter": [],
             "settings": {
@@ -352,10 +383,11 @@ class PlanningService:
             plan.target_version}) " if plan.target_version else ""
         view_name = f"{release.name} {version_str}- {plan.name}"
         settings = deepcopy(self.VIEW_WIDGET_SETTINGS)
+        dashboard = next(widget for widget in settings if widget["type"] == "testDashboard")
         if plan.target_version:
-            settings[2]["settings"]["productVersion"] = plan.target_version
+            dashboard["settings"]["productVersion"] = plan.target_version
         else:
-            settings[2]["settings"]["targetVersion"] = False
+            dashboard["settings"]["targetVersion"] = False
         view = await service.create_view(
             user=user,
             name=slugify(view_name),

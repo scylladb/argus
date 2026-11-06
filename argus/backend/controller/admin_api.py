@@ -3,10 +3,14 @@ from dataclasses import asdict
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, File, Form, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from argus.backend.models.web import User, UserRoles
+from argus.backend.service.chat.config import ChatConfigService, DefaultModel
+from argus.backend.service.chat.identity import PICTURE_LIMIT, ChatIdentityService, identity_json
+from argus.backend.service.chat.mcp import McpServerService
+from argus.backend.service.chat.skills import SkillService, template_json
 from argus.backend.service.release_manager import ReleaseManagerService
 from argus.backend.service.tunnel_service import TunnelService
 from argus.backend.service.user import UserService, require_roles
@@ -464,3 +468,178 @@ async def delete_ssh_key(key_id: UUID, user: User = Depends(admin_user)):
             "deleted": True,
         },
     })
+
+
+class ChatConnectionRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9._-]+$")
+    endpoint: str = Field(min_length=1)
+    token: str | None = None
+
+
+class ChatToolTestRequest(BaseModel):
+    model: str = Field(min_length=1)
+
+
+class ChatActiveIdentityRequest(BaseModel):
+    connection: str | None = None
+
+
+class ChatMcpServerRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=32)
+    url: str = Field(min_length=1)
+    transport: str = "streamable_http"
+    headers: dict[str, str] | None = None
+    enabled: bool = True
+
+
+class ChatMcpModesRequest(BaseModel):
+    modes: dict[str, str]
+
+
+class ChatTemplateRequest(BaseModel):
+    template: str = Field(min_length=1)
+
+
+class ChatSkillRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    description: str = ""
+    content: str = Field(min_length=1)
+    mode: str = "always"
+
+
+class ChatDefaultRequest(BaseModel):
+    connection: str = Field(min_length=1)
+    model: str = Field(min_length=1)
+    context_window: int = Field(gt=0)
+    tools: bool
+    vision: bool = False
+
+
+@router.get("/chat/connections", name="admin.admin_api.chat_connections")
+async def chat_connections(user: User = Depends(admin_user)):
+    connections, default = await ChatConfigService().connections()
+    identities, active = await ChatIdentityService().identities()
+    return APIResponse({
+        "status": "ok",
+        "response": {
+            "connections": [asdict(connection) for connection in connections],
+            "default": asdict(default) if default else None,
+            "identities": [identity_json(identity) for identity in identities],
+            "active_identity": active,
+        },
+    })
+
+
+@router.post("/chat/connection", name="admin.admin_api.chat_save_connection")
+async def chat_save_connection(payload: ChatConnectionRequest, user: User = Depends(admin_user)):
+    connection = await ChatConfigService().save_connection(payload.name, payload.endpoint, payload.token, user)
+    return APIResponse({"status": "ok", "response": asdict(connection)})
+
+
+@router.delete("/chat/connection/{name}", name="admin.admin_api.chat_delete_connection")
+async def chat_delete_connection(name: str, user: User = Depends(admin_user)):
+    await ChatConfigService().delete_connection(name)
+    await ChatIdentityService().delete(name)
+    return APIResponse({"status": "ok", "response": {"deleted": name}})
+
+
+@router.get("/chat/connection/{name}/models", name="admin.admin_api.chat_probe_models")
+async def chat_probe_models(name: str, user: User = Depends(admin_user)):
+    models = await ChatConfigService().probe(name)
+    return APIResponse({"status": "ok", "response": [asdict(model) for model in models]})
+
+
+@router.post("/chat/connection/{name}/test_tools", name="admin.admin_api.chat_test_tools")
+async def chat_test_tools(name: str, payload: ChatToolTestRequest, user: User = Depends(admin_user)):
+    result = await ChatConfigService().test_tools(name, payload.model)
+    return APIResponse({"status": "ok", "response": asdict(result)})
+
+
+@router.post("/chat/default", name="admin.admin_api.chat_set_default")
+async def chat_set_default(payload: ChatDefaultRequest, user: User = Depends(admin_user)):
+    default = await ChatConfigService().set_default(DefaultModel(**payload.model_dump()), user)
+    return APIResponse({"status": "ok", "response": asdict(default)})
+
+
+@router.post("/chat/connection/{name}/identity", name="admin.admin_api.chat_save_identity")
+async def chat_save_identity(name: str, assistant_name: str = Form(...), picture: UploadFile | None = File(None),
+                             remove_picture: bool = Form(False), user: User = Depends(admin_user)):
+    data = await picture.read(PICTURE_LIMIT + 1) if picture else None
+    identity = await ChatIdentityService().save(name, assistant_name, data, remove_picture, user)
+    return APIResponse({"status": "ok", "response": identity_json(identity)})
+
+
+@router.delete("/chat/connection/{name}/identity", name="admin.admin_api.chat_delete_identity")
+async def chat_delete_identity(name: str, user: User = Depends(admin_user)):
+    await ChatIdentityService().delete(name)
+    return APIResponse({"status": "ok", "response": {"deleted": name}})
+
+
+@router.post("/chat/identity/active", name="admin.admin_api.chat_set_active_identity")
+async def chat_set_active_identity(payload: ChatActiveIdentityRequest, user: User = Depends(admin_user)):
+    identity = await ChatIdentityService().set_active(payload.connection)
+    return APIResponse({"status": "ok", "response": identity_json(identity)})
+
+
+@router.get("/chat/prompt", name="admin.admin_api.chat_prompt")
+async def chat_prompt(user: User = Depends(admin_user)):
+    return APIResponse({"status": "ok", "response": template_json(await SkillService().prompt_setup())})
+
+
+@router.put("/chat/prompt", name="admin.admin_api.chat_save_prompt")
+async def chat_save_prompt(payload: ChatTemplateRequest, user: User = Depends(admin_user)):
+    return APIResponse({"status": "ok", "response": template_json(await SkillService().save_template(
+        payload.template, user))})
+
+
+@router.delete("/chat/prompt", name="admin.admin_api.chat_reset_prompt")
+async def chat_reset_prompt(user: User = Depends(admin_user)):
+    return APIResponse({"status": "ok", "response": template_json(await SkillService().reset_template(user))})
+
+
+@router.get("/chat/skills", name="admin.admin_api.chat_skills")
+async def chat_skills(user: User = Depends(admin_user)):
+    setup = await SkillService().prompt_setup()
+    return APIResponse({"status": "ok", "response": [asdict(skill) for skill in setup.skills]})
+
+
+@router.post("/chat/skill", name="admin.admin_api.chat_save_skill")
+async def chat_save_skill(payload: ChatSkillRequest, user: User = Depends(admin_user)):
+    skill = await SkillService().save_skill(payload.name, payload.description, payload.content, payload.mode, user)
+    return APIResponse({"status": "ok", "response": asdict(skill)})
+
+
+@router.delete("/chat/skill/{name}", name="admin.admin_api.chat_delete_skill")
+async def chat_delete_skill(name: str, user: User = Depends(admin_user)):
+    await SkillService().delete_skill(name)
+    return APIResponse({"status": "ok", "response": {"deleted": name}})
+
+
+@router.get("/chat/mcp", name="admin.admin_api.chat_mcp_servers")
+async def chat_mcp_servers(user: User = Depends(admin_user)):
+    servers = await McpServerService().servers()
+    return APIResponse({"status": "ok", "response": [asdict(server) for server in servers]})
+
+
+@router.post("/chat/mcp/server", name="admin.admin_api.chat_save_mcp_server")
+async def chat_save_mcp_server(payload: ChatMcpServerRequest, user: User = Depends(admin_user)):
+    server = await McpServerService().save(payload.name, payload.url, payload.transport, payload.headers,
+                                           payload.enabled, user)
+    return APIResponse({"status": "ok", "response": asdict(server)})
+
+
+@router.delete("/chat/mcp/server/{name}", name="admin.admin_api.chat_delete_mcp_server")
+async def chat_delete_mcp_server(name: str, user: User = Depends(admin_user)):
+    await McpServerService().delete(name)
+    return APIResponse({"status": "ok", "response": {"deleted": name}})
+
+
+@router.post("/chat/mcp/server/{name}/probe", name="admin.admin_api.chat_probe_mcp_server")
+async def chat_probe_mcp_server(name: str, user: User = Depends(admin_user)):
+    return APIResponse({"status": "ok", "response": asdict(await McpServerService().probe(name))})
+
+
+@router.post("/chat/mcp/server/{name}/tools", name="admin.admin_api.chat_mcp_tool_modes")
+async def chat_mcp_tool_modes(name: str, payload: ChatMcpModesRequest, user: User = Depends(admin_user)):
+    return APIResponse({"status": "ok", "response": asdict(await McpServerService().set_modes(name,
+                                                                                               payload.modes))})

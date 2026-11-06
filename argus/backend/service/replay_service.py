@@ -100,6 +100,7 @@ import zstandard as zstd
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.error_handlers import APIException, DataValidationError
+from argus.backend.models.release_summary import mark_release_summary_stale
 from argus.backend.models.web import User
 from argus.backend.plugins.loader import AVAILABLE_PLUGINS
 from argus.backend.service.client_service import ClientException, ClientService
@@ -866,6 +867,7 @@ class ReplayService:
         if changed:
             await run.save()
             await RunCostService().relocate_rollup_guarded(run.id, old_release_id)
+            await mark_release_summary_stale(run.release_id, old_release_id)
             LOGGER.info(
                 "Back-filled categorical fields on existing run %s (test_id=%s)",
                 run_id, test.id,
