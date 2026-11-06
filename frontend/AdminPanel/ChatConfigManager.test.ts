@@ -55,6 +55,25 @@ describe("ChatConfigManager", () => {
         expect((screen.getByLabelText("Endpoint") as HTMLInputElement).value).toBe("https://db.test/api");
     });
 
+    it("keeps the stored capabilities when the current default is saved again", async () => {
+        const current = { connection: "yaml-webui", model: "deepseek-flash", context_window: 128000, tools: false,
+                          vision: true, set_by: "u1", set_at: null };
+        vi.mocked(fetchJson).mockImplementation(async (url: string, init?: RequestInit) => {
+            if (url.endsWith("/connections")) return { connections, default: current, identities, active_identity: null };
+            if (url.endsWith("/models")) return models;
+            if (url.endsWith("/default")) return { ...JSON.parse(init!.body as string), set_by: "u1", set_at: null };
+            return {};
+        });
+        render(ChatConfigManager);
+        await fireEvent.click(await screen.findByRole("button", { name: "Change default model" }));
+        await fireEvent.click(await screen.findByRole("button", { name: "Set deepseek-flash as default" }));
+
+        await waitFor(() => expect(vi.mocked(fetchJson).mock.calls.some(([url]) => url.endsWith("/default"))).toBe(true));
+        const call = vi.mocked(fetchJson).mock.calls.find(([url]) => url.endsWith("/default"))!;
+        expect(JSON.parse(call[1]!.body as string)).toMatchObject({ model: "deepseek-flash", context_window: 128000,
+                                                                     tools: false, vision: true });
+    });
+
     it("probes the models and sets the chosen one as default", async () => {
         api();
         render(ChatConfigManager);
