@@ -6,9 +6,9 @@ from uuid import uuid1
 import pytest
 
 from argus.backend.service.chat import tasks as chat_tasks
-from argus.backend.service.chat.actions import ChatActionError
+from argus.backend.service.chat.actions import ChatActionError, execute
 from argus.backend.service.chat.entity import resolve_entity
-from argus.backend.service.chat.history import ChatHistoryService
+from argus.backend.service.chat.history import ChatHistoryError, ChatHistoryService
 from argus.backend.service.chat.hub import ChatHub
 from argus.backend.service.chat.llm import ToolCall
 from argus.backend.service.chat.service import ChatService
@@ -245,3 +245,57 @@ async def test_a_shutdown_while_a_card_runs_closes_the_card(seeded, jenkins, cha
     closed = next(node for node in nodes if node.node == card.node)
     assert closed.action_state == "done"
     assert "server stopped" in json.loads(closed.action)["results"][0]["error"]
+
+
+async def test_a_card_confirmed_later_acts_only_within_the_chat_now(seeded, jenkins, issues, chat_model,
+                                                                    logged_in_user):
+    entity, _, start = await card_from_chat(seeded, chat_model, logged_in_user, "execute_tests",
+                                            {"tests": [seeded.tests[0].name]})
+    await card_from_chat(seeded, chat_model, logged_in_user, "link_issue",
+                         {"run": str(seeded.run), "url": "https://jira.test/browse/SCYLLA-9"})
+    _, nodes = await ChatHistoryService(entity).read()
+    link = next(node for node in nodes if node.role == "action" and json.loads(node.action)["kind"] == "link_issue")
+    view = await resolve_entity("view", (await seed_view(logged_in_user, [seeded.tests[1]])).id)
+
+    started = await execute(view, start, json.loads(start.action), logged_in_user)
+    linked = await execute(view, link, json.loads(link.action), logged_in_user)
+
+    assert "no longer in this chat's scope" in started["results"][0]["error"]
+    assert "outside" in linked["results"][0]["error"]
+    jenkins.build_job.assert_not_called()
+    issues.submit.assert_not_called()
+
+
+async def test_a_start_whose_job_changed_since_the_card_is_not_started(seeded, jenkins, chat_model, logged_in_user):
+    entity, service, card = await card_from_chat(seeded, chat_model, logged_in_user, "execute_tests",
+                                                 {"tests": [seeded.tests[0].name], "params": {"backend": "gce"}})
+    jenkins.retrieve_job_parameters.side_effect = lambda build_id, build_number, **_: [
+        {"name": "backend", "value": "aws", "choices": ["aws"]}, {"name": "scylla_version", "value": "2025.1.0"},
+        {"name": "region", "value": "us-east-1"}]
+
+    await service.confirm(entity, card.node, logged_in_user)
+    await chat_tasks.drain()
+
+    _, nodes = await ChatHistoryService(entity).read()
+    action = json.loads(next(node for node in nodes if node.node == card.node).action)
+    assert action["results"][0]["error"].startswith("Not started: gce is not a choice of backend")
+    jenkins.build_job.assert_not_called()
+
+
+async def test_undo_waits_for_a_running_card(seeded, jenkins, chat_model, logged_in_user):
+    release = asyncio.Event()
+
+    async def held(**_):
+        await release.wait()
+        return 777
+
+    jenkins.build_job.side_effect = held
+    entity, service, card = await card_from_chat(seeded, chat_model, logged_in_user, "execute_tests",
+                                                 {"tests": [seeded.tests[0].name]})
+    await service.confirm(entity, card.node, logged_in_user)
+
+    with pytest.raises(ChatHistoryError, match="still running"):
+        await service.undo(entity)
+    release.set()
+    await chat_tasks.drain()
+    await service.undo(entity)

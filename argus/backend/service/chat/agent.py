@@ -30,6 +30,7 @@ from argus.backend.service.chat.prompt import (
     build_system_prompt,
     compact_summary,
     node_user_ids,
+    prompt_memories,
     results_text,
     to_messages,
 )
@@ -89,7 +90,7 @@ class ChatAgent:
         self.history = ChatHistoryService(entity)
         self.box = Toolbox()
         self.auto = False
-        self.beat_at = time.monotonic()
+        self.lock_lost = False
 
     def _publish(self, event: dict) -> None:
         self.hub.publish(self.entity.id, event)
@@ -108,8 +109,23 @@ class ChatAgent:
         return node
 
     async def _stop_requested(self) -> bool:
+        """Stop when a user asked to, or when this answer no longer holds the chat's lock."""
+        if self.lock_lost:
+            return True
         state = await self.history.state()
-        return state.stop_requested is not None and state.stop_requested == self.busy_node
+        return state.busy != self.busy_node or (state.stop_requested is not None
+                                                and state.stop_requested == self.busy_node)
+
+    async def _beat(self) -> None:
+        """Refresh the lock for as long as the answer runs, whatever it is waiting on."""
+        while True:
+            await asyncio.sleep(HEARTBEAT_SECONDS)
+            try:
+                if not await self.history.heartbeat(self.busy_node):
+                    self.lock_lost = True
+                    return
+            except Exception:  # noqa: BLE001 - one failed refresh is retried on the next beat
+                LOGGER.warning("The chat lock of %s could not be refreshed", self.entity.id, exc_info=True)
 
     async def _finish(self, node: ChatHistory, status: str, streamed: Streamed | None = None,
                       error: str | None = None) -> None:
@@ -142,9 +158,6 @@ class ChatAgent:
             if time.monotonic() - flushed_at >= FLUSH_SECONDS:
                 flushed_at = time.monotonic()
                 await self.history.flush(node, content=streamed.content, reasoning=streamed.thinking)
-                if time.monotonic() - self.beat_at >= HEARTBEAT_SECONDS:
-                    self.beat_at = time.monotonic()
-                    await self.history.heartbeat(self.busy_node)
                 self._publish_node(node)
                 if await self._stop_requested():
                     raise StopRequested
@@ -168,9 +181,10 @@ class ChatAgent:
             LOGGER.exception("The summary of %s is unavailable for the chat", self.entity.id)
             summary = "The release summary is unavailable right now."
         identity = await ChatIdentityService().active()
+        memories, left_out = prompt_memories(memories, self.entity.id)
         system = build_system_prompt(self.entity, memories, summary, users, datetime.now(UTC), self.model.tools,
                                      assistant_name=identity.name if identity else None, template=setup.template,
-                                     skills=setup.skills_text(), auto=self.auto)
+                                     skills=setup.skills_text(), auto=self.auto, memories_left_out=left_out)
         messages = to_messages(path, users)
         if messages and messages[0].role == "system":
             system = f"{system}\n\n{messages.pop(0).content}"
@@ -222,6 +236,7 @@ class ChatAgent:
 
     async def _guard(self, current, work) -> None:
         streamed = Streamed()
+        beat = asyncio.create_task(self._beat())
         try:
             await work(streamed)
         except StopRequested:
@@ -235,6 +250,7 @@ class ChatAgent:
             LOGGER.exception("The chat answer of %s failed", self.entity.id)
             await self._finish(current(), "error", streamed, error=f"{exception.__class__.__name__}: {exception}")
         finally:
+            beat.cancel()
             await self.history.release(self.busy_node)
             await self._publish_state()
 
@@ -261,6 +277,8 @@ class ChatAgent:
     async def _confirm_automatically(self, card: ChatHistory) -> str:
         """Auto mode: confirm the card as the asker and run it inside the answer; the outcome is the tool
         result the model sees."""
+        if await self._stop_requested():
+            raise StopRequested
         card, action = await claim(self.entity, card.node, self.user, "running", auto=True)
         self._publish_node(card)
         action = await execute(self.entity, card, action, self.user)

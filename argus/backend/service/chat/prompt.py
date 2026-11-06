@@ -11,6 +11,8 @@ from argus.backend.service.chat.llm import ChatMessage, ToolCall
 
 TEMPLATE = (Path(__file__).parent / "prompts" / "system.md").read_text(encoding="utf-8")
 TOOL_RESULT_LIMIT = 6000
+MEMORY_PROMPT_LIMIT = 8000
+MEMORY_LINE_OVERHEAD = 120
 AUTO_COMPACT_SHARE = 0.9
 COMPACT_WARNING_SHARE = 0.75
 FAILED_TEST_LIMIT = 40
@@ -87,14 +89,34 @@ def compact_summary(summaries: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def memory_lines(memories: list[dict], users: Mapping[UUID, User]) -> str:
-    if not memories:
+def prompt_memories(memories: list[dict], entity_id: UUID) -> tuple[list[dict], int]:
+    """The memories that fit the prompt's memory budget: the chat's own first, then the newest; and how many were
+    left out."""
+    ordered = sorted(memories, key=lambda memory: (str(memory["entity_id"]) != str(entity_id),
+                                                   -as_timestamp(memory["updated_at"])))
+    shown, used = [], 0
+    for memory in ordered:
+        cost = len(memory["content"]) + MEMORY_LINE_OVERHEAD
+        if used + cost <= MEMORY_PROMPT_LIMIT:
+            shown.append(memory)
+            used += cost
+    return shown, len(memories) - len(shown)
+
+
+def as_timestamp(moment) -> float:
+    if isinstance(moment, datetime):
+        return moment.timestamp()
+    return datetime.fromisoformat(str(moment)).timestamp() if moment else 0.0
+
+
+def memory_lines(memories: list[dict], users: Mapping[UUID, User], left_out: int = 0) -> str:
+    if not memories and not left_out:
         return "No memories yet."
-    return "\n".join(
-        f"- [{memory['id']}] {memory['kind']} of {memory['entity_type']} {memory['entity_name']}, "
-        f"by {user_label(memory['updated_by'], users)}: {memory['content']}"
-        for memory in memories
-    )
+    lines = [f"- [{memory['id']}] {memory['kind']} of {memory['entity_type']} {memory['entity_name']}, "
+             f"by {user_label(memory['updated_by'], users)}: {memory['content']}" for memory in memories]
+    if left_out:
+        lines.append(f"- {left_out} more memories do not fit here; read_memory finds them by their text.")
+    return "\n".join(lines)
 
 
 def scope_text(entity: ChatEntity) -> str:
@@ -106,7 +128,7 @@ def scope_text(entity: ChatEntity) -> str:
 
 def build_system_prompt(entity: ChatEntity, memories: list[dict], summary_text: str, users: Mapping[UUID, User],
                         now: datetime, tools: bool, assistant_name: str | None = None, template: str = TEMPLATE,
-                        skills: str = "", auto: bool = False) -> str:
+                        skills: str = "", auto: bool = False, memories_left_out: int = 0) -> str:
     if skills and "{skills}" not in template:
         template = f"{template.rstrip()}\n\n{{skills}}"
     return template.format_map({
@@ -116,7 +138,7 @@ def build_system_prompt(entity: ChatEntity, memories: list[dict], summary_text: 
         "date": now.strftime("%Y-%m-%d"),
         "tool_rules": (TOOL_RULES + (AUTO_RULE if auto else "")) if tools else NO_TOOL_RULES,
         "scope": scope_text(entity),
-        "memories": memory_lines(memories, users),
+        "memories": memory_lines(memories, users, memories_left_out),
         "summary": summary_text,
         "skills": skills,
     })

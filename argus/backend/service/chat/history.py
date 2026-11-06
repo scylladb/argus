@@ -1,7 +1,8 @@
 from collections import defaultdict
 from collections.abc import Iterable
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid1
 
 from coodie.exceptions import DocumentNotFound
 
@@ -51,6 +52,16 @@ def newest_leaf(nodes: list[ChatHistory], start: ChatHistory) -> ChatHistory:
     while visible := children.get(current.node):
         current = max(visible, key=lambda node: node.node.time)
     return current
+
+
+def subtree(nodes: list[ChatHistory], root: ChatHistory) -> list[ChatHistory]:
+    children = children_of(nodes)
+    found, pending = [], [root]
+    while pending:
+        current = pending.pop()
+        found.append(current)
+        pending.extend(children.get(current.node, []))
+    return found
 
 
 def describe_user(user: User | None) -> str:
@@ -124,9 +135,12 @@ class ChatHistoryService:
             state = await self.state()
         raise ChatBusyError(f"Answering the question of {describe_user(await self._user(state.busy_user))}")
 
-    async def heartbeat(self, node: UUID) -> None:
-        """Keep a long answer's lock fresh, so it is never taken over as abandoned."""
-        await ChatState(entity_id=self.entity.id).update(if_conditions={"busy": node}, busy_since=datetime.now(UTC))
+    async def heartbeat(self, node: UUID) -> bool:
+        """Keep a long answer's lock fresh, so it is never taken over as abandoned; False when the lock is no
+        longer the answer's."""
+        result = await ChatState(entity_id=self.entity.id).update(if_conditions={"busy": node},
+                                                                  busy_since=datetime.now(UTC))
+        return result.applied
 
     async def release_stale(self, now: datetime | None = None) -> bool:
         """Free a lock no answer has refreshed for STALE_LOCK, left by a worker that died, and mark its node."""
@@ -154,8 +168,26 @@ class ChatHistoryService:
             raise ChatBusyError(f"Answering the question of {describe_user(await self._user(state.busy_user))}")
         return state
 
+    @asynccontextmanager
+    async def holding(self):
+        """Hold the chat's lock while the tree changes, so no answer starts in the middle of the change."""
+        holder = uuid1()
+        await self.state()
+        result = await ChatState(entity_id=self.entity.id).update(
+            if_conditions={"busy": None}, busy=holder, busy_user=None, busy_since=datetime.now(UTC))
+        if not result.applied:
+            await self.ensure_idle()
+            raise ChatBusyError("The conversation is changing; try again")
+        try:
+            yield await self.state()
+        finally:
+            await self.release(holder)
+
     async def undo(self) -> UUID | None:
-        state = await self.ensure_idle()
+        async with self.holding() as state:
+            return await self._undo(state)
+
+    async def _undo(self, state: ChatState) -> UUID | None:
         nodes = await self.nodes()
         path = active_path(nodes, state.head)
         root = next((node for node in reversed(path) if node.role in TURN_ROOTS), None)
@@ -163,13 +195,18 @@ class ChatHistoryService:
             raise ChatHistoryError("There is nothing to undo")
         if any(not node.hidden for node in children_of(nodes).get(state.head, [])):
             raise ChatHistoryError("Undo works at the end of a branch; this is a fork point")
+        if any(node.role == "action" and node.action_state == "running" for node in subtree(nodes, root)):
+            raise ChatHistoryError("A card of this question is still running; undo it once it is done")
         await self._hide_subtree(nodes, root)
         if not await self.move_head(state.head, root.parent):
             raise ChatHistoryError("The conversation changed meanwhile; try again")
         return root.parent
 
     async def set_head(self, node: UUID) -> UUID:
-        state = await self.ensure_idle()
+        async with self.holding() as state:
+            return await self._set_head(state, node)
+
+    async def _set_head(self, state: ChatState, node: UUID) -> UUID:
         nodes = await self.nodes()
         target = next((candidate for candidate in nodes if candidate.node == node and not candidate.hidden), None)
         if target is None:
@@ -181,7 +218,10 @@ class ChatHistoryService:
 
     async def fork(self, node: UUID) -> UUID:
         """Move the head to the end of an earlier turn, so the next question starts a new branch there."""
-        state = await self.ensure_idle()
+        async with self.holding() as state:
+            return await self._fork(state, node)
+
+    async def _fork(self, state: ChatState, node: UUID) -> UUID:
         nodes = await self.nodes()
         target = next((candidate for candidate in nodes if candidate.node == node and not candidate.hidden), None)
         if target is None:
@@ -193,19 +233,15 @@ class ChatHistoryService:
         return target.node
 
     async def wipe(self) -> None:
-        await self.ensure_idle()
-        await ChatHistory.find(entity_id=self.entity.id).delete()
-        await ChatState(entity_id=self.entity.id).update(head=None, stop_requested=None)
+        async with self.holding():
+            await ChatHistory.find(entity_id=self.entity.id).delete()
+            await ChatState(entity_id=self.entity.id).update(head=None, stop_requested=None)
         await self.touch()
 
     async def _hide_subtree(self, nodes: list[ChatHistory], root: ChatHistory) -> None:
-        children = children_of(nodes)
-        pending = [root]
         now = datetime.now(UTC)
-        while pending:
-            current = pending.pop()
-            await current.update(hidden=True, updated_at=now)
-            pending.extend(children.get(current.node, []))
+        for node in subtree(nodes, root):
+            await node.update(hidden=True, updated_at=now)
 
     async def _abandon(self, node: UUID) -> None:
         abandoned = await ChatHistory.find_one(entity_id=self.entity.id, node=node)

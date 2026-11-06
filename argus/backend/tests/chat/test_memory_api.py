@@ -3,6 +3,7 @@ import uuid
 import pytest
 from starlette.testclient import TestClient
 
+from argus.backend.service.release_summary import ReleaseSummaryService
 from argus.backend.tests.chat.helpers import seed_entity_release
 from argus.backend.tests.release_summary.helpers import submit_run
 
@@ -51,7 +52,7 @@ async def test_findings_show_in_the_summary_and_survive_a_recompute(api_client: 
 
     first = ok(api_client.get(f"/api/v1/release/{seeded.release.id}/version_summary"))
     await submit_run(client_service, seeded.tests[1], "2034.1.0", "failed")
-    second = ok(api_client.get(f"/api/v1/release/{seeded.release.id}/version_summary"))
+    second = await ReleaseSummaryService().get(seeded.release.id, wait=True)
 
     assert [finding["content"] for finding in first["findings"]] == ["rc failures were infra"]
     assert second["families"][0]["rollup"]["counts"]["failed"] == 1

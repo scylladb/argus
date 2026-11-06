@@ -1,11 +1,14 @@
 import asyncio
 import json
 import time
+from uuid import UUID, uuid1
 from unittest.mock import MagicMock, patch
 
 import pytest
 from starlette.testclient import TestClient
 
+from argus.backend.service.chat.entity import resolve_entity
+from argus.backend.service.chat.history import ChatHistoryService
 from argus.backend.service.jenkins_service import JenkinsService
 from argus.backend.tests.chat.helpers import seed_entity_release, text_turn, tool_turn
 
@@ -88,4 +91,31 @@ async def test_stop_before_the_tools_run_starts_nothing(chat_client: TestClient,
 
     assert not any(node["role"] in ("tool", "action") for node in conversation["nodes"])
     assert next(node for node in conversation["nodes"] if node["role"] == "assistant")["status"] == "stopped"
+    jenkins.build_job.assert_not_called()
+
+
+async def test_an_answer_that_lost_its_lock_runs_no_more_tools(chat_client: TestClient, chat_model, jenkins, seeded,
+                                                               logged_in_user):
+    base = f"/api/v1/chat/release/{seeded.release.id}"
+    entity = await resolve_entity("release", seeded.release.id)
+    paused = asyncio.Event()
+    chat_model.turns = [[paused, *tool_turn(("execute_tests", {"tests": [seeded.tests[0].name]}))],
+                        text_turn("Started")]
+
+    with patch("argus.backend.service.chat.agent.HEARTBEAT_SECONDS", 0.05):
+        started = ok(chat_client.post(f"{base}/messages", json={"content": "start it", "auto": True}))
+        history = ChatHistoryService(entity)
+        await history.release(UUID(started["assistant_node"]["node"]))
+        await history.acquire(logged_in_user, uuid1())
+        await asyncio.sleep(0.2)
+        paused.set()
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            answer = next(node for node in ok(chat_client.get(base))["nodes"]
+                          if node["node"] == started["assistant_node"]["node"])
+            if answer["status"] != "streaming":
+                break
+            time.sleep(0.05)
+
+    assert answer["status"] == "stopped"
     jenkins.build_job.assert_not_called()

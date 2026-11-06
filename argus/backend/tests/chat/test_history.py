@@ -241,3 +241,15 @@ async def test_a_heartbeat_keeps_only_its_own_lock_fresh(release_manager_service
     kept = not await history.release_stale()
 
     assert stale is True and kept is True
+
+
+async def test_no_question_starts_while_the_tree_changes(release_manager_service, logged_in_user, chat_model):
+    history = await history_for_new_release(release_manager_service)
+
+    async with history.holding():
+        with pytest.raises(ChatBusyError):
+            await ChatService(ChatHub()).send(history.entity, "q", logged_in_user)
+        with pytest.raises(ChatBusyError):
+            await history.undo()
+
+    assert (await history.state()).busy is None

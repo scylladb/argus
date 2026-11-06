@@ -40,9 +40,10 @@ FIXED_VALUES = {
 }
 URL_RE = re.compile(r"^https?://(www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&/=]*)$")
 FORMATS = {
-    "scylla_version": (re.compile(r"^(([\w\-.]+:(latest|\d+|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z))|"
+    "scylla_version": (re.compile(r"^(latest|([\w\-.]+:(latest|\d+|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z))|"
                                   r"(\d+\.\d+(\.\d+)?)((~|-)rc\d)?)$"),
-                       "a released version (2025.1, 2025.1.0, 2025.1.0~rc1 or 2025.1.0-rc1), or a branch build as "
+                       "latest (Docker), a released version (2025.1, 2025.1.0, 2025.1.0~rc1 or 2025.1.0-rc1), or a "
+                       "branch build as "
                        "branch:latest, branch:<build number> or branch:<YYYY-MM-DDTHH:MM:SSZ> (master:latest, "
                        "branch-2025.1:latest, master:1234)"),
     "scylla_repo": (URL_RE, "an http(s) link to the .repo or .list file"),
@@ -50,7 +51,8 @@ FORMATS = {
     "scylla_ami_id": (re.compile(r"^(ami-[abcdef\d]{4,17}|scylla-.+)$"), "ami-<hex id>"),
     "gce_image_db": (re.compile(r"^https://www\.googleapis\.com/compute/v1/.+$"),
                      "https://www.googleapis.com/compute/v1/<image path>"),
-    "azure_image_db": (re.compile(r"^/subscriptions/.+$"), "/subscriptions/<image path>"),
+    "azure_image_db": (re.compile(r"^(/subscriptions/.+|[\w.-]+:[\w.-]+:[\w.-]+:[\w.-]+)$"),
+                       "/subscriptions/<image path>, or a marketplace URN publisher:offer:sku:version"),
     "oci_image_db": (re.compile(r"^ocid1\.image\.oc1\..+\.aaaaaaaa.+$"), "ocid1.image.oc1.<region>.aaaaaaaa<id>"),
     "byo_scylla_repo": (re.compile(r"^git@github\.com:[\w-]+/[\w-]+\.git$"), "git@github.com:<user>/<repo>.git"),
 }
@@ -75,7 +77,8 @@ def backend_group(backend: str | None) -> str | None:
     return next((group for group, members in BACKEND_GROUPS.items() if backend in members), None)
 
 
-def allowed_values(name: str, params: dict) -> tuple[str, ...] | None:
+def suggested_values(name: str, params: dict) -> tuple[str, ...] | None:
+    """The values the run page's wizard offers for a parameter; SCT accepts others too, so they only guide."""
     if name in FIXED_VALUES:
         return FIXED_VALUES[name]
     group = backend_group(params.get("backend"))
@@ -112,8 +115,6 @@ async def check(params: dict[str, str], changed: set[str]) -> str | None:
         value = str(params.get(name) or "")
         if not value:
             continue
-        if (values := allowed_values(name, params)) and value not in values:
-            return f"{value} is not a supported {name}; use one of {', '.join(values)}"
         if name in FORMATS and not FORMATS[name][0].match(value):
             return f"{name} must be {FORMATS[name][1]}, not {value}"
     if params.get("byo_scylla_repo") and changed & {"byo_scylla_repo", BYO_BRANCH}:
@@ -126,15 +127,17 @@ async def check(params: dict[str, str], changed: set[str]) -> str | None:
 
 
 def fields(params: dict[str, str], job: list[dict], sct: bool) -> list[dict]:
-    """The job's parameters for the card and the model: each with its value, its allowed values, its wizard
-    group for an SCT job, and the start of its description."""
+    """The job's parameters for the card and the model: each with its value, the choices its job enforces, the
+    wizard's suggested values and group for an SCT job, and the start of its description."""
     group_of = {name: group for group, names in FIELD_GROUPS.items() for name in names} if sct else {}
     result = []
     for param in job:
         name = param["name"]
         entry = {"name": name, "value": params.get(name, param.get("value")), "group": group_of.get(name, "other")}
-        if choices := param.get("choices") or (sct and allowed_values(name, params)):
+        if choices := param.get("choices"):
             entry["choices"] = list(choices)
+        elif sct and (suggestions := suggested_values(name, params)):
+            entry["suggestions"] = list(suggestions)
         if description := HTML_TAG.sub("", param.get("description") or "").strip():
             entry["description"] = description[:160]
         if sct and name in FORMATS:
