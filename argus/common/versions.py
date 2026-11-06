@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass
 
-VERSION_RE = re.compile(r"^(?P<base>\d+\.\d+\.\d+)(?:[~.](?P<pre>rc\d+|dev))?(?:[.~-].*)?$")
+VERSION_RE = re.compile(r"^(?P<base>\d+\.\d+(?:\.\d+)?)(?:[~.-](?P<pre>rc\d+|dev))?(?:[.~-].*)?$")
 FINAL_RANK = 1_000_000
 
 
@@ -33,4 +33,7 @@ def parse_version(raw: str | None) -> ScyllaVersion | None:
     match = VERSION_RE.match(raw.strip())
     if not match:
         return None
-    return ScyllaVersion(base=match.group("base"), pre=match.group("pre"))
+    base = match.group("base")
+    if base.count(".") == 1:
+        base = f"{base}.0"
+    return ScyllaVersion(base=base, pre=match.group("pre"))

@@ -9,6 +9,10 @@ from argus.common.versions import ScyllaVersion, parse_version
     ("2025.1.0.0.20250325.9dca28d2b818", "2025.1.0", "2025.1.0"),
     ("2024.1.0~dev", "2024.1.0~dev", "2024.1.0"),
     ("2025.1.1", "2025.1.1", "2025.1.1"),
+    ("2026.4.0-rc1", "2026.4.0~rc1", "2026.4.0"),
+    ("2026.4.0-dev-0.20261101.abc", "2026.4.0~dev", "2026.4.0"),
+    ("2022.1~rc5", "2022.1.0~rc5", "2022.1.0"),
+    ("2025.1", "2025.1.0", "2025.1.0"),
     ("6.0.0~rc0-0.20240101.abcdef", "6.0.0~rc0", "6.0.0"),
 ])
 def test_parse_version_reads_the_version_and_its_family(raw, version, family):
@@ -18,7 +22,7 @@ def test_parse_version_reads_the_version_and_its_family(raw, version, family):
     assert parsed.family == family
 
 
-@pytest.mark.parametrize("raw", [None, "", "master", "2025.1", "rc1"])
+@pytest.mark.parametrize("raw", [None, "", "master", "2025", "rc1"])
 def test_parse_version_leaves_out_what_does_not_parse(raw):
     assert parse_version(raw) is None
 

@@ -260,13 +260,33 @@ describe("ReleaseSummary.svelte", () => {
         expect(fetchMock).toHaveBeenCalledWith("/api/v1/views/widgets/release_summary?view_id=v-1");
     });
 
-    it("says when it shows stored figures and when nothing was tested", async () => {
-        fetchMock.mockResolvedValue({ releases: [{ ...RELEASE, stale: true }, { ...RELEASE, release_id: "r-2", families: [] }] });
+    it("refreshes stored figures until the recompute lands, and says when nothing was tested", async () => {
+        vi.useFakeTimers({ toFake: ["Date", "setTimeout"] });
+        vi.setSystemTime(new Date("2026-11-05T10:00:00Z"));
+        fetchMock.mockResolvedValueOnce({ releases: [{ ...RELEASE, stale: true }, { ...RELEASE, release_id: "r-2", families: [] }] })
+            .mockResolvedValue({ releases: [RELEASE, { ...RELEASE, release_id: "r-2", families: [] }] });
 
         render(ReleaseSummary, { props: { dashboardObject: { id: "v-2" } } });
 
-        await waitFor(() => expect(screen.getByText(/could not be refreshed/)).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/Refreshing; showing the figures stored/)).toBeTruthy());
         expect(screen.getByText("No tested or planned versions yet.")).toBeTruthy();
+        await vi.advanceTimersByTimeAsync(3000);
+        await waitFor(() => expect(screen.queryByText(/Refreshing/)).toBeNull());
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("says when the stored figures could not be refreshed", async () => {
+        vi.useFakeTimers({ toFake: ["Date", "setTimeout"] });
+        vi.setSystemTime(new Date("2026-11-05T10:00:00Z"));
+        fetchMock.mockResolvedValue({ ...RELEASE, stale: true });
+
+        render(ReleaseSummary, { props: { dashboardObject: { id: "r-1" }, dashboardObjectType: "release" } });
+        for (let tries = 0; tries < 5; tries += 1) {
+            await vi.advanceTimersByTimeAsync(3000);
+        }
+
+        await waitFor(() => expect(screen.getByText(/could not be refreshed/)).toBeTruthy());
+        expect(fetchMock).toHaveBeenCalledTimes(6);
     });
 });
 

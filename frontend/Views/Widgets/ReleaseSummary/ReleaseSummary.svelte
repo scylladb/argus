@@ -27,7 +27,14 @@
     const isOpen = $derived(!collapsible || expanded);
     const headerFamilies = $derived((releases ?? []).flatMap((release) => release.families).slice(0, HEADER_FAMILIES));
 
-    onMount(async () => {
+    const REFRESH_MS = 3000;
+    const REFRESH_TRIES = 5;
+
+    let refreshes = 0;
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    const refreshing = $derived((releases ?? []).some((release) => release.stale) && refreshes < REFRESH_TRIES);
+
+    const load = async () => {
         try {
             if (dashboardObjectType === "release") {
                 releases = [await fetchJson(`/api/v1/release/${dashboardObject.id}/version_summary`)];
@@ -37,10 +44,19 @@
                 );
                 releases = response.releases;
             }
+            if (releases.some((release) => release.stale) && refreshes < REFRESH_TRIES) {
+                refreshes += 1;
+                refreshTimer = setTimeout(load, REFRESH_MS);
+            }
         } catch (e) {
             error = e instanceof Error ? e.message : "Could not load the release summary.";
             sendMessage("error", error, "ReleaseSummary::load");
         }
+    };
+
+    onMount(() => {
+        load();
+        return () => clearTimeout(refreshTimer);
     });
 </script>
 
@@ -63,7 +79,12 @@
                     >
                 {/if}
             </div>
-            {#if release.stale}
+            {#if release.stale && refreshing}
+                <div class="small text-body-secondary mb-2">
+                    <span class="spinner-border spinner-border-sm"></span> Refreshing; showing the figures stored
+                    {updatedAgo(release.generated_at)}.
+                </div>
+            {:else if release.stale}
                 <div class="alert alert-warning py-1 px-2 small">
                     The summary could not be refreshed. It shows the figures stored {updatedAgo(release.generated_at)}.
                 </div>

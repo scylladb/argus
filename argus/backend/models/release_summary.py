@@ -3,8 +3,6 @@ from datetime import UTC, datetime
 from typing import Annotated, Optional
 from uuid import UUID
 
-from cassandra import DriverException
-from cassandra.cluster import NoHostAvailable
 from coodie import ClusteringKey, PrimaryKey, Static
 from coodie.aio import Document
 
@@ -29,5 +27,5 @@ async def mark_release_summary_stale(*release_ids: UUID | None) -> None:
     for release_id in {release_id for release_id in release_ids if release_id}:
         try:
             await ReleaseSummary.find(release_id=release_id).update(invalidated_at=now)
-        except (DriverException, NoHostAvailable):
+        except Exception:  # noqa: BLE001 - a summary mark must never fail the client write that caused it
             LOGGER.warning("Failed to mark the release summary of %s stale", release_id, exc_info=True)

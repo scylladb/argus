@@ -19,7 +19,7 @@ pytestmark = pytest.mark.docker_required
 
 
 async def read(release_id: UUID) -> dict:
-    return await ReleaseSummaryService().get(release_id)
+    return await ReleaseSummaryService().get(release_id, wait=True)
 
 
 def status_of(summary: dict, family: str, version: str | None, test_name: str) -> str | None:
