@@ -645,6 +645,73 @@ them. `to_investigate` counts the failed, test error and error tests nobody has
 investigated. `start_time` is `null` for a test that never ran. A dormant
 release answers `{"dormant": true}` unless it has a stored snapshot.
 
+```http
+GET /api/v1/release/{release_id}/version_summary
+```
+
+Returns the release summary: the test and issue counts of each tested or
+planned version of the release, grouped by family, with a rolled-up row per
+family. [`release_summary.md`](release_summary.md) defines each number.
+
+```json
+{
+  "response": {
+    "release_id": "1a2c714b-8d73-4891-a901-c3013dfd794a",
+    "release_name": "scylla-2025.1",
+    "generated_at": "2026-11-05T10:00:00+00:00",
+    "stale": false,
+    "families": [
+      {
+        "family": "2025.1.0",
+        "rollup": {
+          "version": null,
+          "counts": {"executed": 40, "passed": 36, "failed": 3, "aborted": 1, "in_progress": 0, "pending": 2,
+                     "issues_new": 2, "issues_existing": 1, "issues_fixed": 1},
+          "tests": [
+            {"test_id": "3f1c9a52-7d4e-4b8a-9c21-5e6f7a8b9c0d", "group_id": "b197bc8c-71ce-4832-910f-f6daf47857b0",
+             "test_name": "longevity-100gb-4h", "group_name": "Longevity", "status": "passed",
+             "run_id": "9d0c…", "build_id": "scylla-2025.1/longevity/longevity-100gb-4h", "build_number": 12,
+             "version": "2025.1.0"}
+          ],
+          "issues": [
+            {"id": "51b2…", "type": "jira", "key": "SCYLLADB-123", "title": "Crash during upgrade",
+             "url": "https://scylladb.atlassian.net/browse/SCYLLADB-123", "state": "open",
+             "novelty": "new", "status": "fixed", "test_ids": ["3f1c…"], "run_ids": ["77aa…"],
+             "issue": {"id": "51b2…", "subtype": "jira", "key": "SCYLLADB-123", "summary": "Crash during upgrade",
+                       "permalink": "https://scylladb.atlassian.net/browse/SCYLLADB-123", "state": "open",
+                       "links": [{"run_id": "77aa…", "test_id": "3f1c…", "added_on": "2026-10-30T08:12:00Z"}]}}
+          ]
+        },
+        "versions": [
+          {"version": "2025.1.0~rc0", "counts": {}, "tests": [], "issues": []},
+          {"version": "2025.1.0", "counts": {}, "tests": [], "issues": []}
+        ]
+      }
+    ]
+  },
+  "status": "ok"
+}
+```
+
+Families come newest first. The versions of a family run from `~dev` through
+the release candidates to the final build. A pending test has `"status":
+"pending"` and no run. On a version row, `issues_fixed` is `0` and every issue
+is `open`. `stale` is `true` when a refresh failed and the response holds the
+last stored figures. `issue` holds the issue as `GET /api/v1/issues/get` returns it
+with `aggregateByIssue`, limited to the links on runs of that row.
+
+```http
+GET /api/v1/views/widgets/release_summary
+```
+
+| Parameter | Type | Description |
+| --------- | ---- | ------------|
+| view_id          | string     | View id            |
+
+Returns `{"releases": [...]}`, one release object as above for each release
+that holds a test of the view. Each object keeps only the view's tests, and
+the issues linked to them, and counts them again.
+
 ## Email reporting API
 
 ```http

@@ -35,6 +35,7 @@ model, and optionally its own router, through the plugin layer.
   - `models/` — 13 modules. `web.py` holds the core entities. `jira.py`,
     `github_issue.py`, `pytest.py`, `result.py`, `plan.py`, `view_widgets.py`,
     `ssh_key.py`, `run_config.py`, `run_cost.py`, `run_cost_rollup.py`,
+    `release_summary.py`,
     `runtime_store.py` and `argus_ai.py` hold the rest.
   - `util/` — 7 modules of shared helpers.
   - `rendering.py` — the template helpers the `.j2` files expect.
@@ -135,6 +136,15 @@ worker keeps in memory. A request rebuilds it from three table scans once it is
 - **Distribution**: `argus-alm` on PyPI, with the console commands
   `argus-client-generic` and `argus-driver-matrix-client`.
   `pytest-argus-reporter` ships as its own package.
+
+The release summary (`service/release_summary.py`, table
+`release_summary_v1`) holds one row per version of a release and one rolled-up
+row per family. Two static timestamps on the partition decide freshness: every
+release action writes `invalidated_at`, and a recompute writes `generated_at`
+as the time it started. A read recomputes the whole release when
+`invalidated_at` is not older than `generated_at`, from one read of its runs,
+plans and issue links. [`docs/release_summary.md`](../release_summary.md)
+defines the numbers.
 
 ## Data Flow
 

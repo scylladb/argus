@@ -5,6 +5,7 @@ from coodie.exceptions import DocumentNotFound
 
 from argus.backend.plugins.sct.testrun import SCTTestRun
 from argus.backend.service.run_cost_service import RunCostService
+from argus.backend.models.release_summary import ReleaseSummary, mark_release_summary_stale
 from argus.backend.models.web import ArgusRelease, ArgusGroup, ArgusTest, ReleaseDistinctVersions, ReleaseDistinctImages, ReleaseStatsSnapshot, invalidate_release_snapshots
 
 LOGGER = logging.getLogger(__name__)
@@ -211,6 +212,7 @@ class ReleaseManagerService:
             await row.delete()
         for row in await ReleaseStatsSnapshot.find(release_id=release.id).all():
             await row.delete()
+        await ReleaseSummary.find(release_id=release.id).delete()
 
         await release.delete()
         return True
@@ -235,3 +237,4 @@ class ReleaseManagerService:
             await SCTTestRun.find(build_id=build_id, start_time=start_time).update(
                 test_id=test.id, group_id=test.group_id, release_id=test.release_id)
             await RunCostService().relocate_rollup_guarded(run_id, old_release_id)
+        await mark_release_summary_stale(test.release_id, *(old_release_id for *_, old_release_id in runs))

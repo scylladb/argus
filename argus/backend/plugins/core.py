@@ -14,6 +14,7 @@ from coodie.cql_builder import build_update, parse_filter_kwargs, parse_update_k
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.plan import ArgusReleasePlan
+from argus.backend.models.release_summary import mark_release_summary_stale
 from argus.backend.models.web import (
     ArgusTest,
     ArgusGroup,
@@ -32,6 +33,7 @@ JENKINS_LOOKUP_TIMEOUT_SECONDS = 5
 DEFAULT_STATS_PER_PARTITION_LIMIT = 15
 ROLLUP_COLUMNS = ("build_id", "start_time", "id", "release_id", "group_id", "test_id", "status", "end_time",
                   "build_number")
+SUMMARY_COLUMNS = ("id", "build_id", "start_time", "test_id", "group_id", "status", "build_number", "scylla_version")
 
 
 class PluginModelBase(Document):
@@ -166,6 +168,10 @@ class PluginModelBase(Document):
                                  "build_number", "scylla_version")
 
     @classmethod
+    async def get_summary_rows_for_release(cls, release_id: UUID) -> list[dict]:
+        return await select_rows(cls.find(release_id=release_id), *SUMMARY_COLUMNS)
+
+    @classmethod
     async def get_jobs_meta_by_test_id(cls, test_id: UUID) -> list[dict]:
         return await select_rows(cls.find(test_id=test_id), "build_id", "start_time", "id", "test_id", "release_id",
                                  "group_id", "status", "investigation_status", "build_number")
@@ -278,6 +284,7 @@ class PluginModelBase(Document):
                     await snapshot.delete()
         except Exception:
             LOGGER.warning("Failed to invalidate stats snapshot for release %s", self.release_id, exc_info=True)
+        await mark_release_summary_stale(self.release_id)
 
     async def index_version(self) -> None:
         if not self.release_id or not self.scylla_version:

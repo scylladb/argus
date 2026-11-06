@@ -12,6 +12,7 @@ from argus.backend.models.github_issue import GithubIssue, IssueAssignee, IssueL
 from argus.backend.models.jira import JiraIssue
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.pytest import PytestResultTable, PytestResultTableOld, PytestUserField
+from argus.backend.models.release_summary import ReleaseSummary, mark_release_summary_stale
 from argus.backend.models.result import (
     ArgusGenericResultMetadata,
     ArgusGenericResultData,
@@ -442,6 +443,7 @@ async def invalidate_release_snapshots(release_id: UUID) -> None:
         await ReleaseStatsSnapshot.find(release_id=release_id).delete()
     except Exception:  # pylint: disable=broad-except
         _SNAPSHOT_LOGGER.warning("Failed to invalidate release snapshots for %s", release_id, exc_info=True)
+    await mark_release_summary_stale(release_id)
 
 
 # Application models; synced via Document.sync_table()
@@ -477,6 +479,7 @@ USED_MODELS: list[type[Document]] = [
     ReleaseStatsSnapshot,
     ReleaseDistinctVersions,
     ReleaseDistinctImages,
+    ReleaseSummary,
     RunConfiguration,
     RunConfigParam,
     RunConfigParamByRun,
