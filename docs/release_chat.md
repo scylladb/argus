@@ -79,15 +79,14 @@ appears, Argus checks every override against the test's own Jenkins job:
 
 - the job must have the parameter
 - when the parameter is a choice, the value must be one of its choices
-- a Scylla Cluster Tests job follows the rules of the parameter wizard on the
-  run page: a supported backend and a region of that backend, the known
-  values of `provision_type` and the post-test actions, exactly one Scylla
-  version source in its format, and a BYO branch that exists on GitHub.
-  `scylla_version` takes a released version (`2025.1`, `2025.1.0`,
-  `2025.1.0~rc1`) or a branch build: `master:latest`, `branch-2025.1:latest`,
-  `master:1234`, or a build timestamp such as `master:2025-11-01T10:00:00Z`.
-  Setting one version source clears the others, and a new backend gets its
-  first supported region when the job leaves it empty.
+- a Scylla Cluster Tests job keeps exactly one Scylla version source, in its
+  format, and a BYO branch that exists on GitHub. `scylla_version` takes
+  `latest`, a released version (`2025.1`, `2025.1.0`, `2025.1.0~rc1`) or a
+  branch build: `master:latest`, `branch-2025.1:latest`, `master:1234`, or a
+  build timestamp such as `master:2025-11-01T10:00:00Z`. Setting one version
+  source clears the others. The parameter wizard's backends and regions are
+  offered as suggestions, and a new backend gets its first suggested region
+  when the job leaves it empty.
 
 A test that fails a check is listed on the card under **Left out**, with the
 reason, and does not start. **All parameters** on the card shows every value

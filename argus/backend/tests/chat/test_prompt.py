@@ -1,7 +1,7 @@
 import json
 import uuid
-from datetime import UTC, datetime
-from uuid import uuid1
+from datetime import UTC, datetime, timedelta
+from uuid import uuid1, uuid4
 
 from argus.backend.models.chat import ChatHistory
 from argus.backend.models.web import User
@@ -11,6 +11,8 @@ from argus.backend.service.chat.prompt import (
     build_system_prompt,
     compact_summary,
     context_stats,
+    memory_lines,
+    prompt_memories,
     to_messages,
 )
 
@@ -126,3 +128,20 @@ def test_context_stats_start_from_the_last_usage():
 
     assert stats == {"window": 8000, "used": 1300, "last_prompt_tokens": 1000, "estimated_tokens": 100,
                      "messages_since_compaction": 3, "warn_at": 6000, "compact_at": 7200}
+
+
+def test_memories_fit_a_budget_with_the_chats_own_first():
+    own, other = uuid4(), uuid4()
+    now = datetime.now(UTC)
+
+    def memory(owner, content: str, minutes_ago: int) -> dict:
+        return {"id": str(uuid4()), "entity_id": owner, "content": content, "kind": "note", "entity_type": "view",
+                "entity_name": "v", "updated_by": None, "updated_at": now - timedelta(minutes=minutes_ago)}
+
+    memories = [memory(other, "release, new", 1), memory(own, "view, old", 60), memory(other, "x" * 9000, 0)]
+
+    shown, left_out = prompt_memories(memories, own)
+
+    assert [entry["content"] for entry in shown] == ["view, old", "release, new"]
+    assert left_out == 1
+    assert "1 more memories do not fit here" in memory_lines(shown, {}, left_out)

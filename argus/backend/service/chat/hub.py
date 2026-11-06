@@ -17,6 +17,7 @@ from argus.backend.service.chat.entity import ChatEntity
 from argus.backend.service.chat.history import as_utc, ensure_state
 from argus.backend.service.chat.identity import ChatIdentityService, identity_json
 from argus.backend.service.chat.memory import ChatMemoryService
+from argus.backend.util.common import gather_limited, select_rows
 
 LOGGER = logging.getLogger(__name__)
 HEARTBEAT = {"type": "heartbeat"}
@@ -71,6 +72,7 @@ class ChatHub:
         self._subscriptions: dict[UUID, set[Subscription]] = defaultdict(set)
         self._watchers: dict[UUID, asyncio.Task] = {}
         self._known: dict[UUID, dict[UUID, datetime | None]] = defaultdict(dict)
+        self._nodes: dict[UUID, dict[UUID, ChatHistory]] = defaultdict(dict)
 
     def open(self, entity: ChatEntity, user: User) -> Subscription:
         subscription = Subscription(self, entity, user.id)
@@ -97,6 +99,7 @@ class ChatHub:
         if not subscribers:
             self._subscriptions.pop(entity_id, None)
             self._known.pop(entity_id, None)
+            self._nodes.pop(entity_id, None)
             if watcher := self._watchers.pop(entity_id, None):
                 watcher.cancel()
 
@@ -125,8 +128,10 @@ class ChatHub:
             try:
                 state = await ensure_state(entity.id, entity.type)
                 known = self._known[entity.id]
+                cache = self._nodes[entity.id]
                 for node in await ChatHistory.find(entity_id=entity.id).all():
                     known.setdefault(node.node, to_millis(node.updated_at))
+                    cache[node.node] = node
                 release_stamps = await self._memory_stamps(other_ids)
                 break
             except asyncio.CancelledError:
@@ -168,8 +173,22 @@ class ChatHub:
                 LOGGER.warning("The chat watcher of %s failed a poll", entity.id, exc_info=True)
             await asyncio.sleep(self.poll_seconds)
 
+    async def _refresh_cache(self, entity: ChatEntity) -> list[ChatHistory]:
+        """The chat's nodes, reading in full only those whose stamp moved since the last read."""
+        cache = self._nodes[entity.id]
+        stamps = {row["node"]: to_millis(row["updated_at"])
+                  for row in await select_rows(ChatHistory.find(entity_id=entity.id), "node", "updated_at")}
+        for node_id in set(cache) - set(stamps):
+            cache.pop(node_id)
+        moved = [node_id for node_id, stamp in stamps.items()
+                 if node_id not in cache or to_millis(cache[node_id].updated_at) != stamp]
+        for node in await gather_limited(ChatHistory.find_one(entity_id=entity.id, node=node_id) for node_id in moved):
+            if node is not None:
+                cache[node.node] = node
+        return list(cache.values())
+
     async def _push_changes(self, entity: ChatEntity, state: ChatState) -> None:
-        nodes = list(await ChatHistory.find(entity_id=entity.id).all())
+        nodes = await self._refresh_cache(entity)
         known = self._known[entity.id]
         present = {node.node for node in nodes}
         if any(node_id not in present for node_id in known):

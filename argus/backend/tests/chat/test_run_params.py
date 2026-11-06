@@ -26,6 +26,7 @@ LAST_BUILD = [
     {"name": "scylla_version", "value": ""},
     {"name": "scylla_repo", "value": "https://downloads.scylladb.com/rpm/scylla.repo"},
     {"name": "scylla_ami_id", "value": ""},
+    {"name": "azure_image_db", "value": ""},
     {"name": "byo_scylla_repo", "value": ""},
     {"name": "byo_scylla_branch", "value": ""},
     {"name": "provision_type", "value": "spot",
@@ -99,6 +100,17 @@ async def test_every_wizard_version_form_is_accepted(ctx, seeded, jenkins, versi
     assert (params["scylla_version"], params["scylla_repo"]) == (version, "")
 
 
+@pytest.mark.parametrize("overrides", [
+    {"region": "us-east-2"}, {"region": "ca-central-1"}, {"backend": "docker"}, {"backend": "xcloud"},
+    {"provision_type": "auto"}, {"scylla_version": "latest"},
+    {"azure_image_db": "scylladb:scylla-enterprise:2025-1:2025.1.0"},
+])
+async def test_values_sct_accepts_beyond_the_wizard_lists_pass(ctx, seeded, jenkins, overrides):
+    outcome = await call(ctx, "execute_tests", tests=[seeded.tests[0].name], params=overrides)
+
+    assert not outcome.error, outcome.content
+
+
 async def test_overrides_follow_the_wizard(ctx, seeded, jenkins):
     params = params_of(await call(ctx, "execute_tests", tests=[seeded.tests[0].name],
                                   params={"scylla_version": "2025.1.0", "backend": "gce"}))
@@ -109,9 +121,9 @@ async def test_overrides_follow_the_wizard(ctx, seeded, jenkins):
 
 
 @pytest.mark.parametrize(("overrides", "reason"), [
-    ({"region": "mars-1"}, "not a supported region"),
+    ({"azure_image_db": "not an image"}, "azure_image_db must be"),
     ({"scylla_ami_id": "not-an-ami"}, "scylla_ami_id must be"),
-    ({"scylla_version": "latest"}, "branch:latest"),
+    ({"scylla_version": "master"}, "branch:latest"),
     ({"byo_scylla_repo": "git@github.com:someone/scylla.git", "byo_scylla_branch": "gone"}, "not found"),
 ])
 async def test_a_value_the_wizard_refuses_rejects_the_test(ctx, seeded, jenkins, overrides, reason):
@@ -136,8 +148,8 @@ async def test_job_params_come_in_the_wizard_groups(ctx, seeded, jenkins):
 
     groups = json.loads(outcome.content)["groups"]
     environment = {field["name"]: field for field in groups["environment"]}
-    assert "gce" in environment["backend"]["choices"]
-    assert environment["region"]["choices"][0] == "eu-west-1"
+    assert "gce" in environment["backend"]["suggestions"] and "choices" not in environment["backend"]
+    assert environment["region"]["suggestions"][0] == "eu-west-1"
     assert environment["provision_type"]["description"] == "How the instances are provisioned"
     assert groups["post_test"][0]["choices"] == ["destroy", "keep", "keep-on-failure"]
     version = next(field for field in groups["scylla"] if field["name"] == "scylla_version")
@@ -198,4 +210,4 @@ async def test_the_card_route_checks_the_edited_parameters(seeded, jenkins, chat
     assert accepted["status"] == "ok"
     assert accepted["response"]["action"]["proposal"]["tests"][0]["params"]["post_behavior_db_nodes"] == "keep"
     with pytest.raises(ChatActionError):
-        await ChatService().adjust(entity, card.node, {test_id: {"region": "mars-1"}})
+        await ChatService().adjust(entity, card.node, {test_id: {"scylla_ami_id": "not-an-ami"}})

@@ -320,16 +320,16 @@ build therefore does not clash with a new `scylla_version`.
 An SCT job is also checked against the rules of the SCT parameter wizard on
 the run page (`frontend/TestRun/Jenkins/SCTParameterWizard.svelte`), kept
 on the server in one table so the chat and the card use the same rules:
-- `backend` is one of the known backends. The region parameter of its group
-  (`region`, `gce_datacenter`, `azure_region_name`, `oci_region_name`) takes
-  a supported region, and is filled with the first one when a new backend
-  leaves it empty.
-- `provision_type` and the `post_behavior_*` parameters take their known
-  values.
-- Exactly one version source is set, in its format: a version or
-  `branch:latest`, a repository URL, an AMI, a GCE, Azure or OCI image, a
-  rolling upgrade's repository, or a BYO repository and branch that exist on
-  GitHub.
+- The wizard's lists of backends, regions and `provision_type` values are
+  suggestions only, since SCT accepts more (`docker`, `xcloud`, `auto`,
+  regions such as us-east-2). Only a Jenkins choice parameter is enforced.
+  The region parameter of a new backend's group (`region`, `gce_datacenter`,
+  `azure_region_name`, `oci_region_name`) is filled with the first suggested
+  region when the job leaves it empty.
+- Exactly one version source is set, in its format: `latest`, a version or
+  `branch:latest`, a repository URL, an AMI, a GCE image, an Azure image path
+  or marketplace URN, an OCI image, a rolling upgrade's repository, or a BYO
+  repository and branch that exist on GitHub.
 - An empty `email_recipients` becomes `qa@scylladb.com`.
 
 `get_job_params` returns an SCT job's parameters in the wizard's groups,
@@ -379,8 +379,13 @@ A skill is a named piece of prompt text with a description and a mode:
 
 The system prompt is a template. An administrator may replace it, and reset
 it to the default. A template must keep the `tool_rules`, `scope`,
-`memories` and `summary` placeholders and use no unknown one; `skills` is
-optional and is appended when missing.
+`memories` and `summary` placeholders and use no unknown one, each a plain
+name with no index, attribute, format or conversion; `skills` is optional and
+is appended when missing.
+
+The memories in the prompt share a budget of 8,000 characters: the chat's
+own first, then the newest. The prompt says how many did not fit, and
+`read_memory` finds them.
 
 ### Auto mode
 
@@ -398,7 +403,10 @@ users' questions are not affected.
 | Another generation is running | The command is refused with the asker's name. The stream already shows the running answer |
 | The stream does not connect, is closed for good, or is buffered (no event or heartbeat for 30 s) | `EventSource` reconnects on its own; until an event arrives, the client polls `GET` every 3 s |
 | The server shuts down or reloads | Every open stream ends at once; the clients reconnect to the next worker |
-| A lock older than 5 minutes (worker died) | A running answer refreshes its lock every 30 s, so only a dead one ages. Stop, or the next send, frees it and marks the abandoned node `error` |
+| A lock older than 5 minutes (worker died) | A running answer refreshes its lock every 30 s from a side task, whatever it waits on, so only a dead one ages. Stop, or the next send, frees it and marks the abandoned node `error`. An answer whose lock is gone stops before its next tool call or card |
+| Undo, fork, a branch switch or clearing the chat while a question arrives | Each holds the chat's lock while it changes the tree, so the question waits or is refused |
+| Undo while a card of that question runs | Refused until the card is done |
+| A card confirmed after the chat or the job changed | It acts only on tests and runs the chat still reaches, and a start runs only if its overrides still pass the job's current parameters; otherwise the card records why |
 | Stop while the model's tool calls wait to run | No further tool runs and no card is confirmed, Auto mode included |
 | The endpoint fails or times out | The assistant node gets `status=error` with the message, the lock is released, and Try again works |
 | The model calls an unknown tool or sends bad arguments | The tool node carries the error and the loop continues, so the model can correct itself |
@@ -875,9 +883,9 @@ class ChatEntity:
 | A conversation partition grows without bound. Compaction hides old messages from the prompt, not from the read | Reads take the whole partition. A thousand nodes stay within a few hundred kilobytes. Paging is deferred work |
 | A small model invents parameters or test names | Every proposal is resolved and validated on the server, and nothing starts without a user's confirmation |
 | A prompt injection through run data, such as a comment or an issue title, steers the model | Tools that change Argus only propose. The card shows exactly what runs. Memory writes can be reverted and carry `source=chat` |
-| Auto mode, or a `direct` MCP tool, runs a change that injected text asked for | Auto mode is the asker's choice for each question, and the prompt tells the model to propose only what the asker asked for; every card it confirmed stays in the chat, marked as confirmed automatically. A `direct` MCP tool is the admin's choice per tool. An answer shows no image from another host, so it cannot send data out |
+| Auto mode, or a `direct` MCP tool, runs a change that injected text asked for | Auto mode is the asker's choice for each question, and the prompt tells the model to propose only what the asker asked for; every card it confirmed stays in the chat, marked as confirmed automatically. A `direct` MCP tool is the admin's choice per tool. An answer loads nothing from another host: no foreign image, no `srcset`, `style`, `poster` or `background`, and no media or embedded frames, so it cannot send data out |
 | nginx buffers the stream despite the header | The heartbeat never arrives, so the client polls. The live check covers the dev server, which runs without nginx, and a production check follows the deploy |
-| Watchers poll the database: one state-row read every 0.5 s per entity with an open stream, per worker, plus one read per release every 2 s for a view | One watcher serves every stream of an entity in a worker, and stops with its last stream. Ten people in one chat on four workers are at most 8 reads a second. A run with ten clients on one chat kept the other routes at their idle latency |
+| Watchers poll the database: one state-row read every 0.5 s per entity with an open stream, per worker, plus one read per release every 2 s for a view | One watcher serves every stream of an entity in a worker, and stops with its last stream. A change reads only node ids and stamps, then the nodes that moved, from a per-entity cache. Ten people in one chat on four workers are at most 8 reads a second. A run with ten clients on one chat kept the other routes at their idle latency |
 | An endpoint is slow, around 30 seconds before the first token on a cold local model | No request timeout below 5 minutes on the stream. The lock covers 5 minutes. The UI shows "waiting for the model" |
 | A rotated `SECRET_KEY` makes stored tokens unreadable | Shown in the Admin Panel. The token is entered again |
 
