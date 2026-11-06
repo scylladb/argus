@@ -55,10 +55,11 @@
 
     const choose = (model: ProbedModel) => {
         chosen = model;
-        contextWindow = model.context_window ?? (current?.model === model.id ? current.context_window : FALLBACK_CONTEXT);
+        const stored = current?.connection === connection && current?.model === model.id ? current : null;
+        contextWindow = model.context_window ?? stored?.context_window ?? FALLBACK_CONTEXT;
         const tested = tests[model.id];
-        tools = model.tools ?? (typeof tested === "object" ? tested.tools : true);
-        vision = model.vision ?? false;
+        tools = model.tools ?? (typeof tested === "object" ? tested.tools : stored?.tools ?? true);
+        vision = model.vision ?? stored?.vision ?? false;
     };
 
     const testTools = async (model: ProbedModel) => {

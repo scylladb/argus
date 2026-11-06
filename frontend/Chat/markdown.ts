@@ -14,6 +14,11 @@ const singleTilde: TokenizerAndRendererExtension = {
 
 const chatMarked = new Marked({ gfm: true, breaks: true, async: false, extensions: [singleTilde] });
 
+const FETCHING_TAGS = ["style", "link", "video", "audio", "source", "track", "picture", "iframe", "frame", "object",
+                       "embed", "svg", "math", "form", "input", "button"];
+const FETCHING_ATTRIBUTES = ["style", "srcset", "sizes", "poster", "background", "ping", "action", "formaction",
+                             "xlink:href", "data"];
+
 const sameOrigin = (src: string): boolean => {
     try {
         return new URL(src, window.location.href).origin === window.location.origin;
@@ -25,7 +30,11 @@ const sameOrigin = (src: string): boolean => {
 /** Model output is untrusted: it can echo run data, comments and issue titles. An image from another host
  * would let such text send data out of Argus, so only Argus's own images stay; the others keep their alt text. */
 export const renderMarkdown = (text: string): string => {
-    const fragment = DOMPurify.sanitize(chatMarked.parse(text ?? "") as string, { RETURN_DOM_FRAGMENT: true });
+    const fragment = DOMPurify.sanitize(chatMarked.parse(text ?? "") as string, {
+        RETURN_DOM_FRAGMENT: true,
+        FORBID_TAGS: FETCHING_TAGS,
+        FORBID_ATTR: FETCHING_ATTRIBUTES,
+    });
     for (const image of Array.from(fragment.querySelectorAll("img"))) {
         if (!sameOrigin(image.getAttribute("src") ?? "")) {
             image.replaceWith(document.createTextNode(image.getAttribute("alt") ?? ""));

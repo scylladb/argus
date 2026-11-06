@@ -25,4 +25,19 @@ describe("renderMarkdown", () => {
         expect(html).not.toContain("data:image");
         expect(html).toContain("leak");
     });
+
+    it("drops every other way raw HTML could fetch from another host", () => {
+        const html = renderMarkdown([
+            '<img src="/x" srcset="https://evil.test/a 2x">',
+            '<video poster="https://evil.test/b"></video>',
+            '<p style="background:url(https://evil.test/c)">styled</p>',
+            '<table background="https://evil.test/d"><tr><td>t</td></tr></table>',
+            '<a href="/run" ping="https://evil.test/e">run</a>',
+            '<svg><image href="https://evil.test/f"/></svg>',
+        ].join("\n"));
+
+        expect(html).not.toContain("evil.test");
+        expect(html).toContain("styled");
+        expect(html).toContain('href="/run"');
+    });
 });
