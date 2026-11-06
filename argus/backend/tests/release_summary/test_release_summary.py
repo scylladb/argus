@@ -194,6 +194,47 @@ async def test_test_ids_keep_only_those_tests_and_their_issues(release_manager_s
     assert rows["2030.7.0"]["issues"] == []
 
 
+async def test_a_view_sees_an_issue_through_its_own_tests(release_manager_service, client_service,
+                                                         logged_in_user):
+    seeded = await seed_release(release_manager_service, test_count=2)
+    fixed_test, open_test = seeded.tests
+    issues = mocked_issue_service()
+    key = new_jira_key()
+    fixed_run = await submit_run(client_service, fixed_test, "2030.12.0~rc1", "failed")
+    await link_jira(issues, key, fixed_test, fixed_run, logged_in_user)
+    await submit_run(client_service, fixed_test, "2030.12.0~rc2", "passed")
+    open_run = await submit_run(client_service, open_test, "2030.12.0~rc2", "failed")
+    await link_jira(issues, key, open_test, open_run, logged_in_user)
+
+    whole = by_version(await ReleaseSummaryService().get(seeded.release.id, wait=True), "2030.12.0")[None]
+    seen = by_version(await ReleaseSummaryService().get(seeded.release.id, test_ids={fixed_test.id}),
+                      "2030.12.0")[None]
+
+    [whole_issue], [seen_issue] = whole["issues"], seen["issues"]
+    assert (whole_issue["status"], whole_issue["on_latest_run"]) == ("open", True)
+    assert (seen_issue["status"], seen_issue["on_latest_run"]) == ("fixed", False)
+    assert seen_issue["test_ids"] == [str(fixed_test.id)] and seen_issue["run_ids"] == [str(fixed_run)]
+    assert {link["run_id"] for link in seen_issue["issue"]["links"]} == {str(fixed_run)}
+    assert seen["counts"]["issues_fixed"] == 1
+
+
+async def test_deleting_a_release_deletes_its_summary(release_manager_service, client_service):
+    seeded = await seed_release(release_manager_service, test_count=1)
+    await submit_run(client_service, seeded.tests[0], "2030.14.0", "passed")
+    await ReleaseSummaryService().get(seeded.release.id)
+
+    await release_manager_service.delete_release(seeded.release.id)
+
+    assert await ReleaseSummaryService._read(seeded.release.id) == ({}, None, None)
+
+
+async def test_a_failed_mark_does_not_fail_the_write_that_caused_it(release_manager_service):
+    seeded = await seed_release(release_manager_service, test_count=1)
+
+    with patch("argus.backend.models.release_summary.ReleaseSummary.find", side_effect=RuntimeError("boom")):
+        await mark_release_summary_stale(seeded.release.id)
+
+
 async def test_a_fresh_summary_is_not_recomputed_and_a_mark_recomputes_it(release_manager_service, client_service):
     seeded = await seed_release(release_manager_service, test_count=1)
     await submit_run(client_service, seeded.tests[0], "2030.8.0", "passed")
@@ -202,10 +243,28 @@ async def test_a_fresh_summary_is_not_recomputed_and_a_mark_recomputes_it(releas
     first = await service.get(seeded.release.id)
     second = await service.get(seeded.release.id)
     await mark_release_summary_stale(seeded.release.id)
-    third = await service.get(seeded.release.id)
+    third = await service.get(seeded.release.id, wait=True)
 
     assert second["generated_at"] == first["generated_at"]
     assert third["generated_at"] > first["generated_at"]
+
+
+async def test_a_stale_summary_is_served_at_once_and_refreshed_in_the_background(release_manager_service,
+                                                                                 client_service):
+    seeded = await seed_release(release_manager_service, test_count=1)
+    await submit_run(client_service, seeded.tests[0], "2030.8.0", "passed")
+    service = ReleaseSummaryService()
+    first = await service.get(seeded.release.id)
+    await submit_run(client_service, seeded.tests[0], "2030.8.1", "failed")
+
+    served = await service.get(seeded.release.id)
+    running = ReleaseSummaryService._recomputes[seeded.release.id][0]
+    await running
+    refreshed = await service.get(seeded.release.id)
+
+    assert served["stale"] is True and served["generated_at"] == first["generated_at"]
+    assert "2030.8.1" not in {family["family"] for family in served["families"]}
+    assert refreshed["stale"] is False and "2030.8.1" in {family["family"] for family in refreshed["families"]}
 
 
 async def test_a_mark_during_a_recompute_keeps_the_summary_stale(release_manager_service, client_service):
@@ -221,7 +280,7 @@ async def test_a_mark_during_a_recompute_keeps_the_summary_stale(release_manager
 
     with patch.object(ReleaseSummaryService, "_load", side_effect=load_then_mark):
         raced = await service.get(seeded.release.id)
-    recomputed = await service.get(seeded.release.id)
+    recomputed = await service.get(seeded.release.id, wait=True)
     settled = await service.get(seeded.release.id)
 
     assert recomputed["generated_at"] > raced["generated_at"]
@@ -287,8 +346,8 @@ async def test_a_regex_change_shows_on_the_next_read(release_manager_service, cl
     await edit_regex(release_manager_service, seeded.release, None)
 
     assert [entry["family"] for entry in filtered["families"]] == ["2030.11.0"]
-    assert [entry["family"] for entry in (await ReleaseSummaryService().get(seeded.release.id))["families"]] == [
-        "2030.11.0", "2029.5.0"]
+    assert [entry["family"] for entry in (await ReleaseSummaryService().get(seeded.release.id, wait=True))[
+        "families"]] == ["2030.11.0", "2029.5.0"]
 
 
 async def test_an_invalid_regex_filters_nothing(release_manager_service, client_service):

@@ -24,6 +24,7 @@ export interface SummaryTest {
     version: string | null;
     issues?: number;
     comments?: number;
+    start_time?: string | null;
 }
 
 export interface SummaryIssue {
@@ -36,6 +37,8 @@ export interface SummaryIssue {
     novelty: "new" | "existing";
     status: "open" | "fixed";
     on_latest_run?: boolean;
+    open_test_ids?: string[];
+    latest_test_ids?: string[];
     test_ids: string[];
     run_ids: string[];
     issue: Issue;

@@ -332,6 +332,7 @@ class SCTService:
                 # NOTE: This will override status set by SCT Events.
                 run.status = TestStatus.PASSED.value
                 await run.save()
+                await mark_release_summary_stale(run.release_id)
 
         except DocumentNotFound as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)

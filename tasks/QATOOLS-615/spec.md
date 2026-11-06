@@ -31,7 +31,8 @@ mounts the same component for the whole release.
 
 ```python
 # argus/common/versions.py
-VERSION_RE = re.compile(r"^(?P<base>\d+\.\d+\.\d+)(?:[~.](?P<pre>rc\d+|dev))?(?:[.~-].*)?$")
+VERSION_RE = re.compile(r"^(?P<base>\d+\.\d+(?:\.\d+)?)(?:[~.-](?P<pre>rc\d+|dev))?(?:[.~-].*)?$")
+# A two-part base gets a .0: 2022.1~rc5 is 2022.1.0~rc5. -rc1 and -dev read as ~rc1 and ~dev.
 
 @dataclass(frozen=True, slots=True)
 class ScyllaVersion:
@@ -65,7 +66,10 @@ sequenceDiagram
     S->>DB: read partition release_summary_v1
     alt fresh
         S-->>API: rows (filtered to test_ids)
-    else stale or never computed
+    else stale with stored rows
+        S->>S: start a background recompute, as below
+        S-->>API: stored rows, stale: true
+    else never computed
         S->>S: started_at = now
         S->>DB: runs of the release (every plugin, release_id index)
         S->>DB: tests, groups, plans, issue links, issues
@@ -76,6 +80,10 @@ sequenceDiagram
     API-->>UI: summary JSON
 ```
 
+- A stale summary with stored rows comes back at once, marked stale, while a
+  background recompute runs; the widget says it is refreshing and asks again
+  every 3 s, at most 5 times. Only a release with no stored rows waits for
+  its recompute. The build of the rows runs off the event loop.
 - The partition is stale when `invalidated_at >= generated_at`, or when it
   has no `generated_at`. Both columns are static, one value per release, so a
   release with no versioned runs is still stored as computed.
@@ -168,7 +176,8 @@ Each action below calls `mark_stale(release_id)` after its own write.
 | Run finish, after the run row is saved | Client service, after `run.save()` |
 | Status update from the client API | New call |
 | Stuck-run sweep | New call |
-| Gemini and performance auto-fail | New call |
+| Gemini and performance auto-fail, and a performance result that passes | New call |
+| Driver-matrix environment info (sets the version) and the legacy matrix submit | New call |
 | Product version and package submit | New call |
 | Moving a test's runs to another release | New call, for both releases |
 | The replay backfill | New call |
@@ -177,7 +186,8 @@ Each action below calls `mark_stale(release_id)` after its own write.
 
 | Condition | Behavior |
 |---|---|
-| `mark_stale` write fails | Log a warning, do not fail the action. The next successful mark makes the partition stale again |
+| `mark_stale` write fails, for any reason | Log a warning, do not fail the action. The next successful mark makes the partition stale again |
+| A release is deleted | Its summary partition is deleted with it |
 | The recompute fails on a read | Return the stored rows with `stale: true`. Return HTTP 500 only when no rows exist |
 | The recompute write fails | Return the computed result. The partition stays stale |
 | An issue row is missing for a link | Count the link under the issue id, with no title, as existing |
@@ -224,6 +234,7 @@ class TestEntry(TypedDict):
     version: str | None        # the version of the counted run
     issues: int                # distinct issues linked to the counted run
     comments: int              # comments on the counted run
+    start_time: str | None     # the counted run's start, ISO 8601
 
 class IssueEntry(TypedDict):
     id: str
@@ -235,6 +246,8 @@ class IssueEntry(TypedDict):
     novelty: Literal["new", "existing"]
     status: Literal["open", "fixed"]   # always "open" on a version row
     on_latest_run: bool        # linked to a test's latest run in the family; False on a version row
+    open_test_ids: list[str]   # the tests that keep it open; all its tests on a version row
+    latest_test_ids: list[str] # the tests whose latest run in the family carries it
     test_ids: list[str]
     run_ids: list[str]
     issue: dict                # the issue as the issues API returns it with
@@ -272,7 +285,10 @@ class Summary(TypedDict):
 ```
 
 - On a view, `tests` and `issues` keep only the view's tests and the counts
-  are recomputed from them. An issue stays when any of its `test_ids` is in
+  are recomputed from them. Each issue is narrowed to those tests: its status
+  is open while one of them keeps it open (`open_test_ids`), it is on a latest
+  run when one of them carries it there (`latest_test_ids`), and its tests,
+  runs and links are theirs. An issue stays when any of its `test_ids` is in
   the view.
 
 ### Module API
@@ -310,7 +326,7 @@ collapsible, onTestClick}`, where the type is `"view"` or `"release"`.
 
 | Risk | Response |
 |---|---|
-| A release with very many runs, for example master, makes each recompute a large read. It is stale after nearly every change | One recompute per release per worker at a time. The dev cluster reads 4,022 runs in under 0.4 s. If production is slow, serve the stored rows and recompute in the background |
+| A release with very many runs, for example master, makes each recompute a large read. It is stale after nearly every change | One recompute per release per worker at a time, in the background whenever stored rows exist, with the build off the event loop. A page view never waits for it after the first computation |
 | A large partition: one payload per version, with an entry per test | Only tests that ran on, or were planned for, a version get an entry. A release branch has tens of versions |
 | PR #1027 rewrites the same invalidation call sites | The hook is one call inside the existing helpers. Whichever change lands second keeps that call |
 | PR #1140 removes runs, tests and groups through new paths | Those paths call `invalidate_release_snapshots`, which marks the summary stale |
