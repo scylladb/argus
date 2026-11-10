@@ -1,9 +1,7 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -27,8 +25,12 @@ import (
 const (
 	promContainerPrefix = "argus-prom-"
 	promMaxTTL          = 1 * time.Hour
-	promImage           = "prom/prometheus:latest"
+	promImage           = "docker.io/prom/prometheus:latest"
 	promReadyTimeout    = 2 * time.Minute
+	promEngineEnv       = "ARGUS_CONTAINER_ENGINE"
+	// promCreatedAtLayout parses the CreatedAt of `ps`: Docker prints whole
+	// seconds, Podman prints nanoseconds.
+	promCreatedAtLayout = "2006-01-02 15:04:05.999999999 -0700 MST"
 )
 
 const promConfig = `global:
@@ -44,7 +46,12 @@ var prometheusCmd = &cobra.Command{
 	Use:   "prometheus",
 	Short: "Manage ephemeral Prometheus containers for test run metrics",
 	Long: `Download monitoring data from a test run and launch a local Prometheus
-instance to explore metrics. Containers are automatically pruned after 1 hour.`,
+instance to explore metrics. Containers are automatically pruned after 1 hour.
+
+The command uses docker when it is on PATH, else podman. Set
+ARGUS_CONTAINER_ENGINE to select the engine command. Use one engine on a
+host. A start or stop with the other engine does not see the containers of
+the first, and it removes their data.`,
 }
 
 // ---------------------------------------------------------------------------
@@ -56,13 +63,14 @@ var promListCmd = &cobra.Command{
 	Short: "List running Prometheus containers",
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
-		if err := checkDocker(); err != nil {
+		engine, err := containerEngine()
+		if err != nil {
 			return err
 		}
 
 		out := OutputterFrom(cmd.Context())
 
-		names, err := promContainerNames(cmd.Context())
+		names, err := promContainerNames(cmd.Context(), engine)
 		if err != nil {
 			return err
 		}
@@ -73,7 +81,7 @@ var promListCmd = &cobra.Command{
 
 		entries := make([]PromContainerEntry, 0, len(names))
 		for _, name := range names {
-			port, _ := getContainerPort(cmd.Context(), name)
+			port, _ := getContainerPort(cmd.Context(), engine, name)
 			runID := readRunIDFromDataDir(name)
 			entries = append(entries, PromContainerEntry{
 				Container: name,
@@ -106,20 +114,21 @@ var promStartCmd = &cobra.Command{
 			return err
 		}
 
-		if err := checkDocker(); err != nil {
+		engine, err := containerEngine()
+		if err != nil {
 			return err
 		}
 
 		// Prune stale containers and the data they leave behind
-		pruneOldContainers(ctx)
+		pruneOldContainers(ctx, engine)
 		removeOrphanDataDirs(cmd.ErrOrStderr(), root, func() ([]string, error) {
-			return promContainerNames(ctx)
+			return promContainerNames(ctx, engine)
 		})
 
 		// Check if container already exists for this run
 		containerName := promContainerName(runID)
-		if containerExists(ctx, containerName) {
-			port, err := promAwaitReady(ctx, containerName)
+		if containerExists(ctx, engine, containerName) {
+			port, err := promAwaitReady(ctx, engine, containerName)
 			if err != nil {
 				return fmt.Errorf("%w\nrun `argus prometheus stop --run-id %s` and start again", err, runID)
 			}
@@ -236,18 +245,18 @@ var promStartCmd = &cobra.Command{
 			return err
 		}
 
-		// 8. Start Docker container
-		dockerArgs := promDockerRunArgs(containerName, dataDir, configPath, os.Getuid(), os.Getgid())
-		output, err := exec.CommandContext(ctx, "docker", dockerArgs...).CombinedOutput()
+		// 8. Start the container
+		runArgs := promRunArgs(containerName, dataDir, configPath, os.Getuid(), os.Getgid(), rootlessPodman(ctx, engine))
+		output, err := exec.CommandContext(ctx, engine, runArgs...).CombinedOutput()
 		if err != nil {
-			return fmt.Errorf("docker run failed: %w\n%s", err, string(output))
+			return fmt.Errorf("%s run failed: %w\n%s", engine, err, string(output))
 		}
 
-		port, err := promAwaitReady(ctx, containerName)
+		port, err := promAwaitReady(ctx, engine, containerName)
 		if err != nil {
 			rmCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 			defer cancel()
-			if out, rmErr := exec.CommandContext(rmCtx, "docker", "rm", "-f", containerName).CombinedOutput(); rmErr != nil {
+			if out, rmErr := exec.CommandContext(rmCtx, engine, "rm", "-f", containerName).CombinedOutput(); rmErr != nil {
 				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not remove %s: %v\n%s", containerName, rmErr, out)
 			}
 			return err
@@ -275,7 +284,8 @@ var promStopCmd = &cobra.Command{
 		cmd.SilenceUsage = true
 		ctx := cmd.Context()
 
-		if err := checkDocker(); err != nil {
+		engine, err := containerEngine()
+		if err != nil {
 			return err
 		}
 
@@ -287,7 +297,7 @@ var promStopCmd = &cobra.Command{
 		}
 
 		if all {
-			return stopAllContainers(ctx, cmd)
+			return stopAllContainers(ctx, cmd, engine)
 		}
 
 		dir, err := promRunDir(promDataRoot(), runID)
@@ -296,7 +306,7 @@ var promStopCmd = &cobra.Command{
 		}
 
 		containerName := promContainerName(runID)
-		output, err := exec.CommandContext(ctx, "docker", "rm", "-f", containerName).CombinedOutput()
+		output, err := exec.CommandContext(ctx, engine, "rm", "-f", containerName).CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("stopping container %s: %w\n%s", containerName, err, string(output))
 		}
@@ -433,11 +443,33 @@ func extractTarZstFile(path, dest string) error {
 	return extractTarZst(f, dest)
 }
 
-func checkDocker() error {
-	if _, err := exec.LookPath("docker"); err != nil {
-		return fmt.Errorf("docker not found in PATH; please install Docker to use this command")
+// containerEngine returns the command of the container engine.
+func containerEngine() (string, error) {
+	return resolveEngine(os.Getenv, exec.LookPath)
+}
+
+// resolveEngine returns the engine that promEngineEnv names, else docker when
+// lookPath finds it, else podman.
+func resolveEngine(getenv func(string) string, lookPath func(string) (string, error)) (string, error) {
+	if engine := getenv(promEngineEnv); engine != "" {
+		if _, err := lookPath(engine); err != nil {
+			return "", fmt.Errorf("%s=%s: %w", promEngineEnv, engine, err)
+		}
+		return engine, nil
 	}
-	return nil
+	for _, engine := range []string{"docker", "podman"} {
+		if _, err := lookPath(engine); err == nil {
+			return engine, nil
+		}
+	}
+	return "", fmt.Errorf("docker and podman are not in PATH: install one of them, or set %s to the engine command", promEngineEnv)
+}
+
+// rootlessPodman reports whether engine is Podman in rootless mode. Docker
+// has no such field in its info, so the query fails there.
+func rootlessPodman(ctx context.Context, engine string) bool {
+	out, err := exec.CommandContext(ctx, engine, "info", "--format", "{{.Host.Security.Rootless}}").Output()
+	return err == nil && strings.TrimSpace(string(out)) == "true"
 }
 
 func promContainerName(runID string) string {
@@ -499,27 +531,27 @@ func readRunIDFromDataDir(containerName string) string {
 
 // promContainerNames lists the names of all argus prometheus containers,
 // running or not.
-func promContainerNames(ctx context.Context) ([]string, error) {
-	raw, err := exec.CommandContext(ctx, "docker", "ps", "-a",
+func promContainerNames(ctx context.Context, engine string) ([]string, error) {
+	raw, err := exec.CommandContext(ctx, engine, "ps", "-a",
 		"--filter", "name="+promContainerPrefix,
 		"--format", "{{.Names}}",
 	).Output()
 	if err != nil {
-		return nil, fmt.Errorf("docker ps: %w", err)
+		return nil, fmt.Errorf("%s ps: %w", engine, err)
 	}
 	return strings.Fields(string(raw)), nil
 }
 
-func containerExists(ctx context.Context, name string) bool {
-	out, err := exec.CommandContext(ctx, "docker", "ps", "-a", "-q", "--filter", "name=^/"+name+"$").Output()
+func containerExists(ctx context.Context, engine, name string) bool {
+	out, err := exec.CommandContext(ctx, engine, "ps", "-a", "-q", "--filter", "name=^/"+name+"$").Output()
 	return err == nil && len(strings.TrimSpace(string(out))) > 0
 }
 
 // checkContainerRunning returns nil while the container runs.
-func checkContainerRunning(ctx context.Context, name string) error {
-	out, err := exec.CommandContext(ctx, "docker", "inspect", "-f", "{{.State.Running}}", name).Output()
+func checkContainerRunning(ctx context.Context, engine, name string) error {
+	out, err := exec.CommandContext(ctx, engine, "inspect", "-f", "{{.State.Running}}", name).Output()
 	if err != nil {
-		return fmt.Errorf("docker inspect: %w", err)
+		return fmt.Errorf("%s inspect: %w", engine, err)
 	}
 	if strings.TrimSpace(string(out)) != "true" {
 		return errors.New("container exited")
@@ -529,12 +561,12 @@ func checkContainerRunning(ctx context.Context, name string) error {
 
 // promAwaitReady returns the host port once Prometheus in the container is
 // ready, or an error carrying the tail of the container log.
-func promAwaitReady(ctx context.Context, name string) (string, error) {
-	running := func() error { return checkContainerRunning(ctx, name) }
+func promAwaitReady(ctx context.Context, engine, name string) (string, error) {
+	running := func() error { return checkContainerRunning(ctx, engine, name) }
 	var port string
 	err := running()
 	if err == nil {
-		if port, err = getContainerPort(ctx, name); err == nil {
+		if port, err = getContainerPort(ctx, engine, name); err == nil {
 			err = waitPromReady(ctx, "http://localhost:"+port, running, promReadyTimeout)
 		}
 	}
@@ -542,7 +574,7 @@ func promAwaitReady(ctx context.Context, name string) (string, error) {
 		return "", ctx.Err()
 	}
 	if err != nil {
-		logs, _ := exec.CommandContext(ctx, "docker", "logs", "--tail", "20", name).CombinedOutput()
+		logs, _ := exec.CommandContext(ctx, engine, "logs", "--tail", "20", name).CombinedOutput()
 		return "", fmt.Errorf("prometheus in %s is not ready: %w\n%s", name, err, logs)
 	}
 	return port, nil
@@ -577,12 +609,12 @@ func waitPromReady(ctx context.Context, baseURL string, running func() error, ti
 	}
 }
 
-func getContainerPort(ctx context.Context, name string) (string, error) {
-	out, err := exec.CommandContext(ctx, "docker", "port", name, "9090/tcp").Output()
+func getContainerPort(ctx context.Context, engine, name string) (string, error) {
+	out, err := exec.CommandContext(ctx, engine, "port", name, "9090/tcp").Output()
 	if err != nil {
 		return "", err
 	}
-	// Output format: "0.0.0.0:XXXXX\n" or "[::]:XXXXX\n"
+	// Output format: "127.0.0.1:XXXXX\n"
 	line := strings.TrimSpace(string(out))
 	parts := strings.Split(line, ":")
 	if len(parts) < 2 {
@@ -591,8 +623,8 @@ func getContainerPort(ctx context.Context, name string) (string, error) {
 	return parts[len(parts)-1], nil
 }
 
-func stopAllContainers(ctx context.Context, cmd *cobra.Command) error {
-	out, err := exec.CommandContext(ctx, "docker", "ps", "-a", "-q", "--filter", "name="+promContainerPrefix).Output()
+func stopAllContainers(ctx context.Context, cmd *cobra.Command, engine string) error {
+	out, err := exec.CommandContext(ctx, engine, "ps", "-a", "-q", "--filter", "name="+promContainerPrefix).Output()
 	if err != nil {
 		return fmt.Errorf("listing containers: %w", err)
 	}
@@ -602,7 +634,7 @@ func stopAllContainers(ctx context.Context, cmd *cobra.Command) error {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No argus prometheus containers found.")
 	} else {
 		args := append([]string{"rm", "-f"}, ids...)
-		output, err := exec.CommandContext(ctx, "docker", args...).CombinedOutput()
+		output, err := exec.CommandContext(ctx, engine, args...).CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("removing containers: %w\n%s", err, string(output))
 		}
@@ -613,35 +645,34 @@ func stopAllContainers(ctx context.Context, cmd *cobra.Command) error {
 	return nil
 }
 
-func pruneOldContainers(ctx context.Context) {
-	out, err := exec.CommandContext(ctx, "docker", "ps", "-a",
+func pruneOldContainers(ctx context.Context, engine string) {
+	out, err := exec.CommandContext(ctx, engine, "ps", "-a",
 		"--filter", "name="+promContainerPrefix,
-		"--format", "json",
+		"--format", "{{.Names}}\t{{.CreatedAt}}",
 	).Output()
-	if err != nil || len(out) == 0 {
+	if err != nil {
 		return
 	}
-
-	type dockerPsEntry struct {
-		Names     string `json:"Names"`
-		CreatedAt string `json:"CreatedAt"`
+	for _, name := range staleContainers(string(out), time.Now().Add(-promMaxTTL)) {
+		_ = exec.CommandContext(ctx, engine, "rm", "-f", name).Run()
 	}
+}
 
-	scanner := bufio.NewScanner(strings.NewReader(string(out)))
-	for scanner.Scan() {
-		var entry dockerPsEntry
-		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
+// staleContainers returns the containers created before cutoff, from lines
+// of `ps --format '{{.Names}}\t{{.CreatedAt}}'`.
+func staleContainers(psOutput string, cutoff time.Time) []string {
+	var stale []string
+	for line := range strings.Lines(psOutput) {
+		name, createdAt, ok := strings.Cut(strings.TrimSpace(line), "\t")
+		if !ok {
 			continue
 		}
-		// Docker CreatedAt format: "2026-05-25 10:30:00 +0000 UTC"
-		created, err := time.Parse("2006-01-02 15:04:05 -0700 MST", entry.CreatedAt)
-		if err != nil {
-			continue
-		}
-		if time.Since(created) > promMaxTTL {
-			_ = exec.CommandContext(ctx, "docker", "rm", "-f", entry.Names).Run()
+		created, err := time.Parse(promCreatedAtLayout, createdAt)
+		if err == nil && created.Before(cutoff) {
+			stale = append(stale, name)
 		}
 	}
+	return stale
 }
 
 func findMonitorSetLog(ctx context.Context, client *api.Client, runID string) (string, error) {
@@ -773,19 +804,23 @@ func writePromConfig(configPath, contents string) error {
 	return nil
 }
 
-// promDockerRunArgs returns the docker run arguments that start Prometheus as
-// the calling user on the run's data directory.
-func promDockerRunArgs(containerName, dataDir, configPath string, uid, gid int) []string {
+// promRunArgs returns the run arguments that start Prometheus as the calling
+// user on the run's data directory. keepID maps the calling user into the
+// container unchanged, which rootless Podman needs to write the directory.
+func promRunArgs(containerName, dataDir, configPath string, uid, gid int, keepID bool) []string {
 	args := []string{"run", "-d", "--name", containerName}
 	// os.Getuid reports -1 on Windows, where the container keeps the image's user.
 	if uid != -1 {
 		args = append(args, "--user", fmt.Sprintf("%d:%d", uid, gid))
+		if keepID {
+			args = append(args, "--userns=keep-id")
+		}
 	}
 	// z relabels the mounts so an SELinux-enforcing host lets the container read them.
 	return append(args,
 		"-v", dataDir+":/prometheus:z",
 		"-v", configPath+":/etc/prometheus/prometheus.yml:ro,z",
-		"-p", "0:9090",
+		"-p", "127.0.0.1::9090",
 		promImage,
 		"--config.file=/etc/prometheus/prometheus.yml",
 		"--storage.tsdb.path=/prometheus",
