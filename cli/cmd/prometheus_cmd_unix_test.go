@@ -25,22 +25,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeDocker logs its arguments and keeps one container name in
-// $FAKE_DOCKER_STATE. `run` fails when $FAKE_DOCKER_RUN_FAILS is set, the
-// container reports exited when $FAKE_DOCKER_EXITED is set, `inspect` fails
-// when $FAKE_DOCKER_INSPECT_FAILS is set, `rm` fails when
-// $FAKE_DOCKER_RM_FAILS is set, and `port` answers $FAKE_DOCKER_PORT.
-const fakeDocker = `#!/bin/sh
-S="$FAKE_DOCKER_STATE"
-echo "$@" >> "$S/log"
+// fakeEngine logs its name and arguments. It keeps one container name in
+// $FAKE_ENGINE_STATE. These variables change its answers:
+//   - FAKE_ENGINE_RUN_FAILS: `run` fails.
+//   - FAKE_ENGINE_EXITED: the container reports exited.
+//   - FAKE_ENGINE_INSPECT_FAILS: `inspect` fails.
+//   - FAKE_ENGINE_RM_FAILS: `rm` fails.
+//   - FAKE_ENGINE_PORT: `port` prints this port.
+//   - FAKE_ENGINE_ROOTLESS: `info` reports rootless Podman. Unset, `info`
+//     fails as it does on Docker.
+const fakeEngine = `#!/bin/sh
+S="$FAKE_ENGINE_STATE"
+echo "${0##*/} $@" >> "$S/log"
 case "$1" in
+  info) [ -n "$FAKE_ENGINE_ROOTLESS" ] || { echo "can't evaluate field Host" >&2; exit 1; }
+        echo true; exit 0;;
   ps) [ -f "$S/name" ] && cat "$S/name"; exit 0;;
-  run) [ -n "$FAKE_DOCKER_RUN_FAILS" ] && { echo "run failed" >&2; exit 125; }
+  run) [ -n "$FAKE_ENGINE_RUN_FAILS" ] && { echo "run failed" >&2; exit 125; }
        echo "$4" > "$S/name"; exit 0;;
-  port) echo "0.0.0.0:$FAKE_DOCKER_PORT"; exit 0;;
-  inspect) [ -n "$FAKE_DOCKER_INSPECT_FAILS" ] && { echo "inspect failed" >&2; exit 1; }
-           [ -n "$FAKE_DOCKER_EXITED" ] && echo false || echo true; exit 0;;
-  rm) [ -n "$FAKE_DOCKER_RM_FAILS" ] && { echo "rm failed" >&2; exit 1; }
+  port) echo "127.0.0.1:$FAKE_ENGINE_PORT"; exit 0;;
+  inspect) [ -n "$FAKE_ENGINE_INSPECT_FAILS" ] && { echo "inspect failed" >&2; exit 1; }
+           [ -n "$FAKE_ENGINE_EXITED" ] && echo false || echo true; exit 0;;
+  rm) [ -n "$FAKE_ENGINE_RM_FAILS" ] && { echo "rm failed" >&2; exit 1; }
       rm -f "$S/name"; exit 0;;
 esac
 exit 0
@@ -48,9 +54,10 @@ exit 0
 
 const promCmdArchive = "monitor-set-1e72eebe.tar.zst"
 
-// promCmdEnv points the cache root at a temp dir, puts the fake docker on
-// PATH, and stores the run's monitor-set archive in the cache. It returns the
-// command context, the fake docker's state dir and the cache entry dir.
+// promCmdEnv points the cache root at a temp dir, puts the fake engine on
+// PATH as docker and as podman, and stores the run's monitor-set archive in
+// the cache. It returns the command context, the fake engine's state dir and
+// the cache entry dir.
 func promCmdEnv(t *testing.T) (context.Context, string, string) {
 	t.Helper()
 	t.Cleanup(xdg.Reload)
@@ -61,12 +68,15 @@ func promCmdEnv(t *testing.T) (context.Context, string, string) {
 
 	state := t.TempDir()
 	bin := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(bin, "docker"), []byte(fakeDocker), 0o755))
+	for _, engine := range []string{"docker", "podman"} {
+		require.NoError(t, os.WriteFile(filepath.Join(bin, engine), []byte(fakeEngine), 0o755))
+	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("FAKE_DOCKER_STATE", state)
+	t.Setenv(promEngineEnv, "")
+	t.Setenv("FAKE_ENGINE_STATE", state)
 	prom := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	t.Cleanup(prom.Close)
-	t.Setenv("FAKE_DOCKER_PORT", strings.TrimPrefix(prom.URL, "http://127.0.0.1:"))
+	t.Setenv("FAKE_ENGINE_PORT", strings.TrimPrefix(prom.URL, "http://127.0.0.1:"))
 
 	appCache := cache.New(config.CacheDir())
 	key := cache.PrometheusLogKey(promTestRunID)
@@ -118,7 +128,7 @@ func runPromCmd(t *testing.T, ctx context.Context, run *cobra.Command, runID str
 	return out.String(), err
 }
 
-func dockerLog(t *testing.T, state string) string {
+func engineLog(t *testing.T, state string) string {
 	t.Helper()
 	log, err := os.ReadFile(filepath.Join(state, "log"))
 	require.NoError(t, err)
@@ -131,17 +141,17 @@ func TestPromStart_ReusesTheCachedArchive(t *testing.T) {
 	out, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
 
 	require.NoError(t, err)
-	assert.Equal(t, "Prometheus running at http://localhost:"+os.Getenv("FAKE_DOCKER_PORT")+"\n", out)
+	assert.Equal(t, "Prometheus running at http://localhost:"+os.Getenv("FAKE_ENGINE_PORT")+"\n", out)
 	assert.FileExists(t, filepath.Join(entry, promCmdArchive))
 	runDir := filepath.Join(promDataRoot(), promTestRunID)
 	assert.FileExists(t, filepath.Join(runDir, "run_id"))
 	assert.DirExists(t, filepath.Join(runDir, "01KXX1KQAPXZBAGCXV0AJVZ75R"))
-	assert.Contains(t, dockerLog(t, state), "--user ")
+	assert.Contains(t, engineLog(t, state), "--user ")
 }
 
 func TestPromStart_FailedRunLeavesNoRunDir(t *testing.T) {
 	ctx, _, entry := promCmdEnv(t)
-	t.Setenv("FAKE_DOCKER_RUN_FAILS", "1")
+	t.Setenv("FAKE_ENGINE_RUN_FAILS", "1")
 
 	_, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
 
@@ -152,19 +162,19 @@ func TestPromStart_FailedRunLeavesNoRunDir(t *testing.T) {
 
 func TestPromStart_ExitedContainerIsRemoved(t *testing.T) {
 	ctx, state, _ := promCmdEnv(t)
-	t.Setenv("FAKE_DOCKER_EXITED", "1")
+	t.Setenv("FAKE_ENGINE_EXITED", "1")
 
 	_, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
 
 	require.ErrorContains(t, err, "container exited")
-	assert.Contains(t, dockerLog(t, state), "rm -f argus-prom-1e72eebe")
+	assert.Contains(t, engineLog(t, state), "rm -f argus-prom-1e72eebe")
 	assert.NoDirExists(t, filepath.Join(promDataRoot(), promTestRunID))
 }
 
 func TestPromStart_WarnsWhenTheContainerStays(t *testing.T) {
 	ctx, _, _ := promCmdEnv(t)
-	t.Setenv("FAKE_DOCKER_EXITED", "1")
-	t.Setenv("FAKE_DOCKER_RM_FAILS", "1")
+	t.Setenv("FAKE_ENGINE_EXITED", "1")
+	t.Setenv("FAKE_ENGINE_RM_FAILS", "1")
 
 	out, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
 
@@ -174,7 +184,7 @@ func TestPromStart_WarnsWhenTheContainerStays(t *testing.T) {
 
 func TestPromStart_InspectFailureIsNotAnExit(t *testing.T) {
 	ctx, _, _ := promCmdEnv(t)
-	t.Setenv("FAKE_DOCKER_INSPECT_FAILS", "1")
+	t.Setenv("FAKE_ENGINE_INSPECT_FAILS", "1")
 
 	_, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
 
@@ -191,12 +201,12 @@ func TestPromStart_InterruptRemovesTheContainer(t *testing.T) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer prom.Close()
-	t.Setenv("FAKE_DOCKER_PORT", strings.TrimPrefix(prom.URL, "http://127.0.0.1:"))
+	t.Setenv("FAKE_ENGINE_PORT", strings.TrimPrefix(prom.URL, "http://127.0.0.1:"))
 
 	_, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
 
 	require.ErrorIs(t, err, context.Canceled)
-	assert.Contains(t, dockerLog(t, state), "rm -f argus-prom-1e72eebe")
+	assert.Contains(t, engineLog(t, state), "rm -f argus-prom-1e72eebe")
 	assert.NoDirExists(t, filepath.Join(promDataRoot(), promTestRunID))
 }
 
@@ -213,7 +223,7 @@ func TestPromStart_RefusesARunDirThatAlreadyExists(t *testing.T) {
 
 	require.ErrorContains(t, err, "already exists")
 	assert.FileExists(t, marker)
-	assert.NotContains(t, dockerLog(t, state), "run ")
+	assert.NotContains(t, engineLog(t, state), "run ")
 }
 
 func TestPromStop_RemovesTheRunDirAndKeepsTheArchive(t *testing.T) {
@@ -227,4 +237,57 @@ func TestPromStop_RemovesTheRunDirAndKeepsTheArchive(t *testing.T) {
 	assert.Equal(t, "Stopped and removed argus-prom-1e72eebe\n", out)
 	assert.NoDirExists(t, filepath.Join(promDataRoot(), promTestRunID))
 	assert.FileExists(t, filepath.Join(entry, promCmdArchive))
+}
+
+func TestPromStart_PublishesOnLoopbackOnly(t *testing.T) {
+	ctx, state, _ := promCmdEnv(t)
+
+	_, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
+
+	require.NoError(t, err)
+	assert.Contains(t, engineLog(t, state), "-p 127.0.0.1::9090 ")
+}
+
+func TestPromStartAndStop_RunTheEngineFromTheEnv(t *testing.T) {
+	ctx, state, _ := promCmdEnv(t)
+	t.Setenv(promEngineEnv, "podman")
+
+	_, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
+	require.NoError(t, err)
+	_, err = runPromCmd(t, ctx, promStopCmd, promTestRunID)
+	require.NoError(t, err)
+
+	log := engineLog(t, state)
+	assert.Contains(t, log, "podman run -d --name argus-prom-1e72eebe ")
+	assert.Contains(t, log, "podman rm -f argus-prom-1e72eebe")
+	assert.NotContains(t, log, "docker ")
+}
+
+func TestPromStart_KeepsTheUserIDsOnRootlessPodman(t *testing.T) {
+	ctx, state, _ := promCmdEnv(t)
+	t.Setenv(promEngineEnv, "podman")
+	t.Setenv("FAKE_ENGINE_ROOTLESS", "1")
+
+	_, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
+
+	require.NoError(t, err)
+	assert.Contains(t, engineLog(t, state), "--userns=keep-id")
+}
+
+func TestPromStart_DockerKeepsTheUserNamespace(t *testing.T) {
+	ctx, state, _ := promCmdEnv(t)
+
+	_, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
+
+	require.NoError(t, err)
+	assert.NotContains(t, engineLog(t, state), "--userns")
+}
+
+func TestPromStart_ReportsAMissingEngine(t *testing.T) {
+	ctx, _, _ := promCmdEnv(t)
+	t.Setenv(promEngineEnv, "argus-no-such-engine")
+
+	_, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
+
+	require.ErrorContains(t, err, promEngineEnv+"=argus-no-such-engine")
 }

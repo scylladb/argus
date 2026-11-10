@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -91,8 +92,8 @@ func TestChildPath_RejectsServerNameWithPath(t *testing.T) {
 	}
 }
 
-func TestPromDockerRunArgs_RunsAsCallingUserBeforeImage(t *testing.T) {
-	args := promDockerRunArgs("argus-prom-1e72eebe", "/data", "/data/prometheus.yml", 1000, 1001)
+func TestPromRunArgs_RunsAsCallingUserBeforeImage(t *testing.T) {
+	args := promRunArgs("argus-prom-1e72eebe", "/data", "/data/prometheus.yml", 1000, 1001, false)
 
 	user := slices.Index(args, "--user")
 	require.NotEqual(t, -1, user, "args=%v", args)
@@ -100,17 +101,124 @@ func TestPromDockerRunArgs_RunsAsCallingUserBeforeImage(t *testing.T) {
 	assert.Less(t, user, slices.Index(args, promImage), "--user must precede the image")
 }
 
-func TestPromDockerRunArgs_OmitsUserWhenUIDUnknown(t *testing.T) {
-	args := promDockerRunArgs("argus-prom-1e72eebe", "/data", "/data/prometheus.yml", -1, -1)
+func TestPromRunArgs_OmitsUserWhenUIDUnknown(t *testing.T) {
+	args := promRunArgs("argus-prom-1e72eebe", "/data", "/data/prometheus.yml", -1, -1, true)
 
 	assert.NotContains(t, args, "--user")
+	assert.NotContains(t, args, "--userns=keep-id")
 }
 
-func TestPromDockerRunArgs_RelabelsMountsForSELinux(t *testing.T) {
-	args := promDockerRunArgs("argus-prom-1e72eebe", "/data", "/data/prometheus.yml", 1000, 1001)
+func TestPromRunArgs_RelabelsMountsForSELinux(t *testing.T) {
+	args := promRunArgs("argus-prom-1e72eebe", "/data", "/data/prometheus.yml", 1000, 1001, false)
 
 	assert.Contains(t, args, "/data:/prometheus:z")
 	assert.Contains(t, args, "/data/prometheus.yml:/etc/prometheus/prometheus.yml:ro,z")
+}
+
+// Podman resolves no short image name without a TTY.
+func TestPromRunArgs_NamesTheImageRegistry(t *testing.T) {
+	args := promRunArgs("argus-prom-1e72eebe", "/data", "/data/prometheus.yml", 1000, 1001, false)
+
+	assert.Contains(t, args, "docker.io/prom/prometheus:latest")
+}
+
+func TestPromRunArgs_PublishesARandomPortOnLoopbackOnly(t *testing.T) {
+	args := promRunArgs("argus-prom-1e72eebe", "/data", "/data/prometheus.yml", 1000, 1001, false)
+
+	publish := slices.Index(args, "-p")
+	require.NotEqual(t, -1, publish, "args=%v", args)
+	assert.Equal(t, "127.0.0.1::9090", args[publish+1])
+}
+
+func TestPromRunArgs_KeepsTheUserIDsOnRootlessPodman(t *testing.T) {
+	args := promRunArgs("argus-prom-1e72eebe", "/data", "/data/prometheus.yml", 1000, 1001, true)
+
+	keepID := slices.Index(args, "--userns=keep-id")
+	require.NotEqual(t, -1, keepID, "args=%v", args)
+	assert.Less(t, keepID, slices.Index(args, promImage), "--userns must precede the image")
+	assert.Contains(t, args, "1000:1001")
+}
+
+func TestPromRunArgs_OmitsKeepIDWhenNotAsked(t *testing.T) {
+	args := promRunArgs("argus-prom-1e72eebe", "/data", "/data/prometheus.yml", 1000, 1001, false)
+
+	assert.NotContains(t, args, "--userns=keep-id")
+}
+
+func TestStaleContainers_ParsesDockerCreatedAt(t *testing.T) {
+	out := "argus-prom-old\t2026-11-10 10:05:47 +0100 CET\n" +
+		"argus-prom-new\t2026-11-10 11:05:47 +0100 CET\n"
+
+	stale := staleContainers(out, time.Date(2026, 11, 10, 9, 30, 0, 0, time.UTC))
+
+	assert.Equal(t, []string{"argus-prom-old"}, stale)
+}
+
+func TestStaleContainers_ParsesPodmanCreatedAt(t *testing.T) {
+	out := "argus-prom-old\t2026-11-10 09:05:42.615310779 +0000 UTC\n" +
+		"argus-prom-new\t2026-11-10 09:35:42.615310779 +0000 UTC\n"
+
+	stale := staleContainers(out, time.Date(2026, 11, 10, 9, 30, 0, 0, time.UTC))
+
+	assert.Equal(t, []string{"argus-prom-old"}, stale)
+}
+
+func TestStaleContainers_SkipsLinesItCannotParse(t *testing.T) {
+	out := "argus-prom-a\tLess than a second ago\nargus-prom-b\n\n"
+
+	assert.Empty(t, staleContainers(out, time.Now()))
+}
+
+func lookPathOf(found ...string) func(string) (string, error) {
+	return func(name string) (string, error) {
+		if slices.Contains(found, name) {
+			return "/usr/bin/" + name, nil
+		}
+		return "", fmt.Errorf("exec: %q: executable file not found in $PATH", name)
+	}
+}
+
+func noEnv(string) string { return "" }
+
+func TestResolveEngine_PrefersDocker(t *testing.T) {
+	engine, err := resolveEngine(noEnv, lookPathOf("docker", "podman"))
+
+	require.NoError(t, err)
+	assert.Equal(t, "docker", engine)
+}
+
+func TestResolveEngine_FallsBackToPodman(t *testing.T) {
+	engine, err := resolveEngine(noEnv, lookPathOf("podman"))
+
+	require.NoError(t, err)
+	assert.Equal(t, "podman", engine)
+}
+
+func TestResolveEngine_TakesTheEngineFromTheEnv(t *testing.T) {
+	getenv := func(name string) string { return map[string]string{promEngineEnv: "podman"}[name] }
+
+	engine, err := resolveEngine(getenv, lookPathOf("docker", "podman"))
+
+	require.NoError(t, err)
+	assert.Equal(t, "podman", engine)
+}
+
+func TestResolveEngine_ReportsAMissingEngineFromTheEnv(t *testing.T) {
+	getenv := func(name string) string { return map[string]string{promEngineEnv: "nerdctl"}[name] }
+
+	_, err := resolveEngine(getenv, lookPathOf("docker"))
+
+	require.ErrorContains(t, err, promEngineEnv+"=nerdctl")
+	assert.ErrorContains(t, err, "executable file not found")
+}
+
+func TestResolveEngine_NamesBothEnginesAndTheEnvWhenNoneIsFound(t *testing.T) {
+	_, err := resolveEngine(noEnv, lookPathOf())
+
+	require.Error(t, err)
+	for _, s := range []string{"docker", "podman", promEngineEnv} {
+		assert.Contains(t, err.Error(), s)
+	}
 }
 
 func TestWaitPromReady_ReturnsOnceReady(t *testing.T) {
