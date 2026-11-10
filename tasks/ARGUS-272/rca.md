@@ -37,10 +37,11 @@ depend on behavior that only Docker has.
    command uses `docker` when it is on the path, else `podman`. Use
    `docker.io/prom/prometheus:latest` and `-p 127.0.0.1::9090`, which both
    engines accept. Read `ps --format '{{.Names}}\t{{.CreatedAt}}'`. Both
-   engines print it as text. Parse it with the layout
-   `2006-01-02 15:04:05.999999999 -0700 MST`. Docker prints
+   engines print it as text. Cut the zone name, and parse the rest with the
+   layout `2006-01-02 15:04:05.999999999 -0700`. Docker prints
    `2026-11-10 10:05:47 +0100 CET` and Podman prints
-   `2026-11-10 09:05:42.615310779 +0000 UTC`. Before `run`, ask the engine
+   `2026-11-10 09:05:42.615310779 +0000 UTC`. A zone with no abbreviation
+   prints the offset as the name, as in `+0545 +0545`. Before `run`, ask the engine
    `info --format '{{.Host.Security.Rootless}}'`, and add
    `--userns=keep-id` when the answer is `true`. Docker has no such field
    and fails the query, so it never gets the flag. Cost: about 60 lines in
@@ -56,20 +57,22 @@ depend on behavior that only Docker has.
 
 ## Regression test
 
-- `cli/cmd/prometheus_test.go`: the run arguments carry the qualified
-  image, `127.0.0.1::9090`, and `--userns=keep-id` only for rootless
-  Podman. The parse of `ps` lines finds the stale container in the Docker
-  and the Podman `CreatedAt` formats.
+- `cli/cmd/prometheus_test.go`: the run arguments carry `127.0.0.1::9090`,
+  and `--userns=keep-id` only for rootless Podman. The parse of `ps` lines
+  finds the stale container in the Docker and the Podman `CreatedAt`
+  formats, and in a zone with no abbreviation.
 - `cli/cmd/prometheus_test.go`, `TestResolveEngine_*`: the command takes
   `docker` first and `podman` when `docker` is missing.
   `ARGUS_CONTAINER_ENGINE` names the engine when it is set. With no
   engine, the error names Docker, Podman and the variable.
 - `cli/cmd/prometheus_cmd_unix_test.go`: with `ARGUS_CONTAINER_ENGINE`
-  set to a fake `podman`, `start` and `stop` run `podman`. A rootless
-  `info` answer adds `--userns=keep-id` to `run`.
+  set to a fake `podman`, `start` and `stop` run `podman`.
+  `rootlessPodman` is true for a rootless `info` answer, and false when
+  `info` fails as it does on Docker.
 
-The real engines are checked by hand: Docker on the workstation, and
-rootful and rootless Podman 5 in a Rocky Linux 9 container.
+The image name is a constant, so no unit test covers it. The real engine
+check pulls it with no TTY. The real engines are checked by hand. Section
+`Validation` holds the results.
 
 ## Risks
 
@@ -81,3 +84,48 @@ rootful and rootless Podman 5 in a Rocky Linux 9 container.
 | `--userns=keep-id` is missing on an older Podman | The QA Tools hosts run Rocky Linux 9, which ships Podman 5 with the flag. |
 | The `info` query fails on rootless Podman | The command then runs without `--userns=keep-id`, and the start fails with the Prometheus log, which shows the permission error. |
 | `127.0.0.1` breaks a caller that reads Prometheus from another host | The output names `http://localhost:<port>`, so no caller depends on the other addresses. |
+
+## Validation
+
+### Real engines
+
+The check used a cached monitor-set archive, so `start` made no API call. It ran `start`, `list` and `stop`, then read the port, the listen address and the owner of the run directory.
+
+- Docker 29.1.3 on the workstation.
+- Podman 5.8.2, rootful and rootless, in `docker run --privileged rockylinux/rockylinux:9`. The storage driver is `vfs` and the cgroup manager is `cgroupfs`. The rootless user `tester` has the subordinate IDs `100000:65536`.
+
+| Engine | upstream/master | This branch |
+|---|---|---|
+| Docker | — | `start`, `list` and `stop` pass. `9090/tcp -> 127.0.0.1:32768`. `ss` shows `127.0.0.1:32768` only. The files belong to `1000:1000`. |
+| Rootful Podman, no `docker` | `Error: docker not found in PATH; please install Docker to use this command` | `start`, `list` and `stop` pass. `9090/tcp -> 127.0.0.1:35917`. `/-/ready` answers `Prometheus Server is Ready.` |
+| Rootful Podman, `docker` calls `podman` | `Error: parsing host port: port numbers must be between 1 and 65535 (inclusive), got 0` | `start`, `list` and `stop` pass. `9090/tcp -> 127.0.0.1:33499`. |
+| Rootless Podman, `docker` calls `podman` | `Error: parsing host port: port numbers must be between 1 and 65535 (inclusive), got 0` | `start`, `list` and `stop` pass. `9090/tcp -> 127.0.0.1:33993`. The files belong to `1000:1000`. |
+| Rootless Podman, no `docker` | — | `start`, `list` and `stop` pass. `9090/tcp -> 127.0.0.1:45551`. The files belong to `1000:1000`. The create command holds `--user 1000:1000 --userns=keep-id`. |
+
+Cause 5 without `--userns=keep-id`, as `tester`: `podman run --user 1000:1000 -v <dir>:/prometheus:z ...` exits with `open /prometheus/queries.active: permission denied`.
+
+Cause 1, the short image name, did not show on upstream/master. Podman stops at the port error before it resolves the image. With the fix, rootless Podman pulled `docker.io/prom/prometheus:latest` into new storage with no prompt.
+
+### Real metrics data
+
+A monitor-set archive held a TSDB snapshot of a Prometheus that scraped itself, with data up to 10:37:47 UTC. Podman ran in a new Rocky Linux 9 container with empty image storage, so the fix also pulled `docker.io/prom/prometheus:latest` with no TTY. Docker ran in a separate daemon in `docker run --privileged docker:29-dind`.
+
+| Engine | Owner of the run files | `prometheus_build_info` at 10:37:40 UTC | `count(up)` at 10:37:40 UTC |
+|---|---|---|---|
+| Docker 29.9.3 | `0:0` (root in the daemon) | 1 series, version 3.16.0 | `1` |
+| Rootful Podman 5.8.2 | `0:0` | 1 series, version 3.16.0 | `1` |
+| Rootless Podman 5.8.2 | `1000:1000` | 1 series, version 3.16.0 | `1` |
+
+On each engine, `start` moved the TSDB block to the top of the data directory, and `list` and `stop` pass.
+
+### Prune
+
+The check created `argus-prom-stale001` on each engine, waited more than one hour (`promMaxTTL`), then ran `start`. The prune runs at the start of `start`.
+
+| Engine | upstream/master | This branch |
+|---|---|---|
+| Rootful Podman | `argus-prom-stale001` stays. | `start` removes `argus-prom-stale001`. |
+| Rootless Podman | `argus-prom-stale001` stays. | `start` removes `argus-prom-stale001`. |
+| Docker 29.9.3 | — | `start` removes `argus-prom-stale001`. |
+
+The Docker check used a separate daemon in `docker run --privileged docker:29-dind`, so no other `argus` on the workstation could prune its container. 56 minutes after the create, this branch kept the stale container on Podman. 21 seconds after the create, it kept the stale container on Docker.
