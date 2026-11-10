@@ -46,7 +46,7 @@ const (
 
 	// Generic result routes (results_api router, mounted at /api/v1/results)
 	ReleaseResultTables = "/api/v1/results/release-tables/%s" // GET  – generic result table names of a release (release name or id)
-	ReleaseResults      = "/api/v1/results/release/%s"        // GET  – results grouped by table, test, run (release); params: table, status[], since, until, sutSince, sutUntil
+	ReleaseResults      = "/api/v1/results/release/%s"        // GET  – results grouped by table, test, run (release); params: table, status[], since, until, sutSince, sutUntil, columns[], includeHidden, runLimit, tableLimit
 
 	// Log file routes
 	TestRunLogDownload = "/api/v1/tests/%s/%s/log/%s/download" // GET  – download log file, 302 to S3 (plugin_name, run_id, log_name)
