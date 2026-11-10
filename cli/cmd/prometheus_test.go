@@ -163,6 +163,15 @@ func TestStaleContainers_ParsesPodmanCreatedAt(t *testing.T) {
 	assert.Equal(t, []string{"argus-prom-old"}, stale)
 }
 
+func TestStaleContainers_ParsesCreatedAtInAZoneWithNoAbbreviation(t *testing.T) {
+	out := "argus-prom-old\t2026-11-10 14:50:42.615310779 +0545 +0545\n" +
+		"argus-prom-new\t2026-11-10 15:20:42.615310779 +0545 +0545\n"
+
+	stale := staleContainers(out, time.Date(2026, 11, 10, 9, 30, 0, 0, time.UTC))
+
+	assert.Equal(t, []string{"argus-prom-old"}, stale)
+}
+
 func TestStaleContainers_SkipsLinesItCannotParse(t *testing.T) {
 	out := "argus-prom-a\tLess than a second ago\nargus-prom-b\n\n"
 

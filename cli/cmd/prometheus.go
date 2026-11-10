@@ -28,9 +28,10 @@ const (
 	promImage           = "docker.io/prom/prometheus:latest"
 	promReadyTimeout    = 2 * time.Minute
 	promEngineEnv       = "ARGUS_CONTAINER_ENGINE"
-	// promCreatedAtLayout parses the CreatedAt of `ps`: Docker prints whole
-	// seconds, Podman prints nanoseconds.
-	promCreatedAtLayout = "2006-01-02 15:04:05.999999999 -0700 MST"
+	// promCreatedAtLayout parses the CreatedAt of `ps` after the zone name
+	// is cut. Docker prints whole seconds, Podman prints nanoseconds. A zone
+	// with no abbreviation prints the offset as its name, as in +0545 +0545.
+	promCreatedAtLayout = "2006-01-02 15:04:05.999999999 -0700"
 )
 
 const promConfig = `global:
@@ -666,6 +667,9 @@ func staleContainers(psOutput string, cutoff time.Time) []string {
 		name, createdAt, ok := strings.Cut(strings.TrimSpace(line), "\t")
 		if !ok {
 			continue
+		}
+		if zone := strings.LastIndexByte(createdAt, ' '); zone > 0 {
+			createdAt = createdAt[:zone]
 		}
 		created, err := time.Parse(promCreatedAtLayout, createdAt)
 		if err == nil && created.Before(cutoff) {
