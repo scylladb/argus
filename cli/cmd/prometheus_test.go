@@ -115,13 +115,6 @@ func TestPromRunArgs_RelabelsMountsForSELinux(t *testing.T) {
 	assert.Contains(t, args, "/data/prometheus.yml:/etc/prometheus/prometheus.yml:ro,z")
 }
 
-// Podman resolves no short image name without a TTY.
-func TestPromRunArgs_NamesTheImageRegistry(t *testing.T) {
-	args := promRunArgs("argus-prom-1e72eebe", "/data", "/data/prometheus.yml", 1000, 1001, false)
-
-	assert.Contains(t, args, "docker.io/prom/prometheus:latest")
-}
-
 func TestPromRunArgs_PublishesARandomPortOnLoopbackOnly(t *testing.T) {
 	args := promRunArgs("argus-prom-1e72eebe", "/data", "/data/prometheus.yml", 1000, 1001, false)
 

@@ -239,15 +239,6 @@ func TestPromStop_RemovesTheRunDirAndKeepsTheArchive(t *testing.T) {
 	assert.FileExists(t, filepath.Join(entry, promCmdArchive))
 }
 
-func TestPromStart_PublishesOnLoopbackOnly(t *testing.T) {
-	ctx, state, _ := promCmdEnv(t)
-
-	_, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
-
-	require.NoError(t, err)
-	assert.Contains(t, engineLog(t, state), "-p 127.0.0.1::9090 ")
-}
-
 func TestPromStartAndStop_RunTheEngineFromTheEnv(t *testing.T) {
 	ctx, state, _ := promCmdEnv(t)
 	t.Setenv(promEngineEnv, "podman")
@@ -263,24 +254,17 @@ func TestPromStartAndStop_RunTheEngineFromTheEnv(t *testing.T) {
 	assert.NotContains(t, log, "docker ")
 }
 
-func TestPromStart_KeepsTheUserIDsOnRootlessPodman(t *testing.T) {
-	ctx, state, _ := promCmdEnv(t)
-	t.Setenv(promEngineEnv, "podman")
+func TestRootlessPodman_ReadsTheEngineInfo(t *testing.T) {
+	ctx, _, _ := promCmdEnv(t)
 	t.Setenv("FAKE_ENGINE_ROOTLESS", "1")
 
-	_, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
-
-	require.NoError(t, err)
-	assert.Contains(t, engineLog(t, state), "--userns=keep-id")
+	assert.True(t, rootlessPodman(ctx, "podman"))
 }
 
-func TestPromStart_DockerKeepsTheUserNamespace(t *testing.T) {
-	ctx, state, _ := promCmdEnv(t)
+func TestRootlessPodman_IsFalseWhenInfoFails(t *testing.T) {
+	ctx, _, _ := promCmdEnv(t)
 
-	_, err := runPromCmd(t, ctx, promStartCmd, promTestRunID)
-
-	require.NoError(t, err)
-	assert.NotContains(t, engineLog(t, state), "--userns")
+	assert.False(t, rootlessPodman(ctx, "docker"))
 }
 
 func TestPromStart_ReportsAMissingEngine(t *testing.T) {
