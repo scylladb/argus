@@ -144,7 +144,8 @@ the cell has no number.
 ```
 argus results tables <release> [--show-hidden]
 argus results query <release> --table <substring> [--status S]... \
-    [--since T] [--until T] [--sut-since T] [--sut-until T] [--show-hidden]
+    [--since T] [--until T] [--sut-since T] [--sut-until T] [--column C]... \
+    [--run-limit N] [--table-limit N] [--show-hidden]
 ```
 
 The CLI prints the response as JSON, or one row per cell with `--text`.
@@ -166,7 +167,9 @@ class ResultsService:
     async def get_release_results(self, release: str, table_filter: str, statuses: list[str] | None = None,
                                   since: datetime | None = None, until: datetime | None = None,
                                   sut_since: datetime | None = None, sut_until: datetime | None = None,
-                                  include_hidden: bool = False) -> list[dict]: ...
+                                  include_hidden: bool = False, columns: list[str] | None = None,
+                                  run_limit: int = DEFAULT_RUN_LIMIT,
+                                  table_limit: int = DEFAULT_TABLE_LIMIT) -> list[dict]: ...
 ```
 
 ## Risks
