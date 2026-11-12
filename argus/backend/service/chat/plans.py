@@ -105,9 +105,15 @@ class DiffBuilder:
             return f"group {group.name}"
         return str(entity_id)
 
+    def entity(self, reference: str) -> ArgusTest | ArgusGroup:
+        entity = entity_reference(self.scope, reference)
+        if entity.release_id != self.plan.release_id:
+            raise TestReferenceError(f"{reference} belongs to another release than the plan {self.plan.name}")
+        return entity
+
     def targets(self, reference: str) -> list[UUID]:
         """The plan entities a reference stands for: a test, a group of the plan, or a group's enabled tests."""
-        entity = entity_reference(self.scope, reference)
+        entity = self.entity(reference)
         if isinstance(entity, ArgusTest):
             return [entity.id]
         if entity.id in self.groups:
@@ -144,7 +150,7 @@ class DiffBuilder:
             for entity_id in self.targets(reference):
                 self.ensure_in_plan(entity_id)
         for reference in changes.remove_tests:
-            entity = entity_reference(self.scope, reference)
+            entity = self.entity(reference)
             if not isinstance(entity, ArgusTest) and entity.id in self.groups:
                 self.whole_group(entity)
             ids = [entity.id] if isinstance(entity, ArgusTest) or entity.id in self.groups else \
@@ -152,7 +158,7 @@ class DiffBuilder:
             for entity_id in ids:
                 self.remove_entity(entity_id)
         for reference in changes.remove_groups:
-            group = entity_reference(self.scope, reference)
+            group = self.entity(reference)
             if isinstance(group, ArgusTest) or group.id not in self.groups:
                 raise TestReferenceError(f"{reference} is not a group of the plan {self.plan.name}")
             self.whole_group(group)
