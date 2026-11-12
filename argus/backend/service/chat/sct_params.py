@@ -41,9 +41,9 @@ FIXED_VALUES = {
 URL_RE = re.compile(r"^https?://(www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&/=]*)$")
 FORMATS = {
     "scylla_version": (re.compile(r"^(latest|([\w\-.]+:(latest|\d+|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z))|"
-                                  r"(\d+\.\d+(\.\d+)?)((~|-)rc\d)?)$"),
-                       "latest (Docker), a released version (2025.1, 2025.1.0, 2025.1.0~rc1 or 2025.1.0-rc1), or a "
-                       "branch build as "
+                                  r"(\d+\.\d+(\.\d+)?)([~-](rc\d+|dev))?(-0\.\d{8}\.[0-9a-f]+)?)$"),
+                       "latest (Docker), a released version (2025.1, 2025.1.0, 2025.1.0~rc1 or 2025.1.0-rc1), a full "
+                       "build tag (2026.2.0~dev-0.20260322.f51126483167), or a branch build as "
                        "branch:latest, branch:<build number> or branch:<YYYY-MM-DDTHH:MM:SSZ> (master:latest, "
                        "branch-2025.1:latest, master:1234)"),
     "scylla_repo": (URL_RE, "an http(s) link to the .repo or .list file"),
@@ -53,7 +53,8 @@ FORMATS = {
                      "https://www.googleapis.com/compute/v1/<image path>"),
     "azure_image_db": (re.compile(r"^(/subscriptions/.+|[\w.-]+:[\w.-]+:[\w.-]+:[\w.-]+)$"),
                        "/subscriptions/<image path>, or a marketplace URN publisher:offer:sku:version"),
-    "oci_image_db": (re.compile(r"^ocid1\.image\.oc1\..+\.aaaaaaaa.+$"), "ocid1.image.oc1.<region>.aaaaaaaa<id>"),
+    "oci_image_db": (re.compile(r"^(ocid1\.image\.oc1\..+\.aaaaaaaa.+|resolve:platform:.+)$"),
+                     "ocid1.image.oc1.<region>.aaaaaaaa<id>, or a platform image as resolve:platform:<os>:<version>"),
     "byo_scylla_repo": (re.compile(r"^git@github\.com:[\w-]+/[\w-]+\.git$"), "git@github.com:<user>/<repo>.git"),
 }
 BYO_BRANCH = "byo_scylla_branch"

@@ -152,3 +152,14 @@ async def test_a_view_chat_edits_plan_groups_only_test_by_test(seeded, logged_in
     assert removed.error and "outside this view" in removed.content
     assert one_test.action["proposal"]["diff"]["options_set"] == {str(seeded.tests[0].id): {"labels": ["week1"]}}
     assert outside.error
+
+
+async def test_a_view_chat_adds_no_test_of_another_release_to_a_plan(seeded, plan, release_manager_service,
+                                                                     logged_in_user):
+    other = await seed_entity_release(release_manager_service)
+    view = await seed_view(logged_in_user, [seeded.tests[0], other.tests[0]])
+    ctx = ToolContext(entity=await resolve_entity("view", view.id), user=logged_in_user, node=uuid1())
+
+    outcome = await call(ctx, "edit_plan", plan=plan.name, add_tests=[str(other.tests[0].id)])
+
+    assert outcome.error and "another release" in outcome.content

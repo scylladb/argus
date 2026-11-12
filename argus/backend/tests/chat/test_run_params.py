@@ -27,6 +27,7 @@ LAST_BUILD = [
     {"name": "scylla_repo", "value": "https://downloads.scylladb.com/rpm/scylla.repo"},
     {"name": "scylla_ami_id", "value": ""},
     {"name": "azure_image_db", "value": ""},
+    {"name": "oci_image_db", "value": ""},
     {"name": "byo_scylla_repo", "value": ""},
     {"name": "byo_scylla_branch", "value": ""},
     {"name": "provision_type", "value": "spot",
@@ -92,7 +93,8 @@ async def test_a_seed_picks_where_the_parameters_come_from(ctx, seeded, jenkins)
 
 
 @pytest.mark.parametrize("version", ["master:latest", "branch-2025.1:latest", "master:1234",
-                                     "master:2025-11-01T10:00:00Z", "2025.1", "2025.1.0~rc1", "2025.1.0-rc2"])
+                                     "master:2025-11-01T10:00:00Z", "2025.1", "2025.1.0~rc1", "2025.1.0-rc2",
+                                     "2026.2.0~dev-0.20260322.f51126483167"])
 async def test_every_wizard_version_form_is_accepted(ctx, seeded, jenkins, version):
     params = params_of(await call(ctx, "execute_tests", tests=[seeded.tests[0].name],
                                   params={"scylla_version": version}))
@@ -104,6 +106,7 @@ async def test_every_wizard_version_form_is_accepted(ctx, seeded, jenkins, versi
     {"region": "us-east-2"}, {"region": "ca-central-1"}, {"backend": "docker"}, {"backend": "xcloud"},
     {"provision_type": "auto"}, {"scylla_version": "latest"},
     {"azure_image_db": "scylladb:scylla-enterprise:2025-1:2025.1.0"},
+    {"oci_image_db": "resolve:platform:Oracle Linux:10"},
 ])
 async def test_values_sct_accepts_beyond_the_wizard_lists_pass(ctx, seeded, jenkins, overrides):
     outcome = await call(ctx, "execute_tests", tests=[seeded.tests[0].name], params=overrides)

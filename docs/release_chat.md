@@ -81,7 +81,8 @@ appears, Argus checks every override against the test's own Jenkins job:
 - when the parameter is a choice, the value must be one of its choices
 - a Scylla Cluster Tests job keeps exactly one Scylla version source, in its
   format, and a BYO branch that exists on GitHub. `scylla_version` takes
-  `latest`, a released version (`2025.1`, `2025.1.0`, `2025.1.0~rc1`) or a
+  `latest`, a released version (`2025.1`, `2025.1.0`, `2025.1.0~rc1`), a full
+  build tag (`2026.2.0~dev-0.20260322.f51126483167`) or a
   branch build: `master:latest`, `branch-2025.1:latest`, `master:1234`, or a
   build timestamp such as `master:2025-11-01T10:00:00Z`. Setting one version
   source clears the others. The parameter wizard's backends and regions are
