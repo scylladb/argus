@@ -197,6 +197,19 @@ def test_validate_sct_version_source_rejects_rolling_upgrade_on_an_image_with_a_
     assert "rolling_upgrade" in str(exc.value)
 
 
+def test_validate_sct_version_source_accepts_a_unified_package_alone_or_on_an_image():
+    package = "https://downloads.scylladb.com/unstable/scylla/master/relocatable/latest/scylla-unified.tar.gz"
+    JenkinsService.validate_sct_version_source({"unified_package": package, "scylla_version": ""})
+    JenkinsService.validate_sct_version_source({"unified_package": package, "scylla_ami_id": "ami-1234"})
+
+
+def test_validate_sct_version_source_rejects_a_unified_package_with_a_version():
+    with pytest.raises(DataValidationError) as exc:
+        JenkinsService.validate_sct_version_source({
+            "unified_package": "https://downloads.scylladb.com/scylla-unified.tar.gz", "scylla_version": "master:latest"})
+    assert "unified_package" in str(exc.value)
+
+
 def test_validate_sct_version_source_rejects_none_set():
     with pytest.raises(DataValidationError):
         JenkinsService.validate_sct_version_source({"scylla_version": "", "scylla_repo": "  "})
