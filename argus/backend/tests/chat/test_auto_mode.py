@@ -7,8 +7,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from starlette.testclient import TestClient
 
+from argus.backend.service.chat import tasks as chat_tasks
 from argus.backend.service.chat.entity import resolve_entity
 from argus.backend.service.chat.history import ChatHistoryService
+from argus.backend.service.chat.hub import ChatHub
+from argus.backend.service.chat.service import ChatService
 from argus.backend.service.jenkins_service import JenkinsService
 from argus.backend.tests.chat.helpers import seed_entity_release, text_turn, tool_turn
 
@@ -118,4 +121,23 @@ async def test_an_answer_that_lost_its_lock_runs_no_more_tools(chat_client: Test
             time.sleep(0.05)
 
     assert answer["status"] == "stopped"
+    jenkins.build_job.assert_not_called()
+
+
+async def test_try_again_in_auto_mode_confirms_nothing_on_a_teammates_question(chat_model, jenkins, seeded,
+                                                                               logged_in_user, chat_people):
+    entity = await resolve_entity("release", seeded.release.id)
+    service = ChatService(ChatHub())
+    chat_model.turns = [text_turn("Which one?"), tool_turn(("execute_tests", {"tests": [seeded.tests[0].name]})),
+                        text_turn("Confirm the card")]
+    await service.send(entity, "start it", chat_people[0])
+    await chat_tasks.drain()
+
+    retried = await service.regenerate(entity, logged_in_user, auto=True)
+    await chat_tasks.drain()
+
+    _, nodes = await ChatHistoryService(entity).read()
+    card = next(node for node in nodes if node.role == "action")
+    assert retried["assistant_node"]["auto"] is False
+    assert card.action_state == "pending"
     jenkins.build_job.assert_not_called()

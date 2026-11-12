@@ -30,6 +30,10 @@ SERVER_COLUMNS = ("name", "url", "transport", "headers_encrypted", "enabled", "c
                   "updated_by", "updated_at")
 
 
+class McpConfirmationNeeded(Exception):
+    pass
+
+
 class ChatMcpError(APIException):
     pass
 
@@ -241,10 +245,14 @@ class McpServerService:
                                                                    tool["input_schema"]), mode))
         return result
 
-    async def call(self, server: str, tool: str, arguments: dict) -> tuple[str, bool]:
+    async def call(self, server: str, tool: str, arguments: dict, confirmed: bool) -> tuple[str, bool]:
+        """Call a tool that is switched on; an unconfirmed call needs a Direct tool."""
         row = await self._row(server)
         if not row["enabled"]:
             return f"The MCP server {server} is disabled", True
-        if json.loads(row["tool_modes"] or "{}").get(tool, "off") == "off":
+        mode = json.loads(row["tool_modes"] or "{}").get(tool, "off")
+        if mode == "off":
             return f"The tool {tool} of {server} is switched off", True
+        if mode != "direct" and not confirmed:
+            raise McpConfirmationNeeded(f"The tool {tool} of {server} needs a confirmation")
         return await self.client_for(row).call_tool(tool, arguments)

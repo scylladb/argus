@@ -106,7 +106,8 @@ class ChatService:
             if question is None:
                 raise ChatHistoryError("There is no question to answer again")
             answer = await history.append(node=answer_node, role="assistant", status="streaming",
-                                          user_id=user.id, parent=question.node, model_name=model.model, auto=auto)
+                                          user_id=user.id, parent=question.node, model_name=model.model,
+                                          auto=auto and question.user_id == user.id)
             return None, answer
 
         _, answer = await self._start(entity, user, model, history, answer_node, build)
