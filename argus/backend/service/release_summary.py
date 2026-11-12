@@ -399,8 +399,8 @@ class ReleaseSummaryService:
             self._recompute_task(release, invalidated_at)
         elif stale:
             try:
-                summaries, generated_at = await asyncio.shield(self._recompute_task(release, invalidated_at))
-                stale = False
+                summaries, generated_at, saved = await asyncio.shield(self._recompute_task(release, invalidated_at))
+                stale = not saved
             except (DriverException, NoHostAvailable):
                 LOGGER.exception("Failed to recompute the release summary of %s", release_id)
                 if not stored:
@@ -443,7 +443,7 @@ class ReleaseSummaryService:
         return running[0]
 
     async def _recompute(self, release: ArgusRelease,
-                         started_at: datetime) -> tuple[dict[tuple[str, str], Summary], datetime]:
+                         started_at: datetime) -> tuple[dict[tuple[str, str], Summary], datetime, bool]:
         summaries = await asyncio.to_thread(build_summaries, await self._load(release))
         try:
             await self._write(release.id, summaries, started_at)
@@ -451,7 +451,8 @@ class ReleaseSummaryService:
                 await ReleaseSummary.find(release_id=release.id).delete()
         except (DriverException, NoHostAvailable):
             LOGGER.warning("Failed to store the release summary of %s", release.id, exc_info=True)
-        return summaries, started_at
+            return summaries, started_at, False
+        return summaries, started_at, True
 
     @staticmethod
     async def _write(release_id: UUID, summaries: dict[tuple[str, str], Summary], started_at: datetime) -> None:

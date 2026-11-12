@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
+from cassandra.cluster import NoHostAvailable
 
 from argus.backend.models.release_summary import mark_release_summary_stale
 from argus.backend.service.release_summary import ReleaseSummaryService
@@ -238,6 +239,17 @@ async def test_a_recompute_that_ends_after_the_release_is_deleted_leaves_no_summ
     await ReleaseSummaryService()._recompute(seeded.release, datetime.now(UTC))
 
     assert await ReleaseSummaryService._read(seeded.release.id) == ({}, None, None)
+
+
+async def test_a_summary_that_could_not_be_stored_comes_back_stale(release_manager_service, client_service):
+    seeded = await seed_release(release_manager_service, test_count=1)
+    await submit_run(client_service, seeded.tests[0], "2030.16.0", "passed")
+
+    with patch.object(ReleaseSummaryService, "_write", side_effect=NoHostAvailable("down", {})):
+        summary = await ReleaseSummaryService().get(seeded.release.id, wait=True)
+
+    assert summary["stale"] is True
+    assert summary["families"]
 
 
 async def test_a_failed_mark_does_not_fail_the_write_that_caused_it(release_manager_service):
