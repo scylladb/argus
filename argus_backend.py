@@ -21,7 +21,7 @@ from argus.backend.error_handlers import (
     ui_redirect_handler,
 )
 from argus.backend.metrics import build_instrumentator, build_metrics_router
-from argus.backend.plugins.sct.events.processor import start_event_processor
+from argus.backend.plugins.sct.events.processor import get_event_processor, start_event_processor
 from argus.backend.rendering import register_app
 from argus.backend.service.user import UserServiceException, api_current_user
 from argus.backend.service.views import UserViewException
@@ -37,6 +37,7 @@ SESSION_LIFETIME = 31 * 24 * 60 * 60  # Flask's permanent_session_lifetime defau
 async def lifespan(app: FastAPI):
     app.state.event_model_load = await start_event_processor()
     yield
+    await get_event_processor().drain()
 
 
 def create_app(config=None) -> FastAPI:

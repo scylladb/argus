@@ -1,6 +1,9 @@
+import hashlib
 import json
 import re
 import uuid
+
+import numpy as np
 
 from argus.backend.models.web import ArgusTest
 from argus.backend.plugins.sct.testrun import SCTTestRunSubmissionRequest
@@ -43,3 +46,19 @@ def get_fake_test_run(
         runner_public_ip=runner_public_ip,
         runner_private_ip=runner_private_ip
     )
+
+
+class StubEmbeddingModel:
+    """Stands in for the BGE model: the same text gives the same unit vector, different texts
+    give vectors far apart, and nothing is downloaded."""
+
+    def load(self) -> None:
+        pass
+
+    def __call__(self, texts: list[str]) -> list[np.ndarray]:
+        vectors = []
+        for text in texts:
+            seed = int.from_bytes(hashlib.sha256(text.encode()).digest()[:8], "big")
+            vector = np.random.default_rng(seed).standard_normal(384)
+            vectors.append((vector / np.linalg.norm(vector)).astype(np.float32))
+        return vectors

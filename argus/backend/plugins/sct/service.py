@@ -534,7 +534,9 @@ class SCTService:
         return "updated"
 
     @classmethod
-    async def submit_events(cls, run_id: UUID, raw_events: list[RawEventPayload]) -> list[QueuedEvent]:
+    async def submit_events(
+        cls, run_id: UUID, raw_events: list[RawEventPayload]
+    ) -> tuple[list[QueuedEvent], Exception | None]:
         async def submit_one(raw_event: RawEventPayload) -> tuple[CoredumpLink | None, QueuedEvent | None] | Exception:
             try:
                 return await cls.submit_event(run_id=run_id, raw_event=raw_event)
@@ -552,9 +554,7 @@ class SCTService:
                 await run.save()
             except Exception:
                 LOGGER.warning("Unable to attach coredump links to run %s.", run_id, exc_info=True)
-        if failures:
-            raise failures[0]
-        return [queued for _, queued in submitted if queued]
+        return [queued for _, queued in submitted if queued], failures[0] if failures else None
 
     @classmethod
     async def submit_event(

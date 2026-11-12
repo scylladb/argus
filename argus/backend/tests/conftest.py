@@ -1,6 +1,5 @@
 import asyncio
 from cassandra.cluster import Cluster
-import hashlib
 import json
 import logging
 from datetime import UTC, datetime
@@ -29,11 +28,11 @@ from unittest.mock import patch, MagicMock
 from cassandra.auth import PlainTextAuthProvider
 from docker import DockerClient
 from docker.models.containers import Container
-import numpy as np
 import pytest
 
 from argus.backend.plugins.loader import all_plugin_models, all_plugin_types
 from argus.backend.plugins.sct.events import embedding
+from argus.backend.tests.util import StubEmbeddingModel
 from argus.backend.plugins.sct.service import SCTService
 from argus.backend.service import test_lookup as lookup
 from argus.backend.service.issue_service import IssueService
@@ -307,22 +306,6 @@ g = _RequestContextShim()
 def test_user_context(argus_db, logged_in_user):
     g.user = logged_in_user
     yield
-
-
-class StubEmbeddingModel:
-    """Stands in for the BGE model: the same text gives the same unit vector, different texts
-    give vectors far apart, and nothing is downloaded."""
-
-    def load(self) -> None:
-        pass
-
-    def __call__(self, texts: list[str]) -> list[np.ndarray]:
-        vectors = []
-        for text in texts:
-            seed = int.from_bytes(hashlib.sha256(text.encode()).digest()[:8], "big")
-            vector = np.random.default_rng(seed).standard_normal(384)
-            vectors.append((vector / np.linalg.norm(vector)).astype(np.float32))
-        return vectors
 
 
 @fixture(scope='session', autouse=True)

@@ -173,3 +173,22 @@ async def test_concurrency_stays_within_the_limit(monkeypatch, client_service, s
 
     assert peak == 2
     assert dispatcher._n_ok == 5
+
+
+async def test_the_encoder_loads_on_the_first_summary_and_a_failed_load_skips_it(monkeypatch, event):
+    monkeypatch.setattr(sd, "Summarizer", FakeSummarizer)
+    loads = []
+
+    def unavailable():
+        loads.append(True)
+        raise OSError("encoding download failed")
+
+    monkeypatch.setattr(sd, "_resolve_encoder", unavailable)
+    dispatcher = SummaryDispatcher(_config())
+    assert loads == []
+
+    await dispatcher.summarize([event])
+
+    assert loads == [True]
+    assert await _summary(event.run_id) is None
+    assert (dispatcher._n_ok, dispatcher._n_failed, dispatcher._n_dropped) == (0, 1, 0)

@@ -58,7 +58,7 @@ def _resolve_prompt(config: dict) -> str:
 
 class SummaryDispatcher:
     def __init__(self, config: dict):
-        self.model = config.get("ANTHROPIC_SUMMARY_MODEL", "claude-sonnet-5")
+        self.model = config.get("ANTHROPIC_SUMMARY_MODEL", "claude-sonnet-5-5")
         # Effort steers the model's thinking depth. Summarization is extraction, so `low` holds
         # quality at a fraction of the output tokens. Empty disables the parameter for models
         # without effort support.
@@ -68,6 +68,7 @@ class SummaryDispatcher:
         self.min_tokens = 0
         self.max_backlog = 0
         self._encoder: tiktoken.Encoding | None = None
+        self._encoder_lock: asyncio.Lock | None = None
         self._semaphore: asyncio.Semaphore | None = None
         self._summarizer: Summarizer | None = None
         self._pending = 0
@@ -82,9 +83,6 @@ class SummaryDispatcher:
             if not config.get("EVENT_SUMMARIZATION_ENABLED", False):
                 raise ValueError("EVENT_SUMMARIZATION_ENABLED=false")
             self.min_tokens = int(config.get("EVENT_SUMMARIZATION_MIN_TOKENS", _DEFAULT_MIN_TOKENS))
-            # Always resolve: input tokens are counted once per event for both the gate and the
-            # input-size metric, so the encoder is needed even when the gate is off.
-            self._encoder = _resolve_encoder()
             max_concurrency = int(config.get("EVENT_SUMMARIZATION_MAX_CONCURRENCY", 4))
             self.max_backlog = int(config.get("EVENT_SUMMARIZATION_MAX_BACKLOG", 1000))
             api_key = config.get("ANTHROPIC_API_KEY")
@@ -92,6 +90,7 @@ class SummaryDispatcher:
                 raise ValueError("ANTHROPIC_API_KEY is missing")
             self._summarizer = Summarizer(api_key=api_key, base_url=config.get("ANTHROPIC_BASE_URL"))
             self._semaphore = asyncio.Semaphore(max_concurrency)
+            self._encoder_lock = asyncio.Lock()
         except Exception as exc:  # noqa: BLE001 - summarization setup must never break event processing
             LOGGER.info("Event summarization disabled: %s", exc)
             return
@@ -111,10 +110,25 @@ class SummaryDispatcher:
             return
         await asyncio.gather(*(self._summarize_one(event) for event in events))
 
+    async def _get_encoder(self) -> tiktoken.Encoding:
+        """Input tokens are counted once per event for both the gate and the input-size metric.
+        tiktoken may download the encoding on first use, so it loads off the event loop, on the
+        first summary rather than when the worker starts."""
+        async with self._encoder_lock:
+            if self._encoder is None:
+                self._encoder = await asyncio.to_thread(_resolve_encoder)
+        return self._encoder
+
     async def _summarize_one(self, event: UniqueEvent) -> None:
         if not event.message:
             return
-        input_tokens = len(self._encoder.encode(event.message))
+        try:
+            encoder = await self._get_encoder()
+        except Exception as exc:  # noqa: BLE001 - a summary is best effort and never fails the caller
+            self._bump("failed", event.severity)
+            LOGGER.warning("Could not load the token encoder; skipping run_id=%s ts=%s: %s", event.run_id, event.ts, exc)
+            return
+        input_tokens = len(encoder.encode(event.message))
         if input_tokens < self.min_tokens:
             return
         if self._pending >= self.max_backlog:

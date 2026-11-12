@@ -274,3 +274,27 @@ stays in every plan built from a spec.
       embedding thread; block load attempts for `RETRY_AFTER` after a failure.
 - [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
 - [x] Commit, with the boxes of this task checked.
+
+## Task 11 — Pull request review fixes
+
+**Files:**
+- Modify: `argus/backend/plugins/sct/events/processor.py` (`_requeue`, `schedule`,
+  `drain`, paged `sweep`), `embedding.py` (incomplete directory, published
+  archive, cool-down bypass), `summary_dispatcher.py` (lazy encoder, default
+  model), `argus/backend/plugins/sct/service.py` (`submit_events` returns the
+  failure), `controller.py`, `argus_backend.py` (drain on shutdown),
+  `gunicorn.conf.py` (startup sweep), `argus_web.example.yaml`,
+  `eval/pricing.py`
+- Move: `StubEmbeddingModel` from `argus/backend/tests/conftest.py` to
+  `argus/backend/tests/util.py`
+- Test: `argus/backend/tests/health/test_gunicorn_hooks.py`, `test_event_processor.py`, `test_event_ingestion.py`,
+  `test_embedding.py`, `test_summary_dispatcher.py`
+
+- [x] Write the failing tests: a failed event without a queue row is queued
+      again; the sweep drains page by page; a batch with a bad event processes
+      what it stored; the encoder loads on the first summary; an incomplete
+      model directory is replaced; a published archive and an extracted model
+      end a failed download and the cool-down.
+- [x] Make the changes, and check each test against its fix disabled.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
