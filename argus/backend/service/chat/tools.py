@@ -35,7 +35,7 @@ from argus.backend.service.chat.actions import (
 from argus.backend.service.chat.entity import ChatEntity
 from argus.backend.service.chat.history import ChatHistoryService
 from argus.backend.service.chat.llm import ToolCall, ToolSpec
-from argus.backend.service.chat.mcp import McpServerService, chat_tool_name
+from argus.backend.service.chat.mcp import McpConfirmationNeeded, McpServerService, chat_tool_name
 from argus.backend.service.chat.memory import ChatMemoryService
 from argus.backend.service.chat.people import load_people, person
 from argus.backend.service.chat.plans import PlanChanges, build_plan_diff, plan_labels, plan_stamp
@@ -169,9 +169,13 @@ async def mcp_tools() -> tuple[ExternalTool, ...]:
 
 
 async def run_mcp_tool(ctx: ToolContext, arguments: dict, *, server: str, tool: str, mode: str) -> ToolOutcome:
+    card = new_action("mcp_call", {"server": server, "tool": tool, "arguments": arguments})
     if mode == "confirm":
-        return proposal_outcome(new_action("mcp_call", {"server": server, "tool": tool, "arguments": arguments}))
-    text, error = await McpServerService().call(server, tool, arguments)
+        return proposal_outcome(card)
+    try:
+        text, error = await McpServerService().call(server, tool, arguments, confirmed=False)
+    except McpConfirmationNeeded:
+        return proposal_outcome(card)
     return ToolOutcome(truncate(text) or "(no output)", error=error)
 
 

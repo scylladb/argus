@@ -169,9 +169,14 @@ async def adjust_start(entity: ChatEntity, node: UUID, *, replace: dict[str, dic
 
 
 def resolve_plan(plans: list[ArgusReleasePlan], reference: str) -> ArgusReleasePlan:
-    for plan in plans:
-        if reference in (str(plan.id), plan.key, plan.name):
-            return plan
+    if plan := next((plan for plan in plans if reference in (str(plan.id), plan.key)), None):
+        return plan
+    named = [plan for plan in plans if plan.name == reference]
+    if len(named) == 1:
+        return named[0]
+    if named:
+        keys = ", ".join(sorted(f"{plan.key or plan.id}" for plan in named))
+        raise TestReferenceError(f"{len(named)} plans are named {reference}; name one by its key or id: {keys}")
     names = ", ".join(sorted(plan.name for plan in plans)) or "none"
     raise TestReferenceError(f"No plan {reference} in this chat's releases; plans: {names}")
 
@@ -438,7 +443,7 @@ async def _execute_in_scope(action: dict, user: User) -> list[dict]:
             results = [{"test": proposal["test"], "error": None}]
         case "mcp_call":
             text, failed = await McpServerService().call(proposal["server"], proposal["tool"],
-                                                         proposal["arguments"])
+                                                         proposal["arguments"], confirmed=True)
             results = [{"server": proposal["server"], "tool": proposal["tool"],
                         "text": text[:MCP_RESULT_LIMIT], "error": text[:500] if failed else None}]
         case "edit_plan":

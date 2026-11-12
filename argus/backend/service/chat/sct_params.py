@@ -40,15 +40,18 @@ FIXED_VALUES = {
 }
 URL_RE = re.compile(r"^https?://(www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&/=]*)$")
 FORMATS = {
-    "scylla_version": (re.compile(r"^(latest|([\w\-.]+:(latest|\d+|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z))|"
+    "scylla_version": (re.compile(r"^(latest|relocatable(:[\w\-.]*(:\w+)?)?|([\w\-.]+:(latest|\d+|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z))|"
                                   r"(\d+\.\d+(\.\d+)?)([~-](rc\d+|dev))?(-0\.\d{8}\.[0-9a-f]+)?)$"),
                        "latest (Docker), a released version (2025.1, 2025.1.0, 2025.1.0~rc1 or 2025.1.0-rc1), a full "
-                       "build tag (2026.2.0~dev-0.20260322.f51126483167), or a branch build as "
+                       "build tag (2026.2.0~dev-0.20260322.f51126483167), a relocatable build as relocatable:<branch>:<arch> "
+                       "(relocatable:master:x86_64), or a branch build as "
                        "branch:latest, branch:<build number> or branch:<YYYY-MM-DDTHH:MM:SSZ> (master:latest, "
                        "branch-2025.1:latest, master:1234)"),
     "scylla_repo": (URL_RE, "an http(s) link to the .repo or .list file"),
     "new_scylla_repo": (URL_RE, "an http(s) link to the .repo or .list file"),
-    "scylla_ami_id": (re.compile(r"^(ami-[abcdef\d]{4,17}|scylla-.+)$"), "ami-<hex id>"),
+    "scylla_ami_id": (re.compile(r"^((ami-[abcdef\d]{4,17}|scylla-\S+)( (ami-[abcdef\d]{4,17}|scylla-\S+))*|"
+                                 r"resolve:ssm:\S+)$"),
+                      "ami-<hex id>, one per region separated by spaces, or an SSM parameter as resolve:ssm:<name>"),
     "gce_image_db": (re.compile(r"^https://www\.googleapis\.com/compute/v1/.+$"),
                      "https://www.googleapis.com/compute/v1/<image path>"),
     "azure_image_db": (re.compile(r"^(/subscriptions/.+|[\w.-]+:[\w.-]+:[\w.-]+:[\w.-]+)$"),

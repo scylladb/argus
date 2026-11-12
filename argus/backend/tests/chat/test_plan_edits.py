@@ -163,3 +163,19 @@ async def test_a_view_chat_adds_no_test_of_another_release_to_a_plan(seeded, pla
     outcome = await call(ctx, "edit_plan", plan=plan.name, add_tests=[str(other.tests[0].id)])
 
     assert outcome.error and "another release" in outcome.content
+
+
+async def test_a_plan_name_two_releases_share_names_no_plan(seeded, plan, release_manager_service, logged_in_user):
+    other = await seed_entity_release(release_manager_service)
+    twin = await PlanningService().create_plan(CreatePlanPayload(
+        name=plan.name, description="", owner=logged_in_user.id, participants=[], target_version="2037.2",
+        release_id=other.release.id, tests=[other.tests[0].id], groups=[], assignments={}, options={}),
+        logged_in_user)
+    view = await seed_view(logged_in_user, [seeded.tests[0], other.tests[0]])
+    ctx = ToolContext(entity=await resolve_entity("view", view.id), user=logged_in_user, node=uuid1())
+
+    by_name = await call(ctx, "get_plan_labels", plan=plan.name)
+    by_id = await call(ctx, "get_plan_labels", plan=str(twin.id))
+
+    assert by_name.error and "2 plans are named" in by_name.content
+    assert not by_id.error

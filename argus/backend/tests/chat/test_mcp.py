@@ -2,12 +2,15 @@ import json
 import time
 from dataclasses import dataclass, field
 from unittest.mock import patch
+from uuid import uuid1
 
 import pytest
 from mcp.server.mcpserver import MCPServer
 from starlette.testclient import TestClient
 
+from argus.backend.service.chat.entity import resolve_entity
 from argus.backend.service.chat.mcp import McpTool, SdkMcpClient, chat_tool_name
+from argus.backend.service.chat.tools import ToolContext, run_mcp_tool
 from argus.backend.tests.chat.helpers import seed_entity_release, text_turn, tool_turn
 
 API = "/admin/api/v1/chat"
@@ -186,3 +189,16 @@ def test_a_new_url_needs_the_headers_again(chat_client: TestClient, fake_mcp):
 
     assert moved.json()["status"] == "error"
     assert ok(toggled)["headers"] == ["Authorization"]
+
+
+@pytest.mark.docker_required
+async def test_a_tool_switched_to_confirm_during_an_answer_proposes_a_card(chat_client: TestClient, fake_mcp,
+                                                                           release_manager_service, logged_in_user):
+    seeded = await seed_entity_release(release_manager_service)
+    ctx = ToolContext(entity=await resolve_entity("release", seeded.release.id), user=logged_in_user, node=uuid1())
+    register(chat_client, {"read_status": "confirm"})
+
+    outcome = await run_mcp_tool(ctx, {"key": "SCYLLA-1"}, server="jira", tool="read_status", mode="direct")
+
+    assert outcome.action["kind"] == "mcp_call"
+    assert fake_mcp.calls == []

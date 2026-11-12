@@ -82,9 +82,11 @@ appears, Argus checks every override against the test's own Jenkins job:
 - a Scylla Cluster Tests job keeps exactly one Scylla version source, in its
   format, and a BYO branch that exists on GitHub. `scylla_version` takes
   `latest`, a released version (`2025.1`, `2025.1.0`, `2025.1.0~rc1`), a full
-  build tag (`2026.2.0~dev-0.20260322.f51126483167`) or a
-  branch build: `master:latest`, `branch-2025.1:latest`, `master:1234`, or a
-  build timestamp such as `master:2025-11-01T10:00:00Z`. Setting one version
+  build tag (`2026.2.0~dev-0.20260322.f51126483167`), a relocatable build
+  (`relocatable:master:x86_64`) or a branch build: `master:latest`,
+  `branch-2025.1:latest`, `master:1234`, or a build timestamp such as
+  `master:2025-11-01T10:00:00Z`. `scylla_ami_id` takes AMI ids, one per
+  region, or an SSM parameter as `resolve:ssm:<name>`. Setting one version
   source clears the others. The parameter wizard's backends and regions are
   offered as suggestions, and a new backend gets its first suggested region
   when the job leaves it empty.
@@ -115,7 +117,8 @@ version or completion. Assigning a test that is not in the plan adds it, and
 a new assignee becomes a participant. The card lists every change, and
 **Apply** saves them, unless someone changed the plan since the proposal; then
 the card fails and nothing changes. Creating, copying and deleting plans stay
-in the planner.
+in the planner. When plans of two releases in a view share a name, name the plan by its key
+or id.
 
 ## Auto mode
 
