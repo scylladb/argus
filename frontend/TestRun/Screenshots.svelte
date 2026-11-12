@@ -24,7 +24,7 @@
                     class="btn p-0 border rounded overflow-hidden ratio ratio-1x1"
                     onclick={() => (selectedScreenshot = url)}
                 >
-                    <img class="object-fit-cover w-100 h-100" src={url} alt="Screenshot {index + 1}" loading="lazy" decoding="async" />
+                    <img class="object-fit-cover w-100 h-100" style="object-position: top left" src={url} alt="Screenshot {index + 1}" loading="lazy" decoding="async" />
                 </button>
             </div>
         {/each}

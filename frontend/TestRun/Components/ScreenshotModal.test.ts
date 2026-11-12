@@ -119,6 +119,16 @@ describe("ScreenshotModal.svelte", () => {
         expect(scaleOf()).toBeCloseTo(1, 10);
     });
 
+    it("opens a loaded screenshot at actual pixels from its top-left corner", async () => {
+        render(ScreenshotModal, { props: { selectedScreenshot: SHOTS[0], screenshots: SHOTS } });
+        layOut();
+
+        await fireEvent.load(image());
+
+        expect(scaleOf()).toBeCloseTo(1.92, 10);
+        expect(image().style.transform).toContain("translate(460px, 140px)");
+    });
+
     it("leaves a key with a modifier to the browser", async () => {
         render(ScreenshotModal, { props: { selectedScreenshot: SHOTS[0], screenshots: SHOTS } });
         layOut();
