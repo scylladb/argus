@@ -26,6 +26,7 @@ describe("Screenshots.svelte", () => {
         expect(images.map((img) => img.getAttribute("src"))).toEqual(URLS);
         expect(images.map((img) => img.getAttribute("alt"))).toEqual(["Screenshot 1", "Screenshot 2", "Screenshot 3"]);
         expect(images.every((img) => img.getAttribute("loading") === "lazy")).toBe(true);
+        expect(images.every((img) => img.style.objectPosition === "top left")).toBe(true);
     });
 
     it("says that no screenshot was submitted", () => {

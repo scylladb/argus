@@ -62,7 +62,7 @@
         if (stage && image) {
             const bounds = measure(stage, image);
             const scale = bounds.imageWidth > 0 ? image.naturalWidth / bounds.imageWidth : 1;
-            view = zoomAt(FIT, scale, { x: 0, y: 0 }, bounds);
+            view = zoomAt(FIT, scale, { x: -bounds.imageWidth / 2, y: -bounds.imageHeight / 2 }, bounds);
         }
     }
 
@@ -181,6 +181,7 @@
                     alt="Screenshot"
                     draggable="false"
                     style="transform: translate({view.x}px, {view.y}px) scale({view.scale})"
+                    onload={actual}
                     onerror={() => (failed = true)}
                 />
             {/if}
