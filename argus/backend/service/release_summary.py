@@ -447,6 +447,8 @@ class ReleaseSummaryService:
         summaries = await asyncio.to_thread(build_summaries, await self._load(release))
         try:
             await self._write(release.id, summaries, started_at)
+            if not await select_rows(ArgusRelease.find(id=release.id), "id"):
+                await ReleaseSummary.find(release_id=release.id).delete()
         except (DriverException, NoHostAvailable):
             LOGGER.warning("Failed to store the release summary of %s", release.id, exc_info=True)
         return summaries, started_at

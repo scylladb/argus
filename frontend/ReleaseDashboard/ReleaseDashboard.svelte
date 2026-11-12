@@ -10,6 +10,7 @@
     import FlyoutLayer from "../Common/FlyoutLayer.svelte";
     import { landingPoint } from "../Common/flyout";
     import { TestStatus } from "../Common/TestStatus";
+    import { summaryTestSelection } from "./summarySelection";
     let { releaseData = {} } = $props();
     let clickedTests = $state({});
     let issuesClicked = $state(false);
@@ -61,36 +62,12 @@
         flights.push({ id: ++lastFlightId, from: flightStart(event), to, label });
     };
 
-    const summarySelection = (test) => ({
-        name: test.test_name,
-        id: test.test_id,
-        assignees: [],
-        group: test.group_name,
-        status: test.status,
-        start_time: test.run_id ? (test.start_time ? Date.parse(test.start_time) / 1000 : 1) : 0,
-        last_runs: test.run_id ? [{
-            id: test.run_id, build_number: test.build_number, status: test.status,
-            start_time: test.start_time, assignee: null, issues: [], comments: [],
-        }] : [],
-        build_system_id: test.build_id,
-    });
-
     const handleSummaryTestClick = function (test, event) {
-        const group = stats?.groups?.[test.group_id];
-        const entry = group?.tests?.[test.test_id];
+        const selection = summaryTestSelection(stats, test);
         if (!clickedTests[test.test_id]) {
-            launchFlight(event, entry?.test.name ?? test.test_name);
+            launchFlight(event, selection.name);
         }
-        handleTestClick(entry ? {
-            name: entry.test.name,
-            id: entry.test.id,
-            assignees: [],
-            group: group.group.name,
-            status: entry.status,
-            start_time: entry.start_time,
-            last_runs: entry.last_runs,
-            build_system_id: entry.test.build_system_id,
-        } : summarySelection(test));
+        handleTestClick(selection);
     };
 
     const handleQuickSelect = function (e) {

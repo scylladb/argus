@@ -1,5 +1,6 @@
 import asyncio
 import time
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
@@ -224,6 +225,17 @@ async def test_deleting_a_release_deletes_its_summary(release_manager_service, c
     await ReleaseSummaryService().get(seeded.release.id)
 
     await release_manager_service.delete_release(seeded.release.id)
+
+    assert await ReleaseSummaryService._read(seeded.release.id) == ({}, None, None)
+
+
+async def test_a_recompute_that_ends_after_the_release_is_deleted_leaves_no_summary(release_manager_service,
+                                                                                    client_service):
+    seeded = await seed_release(release_manager_service, test_count=1)
+    await submit_run(client_service, seeded.tests[0], "2030.15.0", "passed")
+    await release_manager_service.delete_release(seeded.release.id)
+
+    await ReleaseSummaryService()._recompute(seeded.release, datetime.now(UTC))
 
     assert await ReleaseSummaryService._read(seeded.release.id) == ({}, None, None)
 
