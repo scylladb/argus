@@ -60,7 +60,11 @@ the troubleshooting steps, see `docs/dev-setup.md`.
 | Coding style, conventions, errors, validation | `docs/standards/global/` |
 | Routers, models, queries, schema changes | `docs/standards/backend/` |
 | Svelte 5 components, CSS, layout | `docs/standards/frontend/` |
+| Native HTML, CSS and JS features for the frontend | The `modern-web-guidance` plugin |
 | Tests and CI gates | `docs/standards/testing/test-writing.md` |
+
+The Baseline target of the frontend is Baseline Widely available. Use a web
+platform feature without a fallback only when it is in this target.
 
 ## Configuration & Security Notes
 
