@@ -81,11 +81,12 @@ appears, Argus checks every override against the test's own Jenkins job:
 - when the parameter is a choice, the value must be one of its choices
 - a Scylla Cluster Tests job keeps exactly one Scylla version source, in its
   format, and a BYO branch that exists on GitHub. `scylla_version` takes
-  `latest`, a released version (`2025.1`, `2025.1.0`, `2025.1.0~rc1`), a full
-  build tag (`2026.2.0~dev-0.20260322.f51126483167`), a relocatable build
-  (`relocatable:master:x86_64`) or a branch build: `master:latest`,
-  `branch-2025.1:latest`, `master:1234`, or a build timestamp such as
-  `master:2025-11-01T10:00:00Z`. `scylla_ami_id` takes AMI ids, one per
+  the forms Scylla Cluster Tests takes: `latest`, a released version
+  (`2025.1`, `2025.1.0`, `2025.1.0~rc1`), a full build tag
+  (`2026.2.0~dev-0.20260322.f51126483167`), or `branch:<qualifier>`, such as
+  `master:latest`, `branch-2025.1:all`, `master:1234`, a commit
+  (`master:bedcc69`), a build timestamp (`master:2025-11-01T10:00:00Z`) or a
+  relocatable build (`relocatable:master:x86_64`). `scylla_ami_id` takes AMI ids, one per
   region, or an SSM parameter as `resolve:ssm:<name>`. Setting one version
   source clears the others. The parameter wizard's backends and regions are
   offered as suggestions, and a new backend gets its first suggested region

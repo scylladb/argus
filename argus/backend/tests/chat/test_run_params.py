@@ -94,7 +94,8 @@ async def test_a_seed_picks_where_the_parameters_come_from(ctx, seeded, jenkins)
 
 @pytest.mark.parametrize("version", ["master:latest", "branch-2025.1:latest", "master:1234",
                                      "master:2025-11-01T10:00:00Z", "2025.1", "2025.1.0~rc1", "2025.1.0-rc2",
-                                     "2026.2.0~dev-0.20260322.f51126483167", "relocatable",
+                                     "2026.2.0~dev-0.20260322.f51126483167", "2026.3.0.rc1.0.20260730.726f67a532e2",
+                                     "2024.2.5-0.20250221.cb9e2a54ae6d-1", "branch-2019.1:all", "master:bedcc69",
                                      "relocatable:master:x86_64", "relocatable:branch-2025.1:aarch64"])
 async def test_every_wizard_version_form_is_accepted(ctx, seeded, jenkins, version):
     params = params_of(await call(ctx, "execute_tests", tests=[seeded.tests[0].name],
