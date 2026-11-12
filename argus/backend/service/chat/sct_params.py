@@ -38,15 +38,18 @@ FIXED_VALUES = {
     "post_behavior_monitor_nodes": POST_BEHAVIOR,
     "post_behavior_k8s_cluster": POST_BEHAVIOR,
 }
+# The scylla_version forms of SCT, after sdcm/utils/version_utils.py in scylla-cluster-tests.
+SCT_BRANCH_VERSION = r"[a-zA-Z0-9._-]+:.+"
+SCT_FULL_VERSION_TAG = (r"\d+\.\d+\.\d+(?:[~-][a-zA-Z0-9._~]+-?\d*\.\d{8}\.[0-9a-f]+(?:-\d+)?"
+                        r"|\.rc\d+\.\d+\.\d{8}\.[0-9a-f]+(?:\.\d+)?)")
+SCT_RELEASE_VERSION = r"\d+\.\d+(?:\.\d+)?(?:[~-](?:rc\d+|dev))?"
 URL_RE = re.compile(r"^https?://(www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&/=]*)$")
 FORMATS = {
-    "scylla_version": (re.compile(r"^(latest|relocatable(:[\w\-.]*(:\w+)?)?|([\w\-.]+:(latest|\d+|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z))|"
-                                  r"(\d+\.\d+(\.\d+)?)([~-](rc\d+|dev))?(-0\.\d{8}\.[0-9a-f]+)?)$"),
+    "scylla_version": (re.compile(rf"^(latest|{SCT_BRANCH_VERSION}|{SCT_FULL_VERSION_TAG}|{SCT_RELEASE_VERSION})$"),
                        "latest (Docker), a released version (2025.1, 2025.1.0, 2025.1.0~rc1 or 2025.1.0-rc1), a full "
-                       "build tag (2026.2.0~dev-0.20260322.f51126483167), a relocatable build as relocatable:<branch>:<arch> "
-                       "(relocatable:master:x86_64), or a branch build as "
-                       "branch:latest, branch:<build number> or branch:<YYYY-MM-DDTHH:MM:SSZ> (master:latest, "
-                       "branch-2025.1:latest, master:1234)"),
+                       "build tag (2026.2.0~dev-0.20260322.f51126483167), or a branch build as branch:latest or "
+                       "branch:<qualifier> (master:latest, master:1234, master:<commit>, branch-2025.1:all, "
+                       "master:2025-11-01T10:00:00Z, relocatable:master:x86_64)"),
     "scylla_repo": (URL_RE, "an http(s) link to the .repo or .list file"),
     "new_scylla_repo": (URL_RE, "an http(s) link to the .repo or .list file"),
     "scylla_ami_id": (re.compile(r"^((ami-[abcdef\d]{4,17}|scylla-\S+)( (ami-[abcdef\d]{4,17}|scylla-\S+))*|"
