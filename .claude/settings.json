@@ -8,8 +8,13 @@
       "mcp__codegraph__codegraph_callees",
       "mcp__codegraph__codegraph_impact",
       "mcp__codegraph__codegraph_files",
-      "mcp__codegraph__codegraph_status"
+      "mcp__codegraph__codegraph_status",
+      "Bash(npx -y modern-web-guidance@latest search:*)",
+      "Bash(npx -y modern-web-guidance@latest retrieve:*)"
     ]
+  },
+  "env": {
+    "DISABLE_TELEMETRY": "1"
   },
   "extraKnownMarketplaces": {
     "qatools": {
@@ -17,9 +22,16 @@
         "source": "git",
         "url": "git@github.com:scylladb/qatools.git"
       }
+    },
+    "googlechrome": {
+      "source": {
+        "source": "github",
+        "repo": "GoogleChrome/modern-web-guidance"
+      }
     }
   },
   "enabledPlugins": {
-    "qatools-sdlc@qatools": true
+    "qatools-sdlc@qatools": true,
+    "modern-web-guidance@googlechrome": true
   }
 }
