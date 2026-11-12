@@ -24,7 +24,9 @@ within a run, and summarizes the unique ones. It runs inside the Argus backend.
 
 A failure in the background task never reaches the client. An event whose
 message is empty, or empty after sanitizing, leaves the queue without an
-embedding. Any other failure leaves the queue row in place.
+embedding. Any other failure writes the queue row again for the sweep. When
+one event of a submitted batch is invalid, the client gets the error and the
+events stored before it are processed in a task of their own.
 
 ## Recovery sweep
 
@@ -34,8 +36,10 @@ uv run python -m argus.backend.cli process-event-queue [--min-age SECONDS]
 
 The sweep processes the queue rows older than `--min-age`, 600 seconds by
 default, and the rows that have no `queued_at`. A maintenance timer runs it on
-the Argus hosts. A row is that old only when its background task did not
-finish, for instance because the worker restarted.
+the Argus hosts, and the gunicorn master starts one sweep with `--min-age 0`
+when it is ready, for the rows a restart left behind. A row is that old only
+when its background task did not finish. The sweep reads the queue 500 rows
+at a time.
 
 ## Tables
 

@@ -51,6 +51,7 @@ def health_enabled() -> bool:
 
 
 HEALTH_COMMAND = [sys.executable, "-m", "argus.backend.service.health"]
+EVENT_SWEEP_COMMAND = [sys.executable, "-m", "argus.backend.cli", "process-event-queue", "--min-age", "0"]
 DETACH = ["/bin/sh", "-c", '"$@" &', "sh"]
 
 
@@ -59,6 +60,17 @@ def when_ready(server):
         _start(server)
     except Exception:  # noqa: BLE001
         server.log.exception("Could not start the health process")
+    try:
+        _sweep_event_queue(server)
+    except Exception:  # noqa: BLE001
+        server.log.exception("Could not start the SCT event queue sweep")
+
+
+def _sweep_event_queue(server) -> None:
+    """Process the SCT events a previous run of the service left queued, once, from the master,
+    so the workers do not sweep the same queue four times."""
+    subprocess.Popen([*DETACH, *EVENT_SWEEP_COMMAND], start_new_session=True).wait()
+    server.log.info("Started the SCT event queue sweep")
 
 
 def _start(server) -> None:

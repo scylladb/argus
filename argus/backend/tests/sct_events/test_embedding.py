@@ -191,7 +191,7 @@ def test_a_failed_load_waits_out_the_cool_down_before_the_next_attempt(model_dir
     assert requests_mock.call_count == 4
 
 
-def test_a_failed_download_leaves_an_archive_another_process_published(model_dir, archive, requests_mock, sleeps):
+def test_a_failed_download_uses_the_archive_another_process_published(model_dir, archive, requests_mock, sleeps):
     def publish_then_serve_garbage(request, context):
         model_dir.mkdir(parents=True, exist_ok=True)
         (model_dir / "onnx.tar.gz").write_bytes(archive)
@@ -199,11 +199,37 @@ def test_a_failed_download_leaves_an_archive_another_process_published(model_dir
 
     requests_mock.get(BgeSmallEnEmbeddingModel.MODEL_DOWNLOAD_URL, content=publish_then_serve_garbage)
 
-    with pytest.raises(EmbeddingModelError):
-        BgeSmallEnEmbeddingModel()._download(model_dir / "onnx.tar.gz")
+    assert len(BgeSmallEnEmbeddingModel()(["two words"])) == 1
 
+    assert requests_mock.call_count == 1
+    assert sleeps == []
     assert (model_dir / "onnx.tar.gz").read_bytes() == archive
-    assert [path.name for path in model_dir.iterdir()] == ["onnx.tar.gz"]
+
+
+def test_an_incomplete_model_directory_is_replaced(model_dir, archive):
+    (model_dir / "onnx").mkdir(parents=True)
+    (model_dir / "onnx" / "model.onnx").write_text("half")
+    (model_dir / "onnx.tar.gz").write_bytes(archive)
+
+    assert len(BgeSmallEnEmbeddingModel()(["two words"])) == 1
+
+    assert (model_dir / "onnx" / "tokenizer.json").exists()
+    assert (model_dir / "onnx" / "model.onnx").read_text() == ""
+    assert sorted(path.name for path in model_dir.iterdir()) == ["onnx", "onnx.tar.gz"]
+
+
+def test_a_model_another_process_extracted_ends_the_cool_down(model_dir, requests_mock, sleeps):
+    requests_mock.get(BgeSmallEnEmbeddingModel.MODEL_DOWNLOAD_URL, content=b"not the model")
+    model = BgeSmallEnEmbeddingModel()
+    with pytest.raises(EmbeddingModelError):
+        model(["two words"])
+
+    (model_dir / "onnx").mkdir(parents=True)
+    (model_dir / "onnx" / "model.onnx").touch()
+    (model_dir / "onnx" / "tokenizer.json").touch()
+
+    assert len(model(["two words"])) == 1
+    assert requests_mock.call_count == 3
 
 
 def test_a_failed_extraction_publishes_no_model_directory(model_dir, archive, monkeypatch):

@@ -14,7 +14,7 @@ from argus.backend.plugins.sct.events import summary_dispatcher as sd
 from argus.backend.plugins.sct.events.processor import get_event_processor
 from argus.backend.plugins.sct.events.summarizer import SummarizationResult
 from argus.backend.plugins.sct.events.summary_dispatcher import SummaryDispatcher
-from argus.backend.tests.conftest import StubEmbeddingModel
+from argus.backend.tests.util import StubEmbeddingModel
 from argus.backend.tests.sct_events.helpers import queued, stored_embedding
 from argus.common.utils import clamp_ts_to_milliseconds
 
@@ -159,3 +159,16 @@ def test_the_app_builds_the_processor_and_loads_the_model_at_startup(asgi_app, m
 
     assert get_event_processor.cache_info().currsize == 1
     assert loads == [get_event_processor()._embedder.model]
+
+
+def test_a_batch_with_a_bad_event_still_processes_the_events_it_stored(asgi_app, api_client, sct_run_id):
+    ts = _now()
+    events = [_event(sct_run_id, "ERROR", "Reactor stalled for 512 ms", ts),
+              _event(sct_run_id, "NOT-A-SEVERITY", "broken", ts + 1)]
+
+    with TestClient(asgi_app, raise_server_exceptions=False) as client:
+        resp = client.post(f"{API_PREFIX}/{sct_run_id}/event/submit", json={"data": events, "schema_version": "v8"})
+
+    assert resp.json()["status"] == "error"
+    assert asyncio.run(stored_embedding(UUID(sct_run_id), "ERROR", _dt(ts))) is not None
+    assert asyncio.run(queued(UUID(sct_run_id))) == []

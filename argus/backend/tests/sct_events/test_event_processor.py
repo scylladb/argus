@@ -3,6 +3,7 @@ from uuid import UUID
 
 import pytest
 
+from argus.backend.plugins.sct.events import processor as processor_module
 from argus.backend.plugins.sct.events.embedding import EventEmbedder
 from argus.backend.plugins.sct.events.processor import EventProcessor, QueuedEvent
 from argus.backend.plugins.sct.events.summary_dispatcher import SummaryDispatcher
@@ -138,3 +139,29 @@ async def test_events_of_other_severities_are_not_queued(sct_service, run_id):
         await sct_service.submit_event(run_id, event_payload(run_id, severity, STALL))
 
     assert await queued(run_id) == []
+
+
+async def test_a_failed_event_without_a_queue_row_is_queued_for_the_sweep(processor, sct_service, run_id, monkeypatch):
+    def unavailable(texts):
+        raise RuntimeError("model download failed")
+
+    event = await _submit(sct_service, run_id, "ERROR", STALL)
+    await EventProcessor._dequeue(event)
+    monkeypatch.setattr(processor._embedder, "model", unavailable)
+
+    await processor.process([event])
+
+    assert await queued(run_id) == [(event.severity, event.ts.replace(tzinfo=None))]
+
+
+async def test_the_sweep_drains_the_queue_page_by_page(processor, sct_service, run_id, monkeypatch):
+    monkeypatch.setattr(processor_module, "SWEEP_PAGE_SIZE", 1)
+    now = datetime.now(tz=UTC).timestamp()
+    events = [await _submit(sct_service, run_id, "ERROR", f"{STALL} on shard {shard}", now + shard)
+              for shard in range(3)]
+
+    await processor.sweep(timedelta(0))
+
+    assert await queued(run_id) == []
+    for event in events:
+        assert await stored_embedding(run_id, "ERROR", event.ts) is not None

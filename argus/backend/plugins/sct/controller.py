@@ -273,7 +273,10 @@ async def sct_event_submit(run_id: UUID, payload: EventSubmitRequest, background
     """
     event_data = payload.data
     events = event_data if isinstance(event_data, list) else [event_data]
-    queued = await SCTService.submit_events(run_id=run_id, raw_events=events)
+    queued, failure = await SCTService.submit_events(run_id=run_id, raw_events=events)
+    if failure:
+        get_event_processor().schedule(queued)
+        raise failure
     if queued:
         background_tasks.add_task(get_event_processor().process, queued)
     return APIResponse({

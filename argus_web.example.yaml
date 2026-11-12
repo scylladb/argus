@@ -111,7 +111,7 @@ ZEUS_TOKEN: your-token
 EVENT_SUMMARIZATION_ENABLED: false
 # ANTHROPIC_API_KEY: your-anthropic-key      # required only when summarization is enabled
 # ANTHROPIC_BASE_URL: https://api.anthropic.com  # set for a proxy or compatible endpoint
-ANTHROPIC_SUMMARY_MODEL: claude-sonnet-5      # eval winner (argus/backend/plugins/sct/events/eval/baseline)
+ANTHROPIC_SUMMARY_MODEL: claude-sonnet-5-5
 ANTHROPIC_SUMMARY_EFFORT: low                 # thinking depth; empty for models without effort support
 EVENT_SUMMARIZATION_MAX_CONCURRENCY: 4       # concurrent Claude calls per gunicorn worker
 # Max events per gunicorn worker waiting to be summarized before new ones are dropped.

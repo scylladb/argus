@@ -41,6 +41,7 @@ CACHE_WRITE_MULTIPLIER = 1.25
 DEFAULT_PRICING: dict[str, ModelPrice] = {
     "claude-haiku-4-5": ModelPrice(input_per_1m=1.00, output_per_1m=5.00, cached_per_1m=0.10),
     "claude-sonnet-5": ModelPrice(input_per_1m=2.00, output_per_1m=10.00, cached_per_1m=0.20),
+    "claude-sonnet-5-5": ModelPrice(input_per_1m=2.00, output_per_1m=10.00, cached_per_1m=0.10),
     "claude-opus-5": ModelPrice(input_per_1m=5.00, output_per_1m=25.00, cached_per_1m=0.50),
 }
 

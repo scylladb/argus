@@ -33,15 +33,19 @@ Components, all under `argus/backend/plugins/sct/events/`:
 - **Embedder**: BGE-small-en through onnxruntime, 384 dimensions, unchanged
   model, archive and SHA-256. One model per process, loaded on a single
   dedicated thread that also runs the inference. The download and the
-  extraction write to a temporary path and rename it into place. After a
-  failed load, the next attempt waits five minutes.
+  extraction write to a temporary path and rename it into place; an
+  incomplete model directory from an earlier extraction is replaced, and an
+  archive another process published is used when the own download fails.
+  After a failed load, the next attempt waits five minutes, unless another
+  process has extracted the model meanwhile.
 - **Startup**: each worker builds its processor when it starts and starts the
   model load at once, downloading the model when the host has none. The
   worker does not wait for the load; events submitted meanwhile queue behind
   it on the embedding thread.
 - **Processor**: the per-event pipeline below. One instance per process.
 - **Summary dispatcher**: bounded, best-effort Claude summaries of unique
-  events, on the event loop with the blocking API call in a thread.
+  events, on the event loop with the blocking API call in a thread. The token
+  encoder loads on the first summary, in a thread, not at worker start.
 - **Summarizer, prompts, metrics**: moved as they are.
 - **Eval harness**: the offline model and prompt evaluation, moved as it is.
 
@@ -77,14 +81,20 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     T[Maintenance timer] --> S[argus-cli process-event-queue]
-    S -->|read| Q[(sct_unprocessed_events)]
+    G[gunicorn master start] -->|--min-age 0| S
+    S -->|page through| Q[(sct_unprocessed_events)]
     Q -->|queued_at null or older than min age| P[Processor]
     Q -->|newer| K[Skip: a background task owns it]
 ```
 
 The background task has a head start of the minimum age, ten minutes by
 default. Rows that predate the `queued_at` column count as stale, so the first
-sweep after the deploy drains the queue the old service left behind.
+sweep after the deploy drains the queue the old service left behind. The
+gunicorn master also starts one sweep with no minimum age when it is ready,
+so the rows a restart left behind are processed at once; it may process an
+event a new worker is processing at the same moment, which stores the same
+embedding twice. The sweep handles one page of 500 rows at a time, each page
+in run and timestamp order, like a submission.
 
 ### Duplicate rule
 
@@ -100,9 +110,11 @@ unique event stores its embedding and gets a summary.
 | Condition | Behavior |
 |---|---|
 | Any failure in the background task | Logged; the client already has its answer |
+| One event of a submitted batch is invalid | The client gets the error; the events stored before it are processed in a task of their own |
 | The message is empty, or empty after sanitizing | Logged, queue row deleted, no embedding |
 | The event row is missing | Logged, queue row deleted |
-| The model cannot load or download, or a database call fails | Logged, queue row kept for the sweep; the next load attempt waits five minutes |
+| The model cannot load or download, or a database call fails | Logged, queue row written again with a new `queued_at`, so the sweep finds it even when the write at submit failed; the next load attempt waits five minutes |
+| The token encoder cannot load | That summary is skipped and counted; the next summary tries again |
 | The worker dies before the task ends | Queue row kept for the sweep |
 | Summarization disabled or no API key | No summary; the rest runs |
 | The summary backlog is full | The summary is dropped and counted |
@@ -231,5 +243,18 @@ The eval harness runs as `python -m argus.backend.plugins.sct.events.eval`.
   finished starting within its 120 s timeout. (review)
 - A failed model load blocks further attempts for five minutes, so an
   unreachable model does not cost each queued event a full download. (review)
-- The sweep reads the queue in one pass; the queue holds only unfinished
-  events. (review)
+- The processor writes the queue row again when an event fails, because the
+  write at submit is best effort and the sweep finds only queued events.
+  (review)
+- A batch that fails on one event still processes the events it stored, in a
+  task of their own: the error response carries no background task. (review)
+- The token encoder loads on the first summary: with summarization on, a
+  stalled download at worker start would keep the worker from serving.
+  (review)
+- The gunicorn master runs one sweep at start; a sweep from the lifespan
+  would run once per worker. (review)
+- The sweep pages through the queue, so a backlog from a long outage does not
+  load at once. (review)
+- The sweep keeps processing in timestamp order, like a submission, so the
+  older of two matching events stays the original. (review)
+- The default summary model is `claude-sonnet-5-5`. (review)

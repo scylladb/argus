@@ -29,6 +29,7 @@ LOGGER = logging.getLogger(__name__)
 
 # Maximum cosine distance for two embeddings to be considered duplicates.
 DUPLICATE_DISTANCE_THRESHOLD = 0.05
+SWEEP_PAGE_SIZE = 500
 
 EMBEDDING_MODELS = {
     SCTEventSeverity.ERROR.value: SCTErrorEventEmbedding,
@@ -56,6 +57,7 @@ class EventProcessor:
         self._dispatcher = dispatcher
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="event-embedder")
         self._locks: WeakValueDictionary[UUID, asyncio.Lock] = WeakValueDictionary()
+        self._scheduled: set[asyncio.Task] = set()
 
     async def process(self, events: list[QueuedEvent]) -> None:
         unique: list[UniqueEvent] = []
@@ -73,7 +75,17 @@ class EventProcessor:
                             event.severity,
                             event.ts,
                         )
+                        await self._requeue(event)
         await self._dispatcher.summarize(unique)
+
+    def schedule(self, events: list[QueuedEvent]) -> None:
+        """Process events outside a request, for a submission that fails after storing some of them."""
+        task = asyncio.create_task(self.process(events))
+        self._scheduled.add(task)
+        task.add_done_callback(self._scheduled.discard)
+
+    async def drain(self) -> None:
+        await asyncio.gather(*self._scheduled, return_exceptions=True)
 
     async def load_model(self) -> None:
         try:
@@ -83,14 +95,21 @@ class EventProcessor:
 
     async def sweep(self, min_age: timedelta) -> int:
         cutoff = datetime.now(tz=UTC) - min_age
-        stale = [
-            QueuedEvent(run_id=row.run_id, severity=row.severity, ts=row.ts)
-            for row in await SCTUnprocessedEvent.find().all()
-            if row.queued_at is None or _utc_ms(row.queued_at) <= cutoff
-        ]
-        stale.sort(key=lambda event: (event.run_id, event.ts))
-        await self.process(stale)
-        return len(stale)
+        processed = 0
+        paging_state = None
+        while True:
+            page = await SCTUnprocessedEvent.find().fetch_size(SWEEP_PAGE_SIZE).page(paging_state).paged_all()
+            stale = [
+                QueuedEvent(run_id=row.run_id, severity=row.severity, ts=row.ts)
+                for row in page.data
+                if row.queued_at is None or _utc_ms(row.queued_at) <= cutoff
+            ]
+            stale.sort(key=lambda event: (event.run_id, event.ts))
+            await self.process(stale)
+            processed += len(stale)
+            paging_state = page.paging_state
+            if not paging_state:
+                return processed
 
     async def _process_one(self, event: QueuedEvent) -> UniqueEvent | None:
         stored = await SCTEvent.find(run_id=event.run_id, severity=event.severity, ts=event.ts).only("message").first()
@@ -132,6 +151,16 @@ class EventProcessor:
         await model(run_id=event.run_id, ts=event.ts, embedding=vector.tolist()).save()
         await self._dequeue(event)
         return UniqueEvent(run_id=event.run_id, severity=event.severity, ts=event.ts, message=stored.message)
+
+    @staticmethod
+    async def _requeue(event: QueuedEvent) -> None:
+        try:
+            row = SCTUnprocessedEvent.model_construct()
+            row.run_id, row.severity, row.ts = event.run_id, event.severity, event.ts
+            row.queued_at = datetime.now(tz=UTC)
+            await row.save()
+        except Exception:  # noqa: BLE001 - nothing more to do without the database
+            LOGGER.exception("Could not queue event run_id=%s ts=%s for the sweep", event.run_id, event.ts)
 
     @staticmethod
     async def _dequeue(event: QueuedEvent) -> None:

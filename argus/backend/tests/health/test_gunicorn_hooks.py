@@ -15,9 +15,16 @@ CONF_PATH = Path(__file__).parents[4] / "gunicorn.conf.py"
 
 
 @pytest.fixture
-def hooks(monkeypatch, tmp_path):
+def all_hooks(monkeypatch, tmp_path):
     monkeypatch.setenv("PROMETHEUS_MULTIPROC_DIR", str(tmp_path / "prometheus"))
     return runpy.run_path(str(CONF_PATH))
+
+
+@pytest.fixture
+def hooks(all_hooks, monkeypatch):
+    """The hooks with the SCT event queue sweep stubbed out, so a test sees only the health process."""
+    monkeypatch.setitem(all_hooks["when_ready"].__globals__, "_sweep_event_queue", lambda server: None)
+    return all_hooks
 
 
 @pytest.fixture
@@ -198,3 +205,37 @@ def test_when_ready_logs_a_failed_start_and_keeps_the_master(hooks, server, conf
         hooks["when_ready"](server)
     server.log.exception.assert_called_once()
     assert server.health_pipes is None
+
+
+def test_when_ready_starts_the_event_queue_sweep_detached(all_hooks, server, config_file):
+    with (
+        patch.object(Config, "locate_argus_web_config", return_value=config_file("")),
+        patch.object(subprocess, "Popen") as popen,
+    ):
+        all_hooks["when_ready"](server)
+    (command,), options = popen.call_args
+    assert command == [
+        "/bin/sh", "-c", '"$@" &', "sh",
+        sys.executable, "-m", "argus.backend.cli", "process-event-queue", "--min-age", "0",
+    ]
+    assert options["start_new_session"] is True
+    popen.return_value.wait.assert_called_once_with()
+
+
+def test_when_ready_logs_a_failed_sweep_start_and_starts_the_health_process(all_hooks, server, config_file):
+    sweep = all_hooks["EVENT_SWEEP_COMMAND"]
+    health = MagicMock()
+
+    def popen(command, **options):
+        if command[-len(sweep):] == sweep:
+            raise OSError("fork failed")
+        return health
+
+    with (
+        patch.object(Config, "locate_argus_web_config", return_value=config_file("HEALTH_ENABLED: true\n")),
+        patch.object(subprocess, "Popen", side_effect=popen),
+    ):
+        all_hooks["when_ready"](server)
+    server.log.exception.assert_called_once()
+    health.wait.assert_called_once_with()
+    assert all(is_open(fd) for fd in server.health_pipes)

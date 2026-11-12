@@ -70,7 +70,8 @@ class BgeSmallEnEmbeddingModel:
         missing model does not cost every event a full download attempt."""
         if self._session is not None:
             return
-        if self._failed_at is not None and time.monotonic() - self._failed_at < self.RETRY_AFTER:
+        cooling_down = self._failed_at is not None and time.monotonic() - self._failed_at < self.RETRY_AFTER
+        if cooling_down and not self._is_extracted():
             raise EmbeddingModelError(f"{self.MODEL_NAME} is unavailable after a failed load; retrying later")
         try:
             self._load()
@@ -102,20 +103,27 @@ class BgeSmallEnEmbeddingModel:
         model_dir = self.DOWNLOAD_PATH / self.EXTRACTED_FOLDER_NAME
         return (model_dir / "model.onnx").exists() and (model_dir / "tokenizer.json").exists()
 
+    def _has_archive(self, archive: Path) -> bool:
+        return archive.exists() and _sha256(archive) == self._MODEL_SHA256
+
     def _extract_archive(self) -> None:
         archive = self.DOWNLOAD_PATH / self.ARCHIVE_FILENAME
-        if not (archive.exists() and _sha256(archive) == self._MODEL_SHA256):
+        if not self._has_archive(archive):
             self._download(archive)
         staging = Path(tempfile.mkdtemp(dir=self.DOWNLOAD_PATH, prefix=".extract-"))
         try:
             with tarfile.open(archive, "r:gz") as tar:
                 tar.extractall(staging, filter="data")
+            target = self.DOWNLOAD_PATH / self.EXTRACTED_FOLDER_NAME
             try:
-                os.rename(staging / self.EXTRACTED_FOLDER_NAME, self.DOWNLOAD_PATH / self.EXTRACTED_FOLDER_NAME)
+                os.rename(staging / self.EXTRACTED_FOLDER_NAME, target)
             except OSError:
-                if not self._is_extracted():
-                    raise
-                LOGGER.info("Another process extracted %s first", self.MODEL_NAME)
+                if self._is_extracted():
+                    LOGGER.info("Another process extracted %s first", self.MODEL_NAME)
+                else:
+                    LOGGER.warning("Replacing the incomplete model directory %s", target)
+                    shutil.rmtree(target, ignore_errors=True)
+                    os.rename(staging / self.EXTRACTED_FOLDER_NAME, target)
         finally:
             shutil.rmtree(staging, ignore_errors=True)
 
@@ -136,6 +144,9 @@ class BgeSmallEnEmbeddingModel:
             except requests.RequestException as exc:
                 failure = exc
             partial.unlink(missing_ok=True)
+            if self._has_archive(archive):
+                LOGGER.info("Another process downloaded %s", self.MODEL_NAME)
+                return
             LOGGER.warning("Model download attempt %d/%d failed: %s", attempt, self.DOWNLOAD_ATTEMPTS, failure)
             if attempt < self.DOWNLOAD_ATTEMPTS:
                 time.sleep(2 ** (attempt - 1))
