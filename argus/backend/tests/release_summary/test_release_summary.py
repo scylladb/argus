@@ -1,4 +1,5 @@
 import asyncio
+import threading
 import time
 from datetime import UTC, datetime
 from unittest.mock import patch
@@ -239,6 +240,45 @@ async def test_a_recompute_that_ends_after_the_release_is_deleted_leaves_no_summ
     await ReleaseSummaryService()._recompute(seeded.release, datetime.now(UTC))
 
     assert await ReleaseSummaryService._read(seeded.release.id) == ({}, None, None)
+
+
+async def test_an_older_recompute_never_overwrites_a_newer_one(release_manager_service):
+    seeded = await seed_release(release_manager_service, test_count=1)
+    release_id = seeded.release.id
+    older, newer = datetime(2030, 1, 1, tzinfo=UTC), datetime(2030, 1, 2, tzinfo=UTC)
+
+    await ReleaseSummaryService._write(release_id, {("2030.1", "2030.1.0"): {"marker": "new"}}, newer)
+    await ReleaseSummaryService._write(release_id, {("2030.1", "2030.1.0"): {"marker": "old"}}, older)
+
+    stored, _, generated_at = await ReleaseSummaryService._read(release_id)
+    assert stored == {("2030.1", "2030.1.0"): {"marker": "new"}} and generated_at == newer
+
+
+async def test_a_recompute_started_by_a_later_change_stores_after_the_running_one(release_manager_service):
+    seeded = await seed_release(release_manager_service, test_count=1)
+    first_running, finish_first = threading.Event(), threading.Event()
+    markers = iter(["old", "new"])
+
+    def build(_data):
+        marker = next(markers)
+        if marker == "old":
+            first_running.set()
+            finish_first.wait(10)
+        return {("2030.1", "2030.1.0"): {"marker": marker}}
+
+    service = ReleaseSummaryService()
+    with patch("argus.backend.service.release_summary.build_summaries", side_effect=build):
+        first = service._recompute_task(seeded.release, None)
+        await asyncio.to_thread(first_running.wait, 10)
+        await asyncio.sleep(0.01)
+        second = service._recompute_task(seeded.release, datetime.now(UTC))
+        await asyncio.sleep(0.2)
+        finish_first.set()
+        await asyncio.gather(first, second)
+
+    stored, _, _ = await ReleaseSummaryService._read(seeded.release.id)
+    assert second is not first
+    assert stored == {("2030.1", "2030.1.0"): {"marker": "new"}}
 
 
 async def test_a_summary_that_could_not_be_stored_comes_back_stale(release_manager_service, client_service):

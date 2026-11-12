@@ -434,7 +434,8 @@ class ReleaseSummaryService:
         if running is None or running[0].done() or (invalidated_at is not None and running[1] <= invalidated_at):
             now = datetime.now(UTC)
             started_at = now.replace(microsecond=now.microsecond // 1000 * 1000)
-            task = asyncio.create_task(self._recompute(release, started_at))
+            previous = running[0] if running is not None and not running[0].done() else None
+            task = asyncio.create_task(self._recompute(release, started_at, previous))
             self._recomputes[release_id] = (task, started_at)
             task.add_done_callback(lambda done: self._recomputes.pop(release_id, None)
                                    if self._recomputes.get(release_id, (None,))[0] is done else None)
@@ -442,9 +443,12 @@ class ReleaseSummaryService:
             running = (task, started_at)
         return running[0]
 
-    async def _recompute(self, release: ArgusRelease,
-                         started_at: datetime) -> tuple[dict[tuple[str, str], Summary], datetime, bool]:
+    async def _recompute(self, release: ArgusRelease, started_at: datetime,
+                         previous: asyncio.Task | None = None) -> tuple[dict[tuple[str, str], Summary], datetime, bool]:
+        """Build the release's summaries and store them, after the recompute it replaces has stored its own."""
         summaries = await asyncio.to_thread(build_summaries, await self._load(release))
+        if previous is not None:
+            await asyncio.wait([previous])
         try:
             await self._write(release.id, summaries, started_at)
             if not await select_rows(ArgusRelease.find(id=release.id), "id"):
@@ -456,7 +460,9 @@ class ReleaseSummaryService:
 
     @staticmethod
     async def _write(release_id: UUID, summaries: dict[tuple[str, str], Summary], started_at: datetime) -> None:
-        existing = await select_rows(ReleaseSummary.find(release_id=release_id), "family", "version")
+        existing = await select_rows(ReleaseSummary.find(release_id=release_id), "family", "version", "generated_at")
+        if existing and existing[0]["generated_at"] is not None and as_utc(existing[0]["generated_at"]) >= started_at:
+            return
         gone = {(row["family"], row["version"]) for row in existing if row["family"] is not None} - set(summaries)
         await asyncio.gather(*(
             ReleaseSummary.find(release_id=release_id, family=family, version=version).update(
