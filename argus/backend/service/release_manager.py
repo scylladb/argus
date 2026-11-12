@@ -221,9 +221,8 @@ class ReleaseManagerService:
             await row.delete()
         for row in await ReleaseStatsSnapshot.find(release_id=release.id).all():
             await row.delete()
-        await ReleaseSummary.find(release_id=release.id).delete()
-
         await release.delete()
+        await ReleaseSummary.find(release_id=release.id).delete()
         return True
 
     async def batch_move_tests(self, new_group_id: UUID, tests: list[UUID]) -> bool:
