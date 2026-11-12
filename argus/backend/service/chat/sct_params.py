@@ -3,7 +3,7 @@ applied to the parameters of a start proposed from the chat."""
 import re
 
 from argus.backend.service.github_service import GithubService
-from argus.backend.service.jenkins_service import SCT_VERSION_SOURCE_FAMILIES
+from argus.backend.service.jenkins_service import SCT_ON_BASE_IMAGE, SCT_VERSION_SOURCE_FAMILIES
 
 BACKENDS = {
     "aws": "Amazon AWS",
@@ -52,6 +52,7 @@ FORMATS = {
                        "master:2025-11-01T10:00:00Z, relocatable:master:x86_64)"),
     "scylla_repo": (URL_RE, "an http(s) link to the .repo or .list file"),
     "new_scylla_repo": (URL_RE, "an http(s) link to the .repo or .list file"),
+    "unified_package": (URL_RE, "an http(s) link to the unified package .tar.gz"),
     "scylla_ami_id": (re.compile(r"^((ami-[abcdef\d]{4,17}|scylla-\S+)( (ami-[abcdef\d]{4,17}|scylla-\S+))*|"
                                  r"resolve:ssm:\S+)$"),
                       "ami-<hex id>, one per region separated by spaces, or an SSM parameter as resolve:ssm:<name>"),
@@ -71,7 +72,7 @@ FIELD_GROUPS = {
                     "availability_zone", "provision_type", "billing_project"),
     "scylla": ("scylla_version", "scylla_repo", "scylla_ami_id", "gce_image_db", "azure_image_db",
                "oci_image_db", "new_scylla_repo", "base_versions", "byo_scylla_repo", BYO_BRANCH,
-               "update_db_packages"),
+               "unified_package", "update_db_packages"),
     "test": ("test_name", "test_config", "stress_duration"),
     "post_test": tuple(name for name in FIXED_VALUES if name.startswith("post_behavior_")),
     "reporting": ("email_recipients",),
@@ -100,9 +101,11 @@ def normalize(params: dict[str, str], overrides: dict[str, str]) -> tuple[dict[s
     merged = params | overrides
     changed = set(overrides)
     families = {FAMILY_OF[name] for name in overrides if name in FAMILY_OF and str(overrides[name]).strip()}
-    if len(families) == 1:
+    base_image = bool(families & set(SCT_ON_BASE_IMAGE))
+    if len(families - {"scylla_image"} if base_image else families) == 1:
+        kept = families | ({"scylla_image"} if base_image else set())
         for name, family in FAMILY_OF.items():
-            if family not in families and name in merged and name not in overrides and merged[name]:
+            if family not in kept and name in merged and name not in overrides and merged[name]:
                 merged[name] = ""
                 changed.add(name)
     if "backend" in overrides and (group := backend_group(overrides["backend"])):

@@ -28,6 +28,7 @@ LAST_BUILD = [
     {"name": "scylla_ami_id", "value": ""},
     {"name": "azure_image_db", "value": ""},
     {"name": "oci_image_db", "value": ""},
+    {"name": "unified_package", "value": ""},
     {"name": "byo_scylla_repo", "value": ""},
     {"name": "byo_scylla_branch", "value": ""},
     {"name": "provision_type", "value": "spot",
@@ -116,6 +117,15 @@ async def test_values_sct_accepts_beyond_the_wizard_lists_pass(ctx, seeded, jenk
     outcome = await call(ctx, "execute_tests", tests=[seeded.tests[0].name], params=overrides)
 
     assert not outcome.error, outcome.content
+
+
+async def test_a_unified_package_replaces_the_version_and_keeps_the_base_image(ctx, seeded, jenkins):
+    package = "https://downloads.scylladb.com/unstable/scylla/master/relocatable/latest/scylla-unified.tar.gz"
+    params = params_of(await call(ctx, "execute_tests", tests=[seeded.tests[0].name],
+                                  params={"scylla_ami_id": "ami-0123456789abcdef0", "unified_package": package}))
+
+    assert (params["unified_package"], params["scylla_ami_id"]) == (package, "ami-0123456789abcdef0")
+    assert params["scylla_repo"] == "" and params["scylla_version"] == ""
 
 
 async def test_overrides_follow_the_wizard(ctx, seeded, jenkins):

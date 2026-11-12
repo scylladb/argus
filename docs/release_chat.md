@@ -88,7 +88,9 @@ appears, Argus checks every override against the test's own Jenkins job:
   (`master:bedcc69`), a build timestamp (`master:2025-11-01T10:00:00Z`) or a
   relocatable build (`relocatable:master:x86_64`). `scylla_ami_id` takes AMI ids, one per
   region, or an SSM parameter as `resolve:ssm:<name>`. Setting one version
-  source clears the others. The parameter wizard's backends and regions are
+  source clears the others. A `unified_package` or a rolling upgrade's
+  `new_scylla_repo` installs on top of the image, so the image stays as the
+  base OS. The parameter wizard's backends and regions are
   offered as suggestions, and a new backend gets its first suggested region
   when the job leaves it empty.
 

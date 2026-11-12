@@ -25,7 +25,10 @@ SCT_VERSION_SOURCE_FAMILIES: dict[str, list[str]] = {
     "scylla_image": ["scylla_ami_id", "gce_image_db", "azure_image_db", "oci_image_db"],
     "rolling_upgrade": ["new_scylla_repo"],
     "scylla_byo": ["byo_scylla_repo"],
+    "unified_package": ["unified_package"],
 }
+# Families that install Scylla on top of the image, so the image is their base OS rather than a second source.
+SCT_ON_BASE_IMAGE = ("rolling_upgrade", "unified_package")
 
 
 class Parameter(TypedDict):
@@ -208,8 +211,7 @@ class JenkinsService:
             for family, keys in SCT_VERSION_SOURCE_FAMILIES.items()
             if any(str(params.get(key) or "").strip() for key in keys)
         ]
-        # A rolling upgrade installs new_scylla_repo on top of the image, so the image is its base OS.
-        if "rolling_upgrade" in set_families and "scylla_image" in set_families:
+        if "scylla_image" in set_families and any(family in set_families for family in SCT_ON_BASE_IMAGE):
             set_families.remove("scylla_image")
         if not set_families:
             options = ", ".join(
