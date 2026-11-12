@@ -19,6 +19,20 @@ class SilentEventSource {
     close() {}
 }
 
+class TalkingEventSource {
+    static last: TalkingEventSource | null = null;
+    onmessage: ((message: { data: string }) => void) | null = null;
+    onerror = null;
+    readyState = 1;
+    constructor() {
+        TalkingEventSource.last = this;
+    }
+    emit(event: unknown) {
+        this.onmessage?.({ data: JSON.stringify(event) });
+    }
+    close() {}
+}
+
 const conversation = (nodes = [chatNode("q", "user", null, { content: "what failed?" }),
                                chatNode("a", "assistant", "q", { content: "two tests" })]): Conversation => ({
     entity_id: "r1", entity_type: "release", entity_name: "scylla-2025.1", scopes: [], configured: true,
@@ -81,6 +95,48 @@ describe("ChatModal", () => {
         render(ChatModal, { props: { entityType: "release", entityId: "r1", entityName: "scylla-2025.1",
                                      onClose: vi.fn() } });
         expect(await screen.findByText(/your next question compacts it first/)).toBeTruthy();
+    });
+
+    it("keeps a newer snapshot over a load that started before it", async () => {
+        let finishLoad: (value: Conversation) => void = () => {};
+        vi.stubGlobal("EventSource", TalkingEventSource);
+        vi.mocked(fetchJson).mockImplementation(async (url: string) => url.endsWith("/memories") ? []
+            : new Promise((resolve) => { finishLoad = resolve; }));
+        render(ChatModal, { props: { entityType: "release", entityId: "r1", entityName: "scylla-2025.1",
+                                     onClose: vi.fn() } });
+
+        TalkingEventSource.last?.emit({ type: "snapshot", conversation: conversation([
+            chatNode("q", "user", null, { content: "what failed?" }),
+            chatNode("a", "assistant", "q", { content: "three tests" })]) });
+        finishLoad(conversation());
+
+        expect(await screen.findByText("three tests")).toBeTruthy();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(screen.queryByText("two tests")).toBeNull();
+    });
+
+    it("keeps streamed text when the question's response arrives after it", async () => {
+        vi.stubGlobal("EventSource", TalkingEventSource);
+        const question = chatNode("q2", "user", "a", { content: "and now?" });
+        const answer = chatNode("a2", "assistant", "q2", { status: "streaming" });
+        vi.mocked(fetchJson).mockImplementation(async (url: string, init?: RequestInit) => {
+            if (url.endsWith("/memories")) return [];
+            if (init?.method !== "POST") return conversation();
+            TalkingEventSource.last?.emit({ type: "node", node: question });
+            TalkingEventSource.last?.emit({ type: "node", node: answer });
+            TalkingEventSource.last?.emit({ type: "state", head: "a2", busy: { node: "a2", user_id: "u1", since: "" },
+                                            context: conversation().context });
+            TalkingEventSource.last?.emit({ type: "delta", node: "a2", content: "one test" });
+            return { user_node: question, assistant_node: answer };
+        });
+        render(ChatModal, { props: { entityType: "release", entityId: "r1", entityName: "scylla-2025.1",
+                                     onClose: vi.fn() } });
+        expect(await screen.findByText("two tests")).toBeTruthy();
+
+        await fireEvent.input(screen.getByLabelText("Question"), { target: { value: "and now?" } });
+        await fireEvent.click(screen.getByRole("button", { name: /Send/ }));
+
+        expect(await screen.findByText("one test")).toBeTruthy();
     });
 
     it("shows no clear button to other users", async () => {

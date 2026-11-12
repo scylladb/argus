@@ -95,9 +95,17 @@
     const fail = (error: unknown) =>
         sendMessage("error", error instanceof Error ? error.message : String(error), "Chat");
 
+    let changes = 0;
+    const update = (next: Conversation | null) => {
+        changes += 1;
+        conversation = next;
+    };
+
     const load = async () => {
+        const seen = changes;
         try {
-            conversation = await fetchJson<Conversation>(base);
+            const loaded = await fetchJson<Conversation>(base);
+            if (seen === changes) conversation = loaded;
             loadError = "";
         } catch (error) {
             loadError = error instanceof Error ? error.message : String(error);
@@ -126,28 +134,34 @@
             return;
         }
         if (event.type === "snapshot") {
-            conversation = event.conversation;
+            update(event.conversation);
             return;
         }
         if (!conversation) return;
         const follow = nearBottom();
         if (event.type === "node") watch(event.node);
         if (event.type === "delta") watched.add(event.node);
-        conversation = applyEvent(conversation, event);
+        update(applyEvent(conversation, event));
         if (follow) scrollToBottom(true);
     };
 
     const applyStarted = (started: Started) => {
         if (!conversation) return;
+        const known = new Set(conversation.nodes.map((node) => node.node));
+        if (known.has(started.assistant_node.node)) {
+            scrollToBottom(true);
+            return;
+        }
+        let next = conversation;
         for (const node of [started.user_node, started.assistant_node]) {
-            if (node) {
+            if (node && !known.has(node.node)) {
                 watch(node);
-                conversation = applyEvent(conversation, { type: "node", node });
+                next = applyEvent(next, { type: "node", node });
             }
         }
-        conversation = { ...conversation, head: started.assistant_node.node,
-                         busy: { node: started.assistant_node.node, user_id: started.assistant_node.user_id ?? "",
-                                 since: started.assistant_node.created_at } };
+        update({ ...next, head: started.assistant_node.node,
+                 busy: { node: started.assistant_node.node, user_id: started.assistant_node.user_id ?? "",
+                         since: started.assistant_node.created_at } });
         scrollToBottom(true);
     };
 
@@ -163,7 +177,7 @@
 
     const replace = async (path: string, body?: unknown) => {
         try {
-            conversation = await postJson<Conversation>(`${base}/${path}`, body);
+            update(await postJson<Conversation>(`${base}/${path}`, body));
         } catch (error) {
             fail(error);
         }
@@ -172,7 +186,7 @@
     const decideCard = async (node: string, decision: "confirm" | "dismiss" | "refresh") => {
         try {
             const card = await postJson<ChatNode>(`${base}/actions/${node}/${decision}`);
-            if (conversation) conversation = applyEvent(conversation, { type: "node", node: card });
+            if (conversation) update(applyEvent(conversation, { type: "node", node: card }));
         } catch (error) {
             fail(error);
         }
@@ -181,7 +195,7 @@
     const adjustCard = async (node: string, testId: string, overrides: Record<string, string>) => {
         try {
             const card = await postJson<ChatNode>(`${base}/actions/${node}/params`, { tests: { [testId]: overrides } });
-            if (conversation) conversation = applyEvent(conversation, { type: "node", node: card });
+            if (conversation) update(applyEvent(conversation, { type: "node", node: card }));
             return null;
         } catch (error) {
             return error instanceof Error ? error.message : String(error);
@@ -191,7 +205,7 @@
     const clear = async () => {
         confirmingClear = false;
         try {
-            conversation = await postJson<Conversation>(base, undefined, "DELETE");
+            update(await postJson<Conversation>(base, undefined, "DELETE"));
         } catch (error) {
             fail(error);
         }
