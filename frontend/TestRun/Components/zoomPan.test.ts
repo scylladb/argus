@@ -245,6 +245,22 @@ describe("zoomPan action", () => {
         expect(view()).toEqual({ scale: 2, x: -100, y: 0 });
     });
 
+    it("steps to the neighbour on a swipe that starts at the pan edge of a zoomed image", () => {
+        const { node, onSwipe, view } = mount({ scale: 2, x: 500, y: 0 });
+
+        drag(node, [400, 400], [520, 400], { pointerType: "touch" });
+        expect(onSwipe).toHaveBeenLastCalledWith("prev");
+        expect(view()).toEqual({ scale: 2, x: 500, y: 0 });
+
+        drag(node, [600, 400], [500, 400], { pointerType: "touch" });
+        expect(onSwipe).toHaveBeenCalledTimes(1);
+        expect(view()).toEqual({ scale: 2, x: 400, y: 0 });
+
+        drag(node, [400, 400], [520, 400], { pointerType: "touch" });
+        expect(onSwipe).toHaveBeenCalledTimes(1);
+        expect(view()).toEqual({ scale: 2, x: 500, y: 0 });
+    });
+
     it("toggles between the fitted size and the actual pixels on a double-click on the image", () => {
         const { image, view } = mount();
 

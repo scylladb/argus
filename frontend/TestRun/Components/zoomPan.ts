@@ -67,6 +67,7 @@ export type ZoomPanParams = {
 
 const TAP_SLOP = 4;
 const SWIPE_MIN = 50;
+const EDGE_SLACK = 0.5;
 const WHEEL_LINE = 16;
 const WHEEL_RATE = 0.002;
 const PINCH_RATE = 0.01;
@@ -84,11 +85,19 @@ export function zoomPan(node: HTMLElement, params: ZoomPanParams): { destroy(): 
         travelled: number;
         dragging: boolean;
         pinched: boolean;
+        edges: { prev: boolean; next: boolean };
     } | null = null;
 
     const bounds = () => {
         const image = params.image();
         return image ? measure(node, image) : null;
+    };
+
+    const edges = () => {
+        const view = params.view();
+        const current = bounds();
+        const limit = current ? (current.imageWidth * view.scale - current.stageWidth) / 2 : 0;
+        return { prev: view.x >= limit - EDGE_SLACK, next: view.x <= EDGE_SLACK - limit };
     };
 
     const pointAt = (clientX: number, clientY: number): Point => {
@@ -119,7 +128,15 @@ export function zoomPan(node: HTMLElement, params: ZoomPanParams): { destroy(): 
         }
         const position = { x: event.clientX, y: event.clientY };
         if (pointers.size === 0) {
-            gesture = { start: position, target: event.target, pointerType: event.pointerType, travelled: 0, dragging: false, pinched: false };
+            gesture = {
+                start: position,
+                target: event.target,
+                pointerType: event.pointerType,
+                travelled: 0,
+                dragging: false,
+                pinched: false,
+                edges: edges(),
+            };
         } else if (gesture) {
             gesture.pinched = true;
             if (gesture.dragging) {
@@ -173,8 +190,12 @@ export function zoomPan(node: HTMLElement, params: ZoomPanParams): { destroy(): 
         }
         const dx = event.clientX - finished.start.x;
         const dy = event.clientY - finished.start.y;
-        if (finished.pointerType === "touch" && params.view().scale === 1 && Math.abs(dx) > SWIPE_MIN && Math.abs(dx) > Math.abs(dy)) {
-            params.onSwipe(dx < 0 ? "next" : "prev");
+        if (finished.pointerType !== "touch" || Math.abs(dx) <= SWIPE_MIN || Math.abs(dx) <= Math.abs(dy)) {
+            return;
+        }
+        const direction = dx < 0 ? "next" : "prev";
+        if (finished.edges[direction]) {
+            params.onSwipe(direction);
         }
     };
 
