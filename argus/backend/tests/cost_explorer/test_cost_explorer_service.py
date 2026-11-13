@@ -269,3 +269,13 @@ async def test_query_for_view_matches_any_of_the_view_ids(explorer, plugin, api_
     assert result["tiles"]["spend"] == pytest.approx(7.0)
     with pytest.raises(DataValidationError):
         await explorer.query_for_view(uuid.uuid4(), start=START, end=END)
+
+
+async def test_top_runs_carry_who_started_them(explorer, plugin):
+    release_id = uuid.uuid4()
+    await seed(plugin, START + timedelta(days=1), release_id, actual_cost=5.0, started_by="alice")
+    await seed(plugin, START + timedelta(days=2), release_id, actual_cost=3.0)
+
+    result = await explorer.explore(query(plugin, release_ids=frozenset([release_id])))
+
+    assert [run["started_by"] for run in result["top_runs"]] == ["alice", None]

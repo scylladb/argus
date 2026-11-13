@@ -7,7 +7,7 @@ from pydantic import Field
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.web import ArgusRelease
-from argus.backend.plugins.core import PluginModelBase
+from argus.backend.plugins.core import ROLLUP_COLUMNS, PluginModelBase
 from argus.backend.plugins.generic.types import GenericRunFinishRequest, GenericRunSubmitRequest
 from argus.backend.util.common import get_build_number
 from argus.common.enums import TestStatus
@@ -30,6 +30,13 @@ class GenericRun(PluginModelBase):
     def _stats_columns(cls) -> tuple[str, ...]:
         return ("id", "test_id", "group_id", "release_id", "status", "start_time", "build_job_url", "build_id",
                 "assignee", "end_time", "investigation_status", "heartbeat", "build_number", "scylla_version")
+
+    @classmethod
+    def cost_rollup_columns(cls) -> tuple[str, ...]:
+        return ROLLUP_COLUMNS + ("started_by",)
+
+    async def cost_rollup_fields(self, item_names: set[str]) -> dict:
+        return {"started_by": self.started_by}
 
     @classmethod
     async def get_distinct_product_versions(cls, release: ArgusRelease) -> list[str]:
