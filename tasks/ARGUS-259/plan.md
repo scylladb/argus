@@ -137,7 +137,7 @@ writes one line `argus: cannot upgrade to <v>: <err>; run argus upgrade` to
 writes nothing when `ctx` ended. On success it writes `argus: upgraded
 <from> -> <to>`. `Daily` writes nothing else.
 
-- [ ] Write tests: a second `Daily` on the same day sends no request, a
+- [x] Write tests: a second `Daily` on the same day sends no request, a
       `Daily` on the next day sends one, a failed list still writes the
       date, a held lock skips the check, a corrupt state file counts as no
       check, `Upgrade` on `dev` returns `ErrDevBuild`, an up-to-date binary
@@ -148,10 +148,10 @@ writes nothing when `ctx` ended. On success it writes `argus: upgraded
       nothing, root and a user that does not own the binary skip `Daily`,
       a read-only directory skips `Daily` and fails `Upgrade` before the
       list.
-- [ ] Run them and confirm the failure.
-- [ ] Write `Updater`, `Upgrade`, `Daily` and the state helpers.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write `Updater`, `Upgrade`, `Daily` and the state helpers.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 5 — Daily update and re-exec in `main`
 
