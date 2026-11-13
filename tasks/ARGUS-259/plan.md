@@ -66,16 +66,16 @@ when GitHub answers 401. It keeps tags with the prefix `cli/v` that are not draf
 is left out. A status other than 200 returns `ErrReleaseList`.
 `ArchiveName(version, goos, goarch)` gives the archive name.
 
-- [ ] Write tests against `httptest`: backend tags and drafts are left out,
+- [x] Write tests against `httptest`: backend tags and drafts are left out,
       the token header is sent when the variable is set, a 403 returns
       `ErrReleaseList`, a release with no asset for the platform is left
       out, a refused token is sent again without it, a page of backend
       releases leads to the next page, a page with only a CLI pre-release
       leads to the next page, the list stops after 5 pages.
-- [ ] Run them and confirm the failure.
-- [ ] Write `ListReleases` and `ArchiveName`.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write `ListReleases` and `ArchiveName`.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 3 — Download, verify and install
 
