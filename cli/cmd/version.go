@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+
+	"github.com/scylladb/argus/cli/internal/api"
 )
 
 // buildVersion holds the version metadata injected by main via SetVersionInfo.
@@ -18,11 +20,13 @@ var buildVersion = struct {
 }
 
 // SetVersionInfo is called by main to forward the ldflags-injected build
-// metadata into the cmd package before ExecuteContext is invoked.
+// metadata into the cmd package before ExecuteContext is invoked. The
+// version also goes into the User-Agent header of every Argus request.
 func SetVersionInfo(version, commit, date string) {
 	buildVersion.version = version
 	buildVersion.commit = commit
 	buildVersion.date = date
+	api.SetVersion(version)
 }
 
 var cliVersionCmd = &cobra.Command{
