@@ -217,9 +217,9 @@ An error returns exit code 1.
 **Files:**
 - Modify: `.github/workflows/cli-release.yml`, step `Resolve bare version`
 
-- [ ] Refuse a pre-release identifier that mixes letters and digits, such
+- [x] Refuse a pre-release identifier that mixes letters and digits, such
       as `rc1`, and name the `rc.N` form in the error.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 9 — User-Agent on Argus requests
 
