@@ -206,11 +206,11 @@ An error returns exit code 1.
 - Modify: `cli/README.md`, section `Installation` and a new section
   `Updates`
 
-- [ ] Describe the daily check, the `exec` of the new binary,
+- [x] Describe the daily check, the `exec` of the new binary,
       `argus upgrade [--prerelease]`, the `dev` build rule, the pre-release
       rules, `ARGUS_NO_AUTO_UPGRADE`, `GITHUB_TOKEN`, and the state file.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 8 — Release tag check
 

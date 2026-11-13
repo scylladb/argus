@@ -4,7 +4,7 @@ Command-line interface for [Argus](https://argus.scylladb.com) — a test tracki
 
 ## Installation
 
-Download the latest release from the [releases page](https://github.com/scylladb/argus/releases) and place the binary somewhere on your `$PATH`.
+Download the latest release from the [releases page](https://github.com/scylladb/argus/releases) and place the binary somewhere on your `$PATH`. After that, the CLI keeps itself on the latest release. See [Updates](#updates).
 
 For a quick install example, see the [root README](../README.md).
 
@@ -367,6 +367,35 @@ argus results query scylla-master --table throughput --column ops --run-limit 20
 
 The release is a name or a UUID. `--table` matches a substring of the table name, in any case. The output groups the results by table, then by test with its `build_id`, then by run, newest run first. `--since` and `--until` filter on the start time of the run, and `--since` defaults to 30 days before `--until`, or before now. Runs marked as ignored are left out. Each test returns its 100 newest runs, and `runs_truncated` is true when it has more. `--run-limit` changes that number, up to 1000. A `--table` filter that matches more than 500 tables across the tests is an error, and `--table-limit` changes that number, up to 2000. `--column` keeps only the cells of the named columns. Columns marked as hidden are left out unless you pass `--show-hidden`. `--sut-since` and `--sut-until` filter on `sut_timestamp`, the date of the SUT build.
 
+## Updates
+
+The first command of each local calendar day, except `argus version` and help, checks GitHub for a newer `cli/v*` release. When it finds one, the CLI downloads the archive for your platform, checks its SHA-256 sum against the checksum file of the release, and replaces its own binary. Then it starts the new binary with the same arguments, so your command runs on the new version. One line on stderr names both versions. Standard output does not change.
+
+Run the update at any time:
+
+```bash
+argus upgrade
+argus upgrade --prerelease
+```
+
+The rules:
+
+- A stable build installs stable releases only. A release that GitHub marks as a pre-release counts as a pre-release.
+- A pre-release build, such as `0.6.0-rc.1`, also installs a newer pre-release of the same version, such as `0.6.0-rc.2`.
+- `--prerelease` installs the newest release of any kind.
+- A build from source reports the version `dev` and never updates.
+- The daily check runs at most once a day, also when it fails. It usually sends one request. It reads more pages of the release list only when a page holds no stable CLI release.
+- A failed check or download does not fail your command. A failed install prints one warning line that names `argus upgrade`.
+- One update at a time replaces the binary, also across users. `argus upgrade` waits while another update runs, and it stops when that update replaced the binary.
+- Ctrl-C during the daily check stops the command before it starts, with exit code 130.
+- The daily check runs only for the user that owns the binary, and never as root, so `sudo argus ...` keeps the installed version.
+- The daily check skips when the directory of the binary is not writable, for example on a read-only mount. `argus upgrade` then fails before it contacts GitHub.
+- For a binary that root owns, run `sudo argus upgrade`.
+
+Every request to Argus sends `User-Agent: argus-cli/<version> (<os>/<arch>)`.
+
+Set `ARGUS_NO_AUTO_UPGRADE=1` to turn the daily check off, for example in a CI job that pins a version. `argus upgrade` still works. When `GITHUB_TOKEN` or `GH_TOKEN` is set, the check sends it to GitHub, under the higher rate limit. When GitHub refuses the token, the check sends the request again without it.
+
 ---
 
 ## Storage locations
@@ -377,6 +406,7 @@ The release is a name or a UUID. `--table` matches a substring of the table name
 | Cached responses | `$XDG_CACHE_HOME/argus-cli/cache/` |
 | Cloudflared binary | `$XDG_CACHE_HOME/argus-cli/cloudflared` |
 | Logs | `$XDG_CACHE_HOME/argus-cli/logs/` |
+| Date of the last update check | `$XDG_CACHE_HOME/argus-cli/upgrade.json` |
 | Credentials | System keychain |
 
 On Linux `$XDG_CONFIG_HOME` defaults to `~/.config` and `$XDG_CACHE_HOME` to `~/.cache`.
