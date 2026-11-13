@@ -173,12 +173,12 @@ with 130 when a signal ended the context during the check. When it returns
 "ARGUS_UPGRADED_FROM="+version))`. When `Exec` returns an error, `main`
 writes one warning line and continues.
 
-- [ ] Write tests for the skip rules of `AutoUpgrade`, with an `Updater`
+- [x] Write tests for the skip rules of `AutoUpgrade`, with an `Updater`
       that counts the calls.
-- [ ] Run them and confirm the failure.
-- [ ] Write `AutoUpgrade` and the change in `main`.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write `AutoUpgrade` and the change in `main`.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 6 — `argus upgrade` command
 
