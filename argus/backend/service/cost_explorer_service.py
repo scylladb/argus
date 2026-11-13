@@ -268,7 +268,7 @@ class CostExplorerService:
             "status": row.status, "start_time": as_utc(row.start_time),
             "end_time": as_utc(row.end_time) if row.end_time else None,
             "backend": row.backend, "region": row.region, "spend": spend,
-            "coverage": row.coverage, "spot_terminated": row.spot_terminated,
+            "coverage": row.coverage, "spot_terminated": row.spot_terminated, "started_by": row.started_by,
         } for spend, row in priced[:TOP_RUNS]]
 
     @classmethod

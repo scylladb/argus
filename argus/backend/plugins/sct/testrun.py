@@ -248,7 +248,7 @@ class SCTTestRun(PluginModelBase):
 
     @classmethod
     def cost_rollup_columns(cls) -> tuple[str, ...]:
-        return ROLLUP_COLUMNS + ("cloud_setup", "sct_runner_host", "region_name")
+        return ROLLUP_COLUMNS + ("cloud_setup", "sct_runner_host", "region_name", "started_by")
 
     async def cost_rollup_fields(self, item_names: set[str]) -> dict:
         resources, critical_events = await asyncio.gather(
@@ -265,6 +265,7 @@ class SCTTestRun(PluginModelBase):
             "spot_terminated": any((kind or "").lower() == SPOT_TERMINATION_EVENT for (kind,) in critical_events),
             "resource_count": len(nodes),
             "priced_count": len(nodes & item_names),
+            "started_by": self.started_by,
         }
 
     @classmethod

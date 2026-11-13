@@ -19,6 +19,7 @@ class RunCostRollup(Document):
     group_id: Optional[UUID] = None
     test_id: Optional[UUID] = None
     status: str
+    started_by: Optional[str] = None
     end_time: Optional[datetime] = None
     backend: Optional[str] = None
     region: Optional[str] = None

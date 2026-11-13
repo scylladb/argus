@@ -137,6 +137,28 @@ async def test_refresh_copies_the_backend_and_the_region(client_service, run_cos
     assert row.status == "created"
 
 
+async def test_refresh_copies_who_started_an_sct_run(client_service, run_cost_service, fake_test):
+    _, run_id = await _submitted_run(client_service, fake_test)
+
+    row = await run_cost_service.refresh_rollup(run_id)
+
+    assert row.started_by == "default_user"
+    stored = await rollup_rows(run_id, row.release_id, row.month)
+    assert stored[0].started_by == "default_user"
+
+
+async def test_refresh_copies_who_started_a_generic_run(client_service, run_cost_service):
+    run_id = str(uuid.uuid4())
+    await client_service.submit_run("generic", {
+        "run_id": run_id, "build_id": f"generic-job-{run_id}", "build_url": "http://example.com/job/generic/3/",
+        "started_by": "generic_user"})
+
+    row = await run_cost_service.refresh_rollup(UUID(run_id))
+
+    assert row.plugin_name == "generic"
+    assert row.started_by == "generic_user"
+
+
 def test_month_of_treats_a_naive_datetime_as_utc():
     assert CostRollupService.month_of(datetime(2026, 10, 31, 23, 30)) == "2026-10"
     assert CostRollupService.month_of(datetime(2026, 10, 31, 23, 30, tzinfo=UTC)) == "2026-10"

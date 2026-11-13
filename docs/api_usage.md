@@ -305,7 +305,7 @@ Aggregates the cost of every run in a time window from the rollup
                   "plugin_name": "scylla-cluster-tests", "release": "2026.1", "group": "longevity",
                   "test": "longevity-100gb-4h", "status": "failed", "start_time": "...", "end_time": "...",
                   "backend": "aws", "region": "eu-west-1", "spend": 812.4, "coverage": "partial",
-                  "spot_terminated": false}],
+                  "spot_terminated": false, "started_by": "jenkins-user"}],
     "coverage": {"complete": 1002, "partial": 180, "none": 102, "estimate_only": {"count": 40, "spend": 9100.0}},
     "tiers": {"spot": {"spend": 24286.0, "items": 5100}, "on_demand": {"spend": 94120.0, "items": 6200},
               "untiered": {"spend": 0.0, "items": 0}},
@@ -316,7 +316,9 @@ Aggregates the cost of every run in a time window from the rollup
 }
 ```
 
-`top_runs` holds at most twenty runs by spend. `series.buckets` and every
+`top_runs` holds at most twenty runs by spend. `started_by` is the name the
+run was submitted with, `null` for a source that records none and for a row
+the rollup backfill has not rewritten yet. `series.buckets` and every
 backend list have the same length. `span` is the first and the last run
 start of the selected releases over their whole history, `null` when no
 release is selected or none has a run yet; the page uses it to move the

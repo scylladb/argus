@@ -36,15 +36,15 @@ stays in every plan built from a spec.
   `GenericRun.cost_rollup_fields()` returns `{"started_by": self.started_by}`.
 - `_top_runs` adds `"started_by": row.started_by` to each entry.
 
-- [ ] Write the failing tests: an SCT run submitted with `started_by` rolls up
+- [x] Write the failing tests: an SCT run submitted with `started_by` rolls up
       with it; a Generic run submitted through `ClientService.submit_run("generic", ...)`
       rolls up with it; a seeded row with `started_by="alice"` comes back on
       its `top_runs` entry, and one without it comes back as `None`.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Update the `top_runs` example in `docs/api_usage.md`.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Update the `top_runs` example in `docs/api_usage.md`.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 2 — Show the "Started by" column
 
