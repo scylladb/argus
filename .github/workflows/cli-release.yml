@@ -135,7 +135,15 @@ jobs:
               run: |
                   # Strip "cli/v" to get bare semver (e.g. cli/v1.2.3 → 1.2.3).
                   # Used as VERSION in GoReleaser templates for archive names and ldflags.
-                  echo "value=${GITHUB_REF_NAME#cli/v}" >> "$GITHUB_OUTPUT"
+                  version="${GITHUB_REF_NAME#cli/v}"
+                  # Semver compares an identifier with letters as text, so rc10 sorts
+                  # before rc9 and the CLI self-update skips it. Numbers in their own
+                  # identifier compare as numbers: rc.10 sorts after rc.9.
+                  if [[ "$version" =~ -.*[A-Za-z][0-9] ]]; then
+                      echo "::error::Pre-release $version mixes letters and digits in one identifier. Tag cli/vX.Y.Z-rc.N instead."
+                      exit 1
+                  fi
+                  echo "value=$version" >> "$GITHUB_OUTPUT"
 
             - name: Run GoReleaser
               uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2

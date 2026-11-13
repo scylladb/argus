@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -98,6 +99,27 @@ func TestNewRequest_NilBody(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "", req.Header.Get("Content-Type"))
 	assert.Nil(t, req.Body)
+}
+
+func TestNewRequest_SendsTheCLIUserAgent(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("User-Agent")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(srv.Close)
+	api.SetVersion("0.6.0")
+	t.Cleanup(func() { api.SetVersion("dev") })
+	c, err := api.New(srv.URL)
+	require.NoError(t, err)
+
+	req, err := c.NewRequest(context.Background(), http.MethodGet, "/api/v1/version", nil)
+	require.NoError(t, err)
+	resp, err := c.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+
+	assert.Equal(t, "argus-cli/0.6.0 ("+runtime.GOOS+"/"+runtime.GOARCH+")", got)
 }
 
 func TestNewRequest_WithBody(t *testing.T) {
