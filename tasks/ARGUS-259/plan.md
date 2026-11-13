@@ -36,17 +36,17 @@ candidate is a pre-release when its version has a pre-release part or when
 `Release.Prerelease` is set. The core of a version drops its pre-release
 and build parts.
 
-- [ ] Write table tests: stable to newer stable, stable skips a
+- [x] Write table tests: stable to newer stable, stable skips a
       pre-release, stable with `allowPrerelease` takes a pre-release,
       `0.6.0-rc1` to `0.6.0-rc2`, `0.6.0-rc1` to `0.6.0`, `0.6.0-rc1` skips
       `0.7.0-rc1`, `0.6.0-rc1` with `allowPrerelease` takes `0.7.0-rc1`,
       nothing newer, empty list, invalid tags skipped, `0.6.0-rc1+build.1`
       to `0.6.0-rc2`, `0.6.0-rc.9` to `0.6.0-rc.10`, a release that GitHub
       marks as a pre-release skipped without `allowPrerelease`.
-- [ ] Run them and confirm the failure.
-- [ ] Write `Select` and `IsDev`.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write `Select` and `IsDev`.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 2 — Release lookup on GitHub
 
