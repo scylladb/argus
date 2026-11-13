@@ -192,13 +192,13 @@ the annotation `SkipAuthRetryAnnotation`, and a no-op `PersistentPreRunE`, as
 `{"from","to","upgraded","path"}` as JSON, or the text line with `--text`.
 An error returns exit code 1.
 
-- [ ] Write tests with a fake `upgrader` behind the `newUpgrader` factory:
+- [x] Write tests with a fake `upgrader` behind the `newUpgrader` factory:
       JSON output after an upgrade, the `--prerelease` flag, `upgraded: false` when up to date, the error on `dev`, the
       text output.
-- [ ] Run them and confirm the failure.
-- [ ] Write `upgradeCmd`.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write `upgradeCmd`.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 7 — Documentation
 
