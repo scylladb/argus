@@ -96,17 +96,17 @@ error path.
 `ExecutablePath() (string, error)` returns `os.Executable` through
 `filepath.EvalSymlinks`.
 
-- [ ] Write tests: the binary at the target is replaced and keeps its mode,
+- [x] Write tests: the binary at the target is replaced and keeps its mode,
       a wrong sum leaves the target unchanged and no temporary file, a
       missing checksum line returns `ErrChecksum`, an archive with no
       `argus` entry returns `ErrBinaryNotInArchive`, a read-only directory
       returns an error that `errors.Is` matches with `fs.ErrPermission`, a
       binary-mode checksum line matches, an oversized binary or archive
       returns `ErrArchiveTooLarge`.
-- [ ] Run them and confirm the failure.
-- [ ] Write `Install` and `ExecutablePath`.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run them and confirm the failure.
+- [x] Write `Install` and `ExecutablePath`.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 4 — Updater, daily state and lock
 
