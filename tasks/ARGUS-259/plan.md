@@ -232,9 +232,9 @@ An error returns exit code 1.
 header that `Client.NewRequest` puts on every request. `cmd.SetVersionInfo`
 calls it, so `main` sets it before any request.
 
-- [ ] Write a test: a request through `Client.Do` carries the header with
+- [x] Write a test: a request through `Client.Do` carries the header with
       the version and the platform.
-- [ ] Run it and confirm the failure.
-- [ ] Write `UserAgent` and `SetVersion`.
-- [ ] Run the verify sequence.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run it and confirm the failure.
+- [x] Write `UserAgent` and `SetVersion`.
+- [x] Run the verify sequence.
+- [x] Commit, with the boxes of this task checked.
