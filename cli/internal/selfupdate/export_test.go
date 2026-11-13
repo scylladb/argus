@@ -10,3 +10,5 @@ func SetMaxArchiveBytes(t *testing.T, n int64) {
 	t.Cleanup(func() { maxArchiveBytes = prev })
 }
 
+// WithEUID sets the effective user ID that the Updater compares with the owner of the binary.
+func WithEUID(euid int) Option { return func(u *Updater) { u.geteuid = func() int { return euid } } }
