@@ -18,6 +18,7 @@ const RUN = {
     spend: 812.4,
     coverage: "partial" as const,
     spot_terminated: true,
+    started_by: "alice",
 };
 
 afterEach(cleanup);
@@ -48,6 +49,28 @@ describe("TopRuns.svelte", () => {
         expect(tests()).toEqual(["alpha", "beta"]);
         await fireEvent.click(screen.getByRole("button", { name: /^Test/ }));
         expect(tests()).toEqual(["beta", "alpha"]);
+    });
+
+    it("shows who started each run, and a dash when nobody is recorded", () => {
+        render(TopRuns, { props: { runs: [RUN, { ...RUN, run_id: "r-2", spend: 10, started_by: null }] } });
+
+        const rows = screen.getAllByRole("row").slice(1);
+        expect(rows[0].textContent).toContain("alice");
+        expect(rows[1].querySelectorAll("td")[4].textContent).toBe("—");
+    });
+
+    it("sorts by who started the run", async () => {
+        render(TopRuns, { props: { runs: [
+            { ...RUN, run_id: "r-1", test: "first", started_by: "bob", spend: 30 },
+            { ...RUN, run_id: "r-2", test: "second", started_by: null, spend: 20 },
+            { ...RUN, run_id: "r-3", test: "third", started_by: "alice", spend: 10 },
+        ] } });
+        const tests = () => screen.getAllByRole("link").map((link) => link.textContent);
+
+        await fireEvent.click(screen.getByRole("button", { name: /^Started by/ }));
+        expect(tests()).toEqual(["third", "first", "second"]);
+        await fireEvent.click(screen.getByRole("button", { name: /^Started by/ }));
+        expect(tests()).toEqual(["second", "first", "third"]);
     });
 
     it("states the empty range", () => {

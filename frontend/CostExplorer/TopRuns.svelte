@@ -12,13 +12,14 @@
 
     let { runs }: Props = $props();
 
-    type Column = "test" | "release" | "backend" | "status" | "start_time" | "duration" | "spend" | "coverage";
+    type Column = "test" | "release" | "backend" | "status" | "started_by" | "start_time" | "duration" | "spend" | "coverage";
     const sort = createSort<Column>("spend");
     const minutes = (run: TopRun) =>
         run.end_time ? new Date(run.end_time).getTime() - new Date(run.start_time).getTime() : null;
     const value = (run: TopRun, by: Column) => {
         if (by === "duration") return minutes(run);
         if (by === "backend") return `${run.backend ?? ""} ${run.region ?? ""}`;
+        if (by === "started_by") return run.started_by || null;
         return run[by];
     };
     const sorted = $derived(sort.apply(runs, value));
@@ -49,6 +50,7 @@
                         <SortHeader {sort} key="release" label="Release" />
                         <SortHeader {sort} key="backend" label="Backend" />
                         <SortHeader {sort} key="status" label="Status" />
+                        <SortHeader {sort} key="started_by" label="Started by" />
                         <SortHeader {sort} key="start_time" label="Started" defaultDirection="desc" />
                         <SortHeader {sort} key="duration" label="Duration" align="end" />
                         <SortHeader {sort} key="spend" label="Cost" align="end" />
@@ -75,6 +77,7 @@
                                     <span class="badge text-bg-dark">Spot reclaimed</span>
                                 {/if}
                             </td>
+                            <td>{run.started_by || "—"}</td>
                             <td class="text-nowrap">{timestampToISODate(new Date(run.start_time).getTime())}</td>
                             <td class="text-end tabular">{duration(run.start_time, run.end_time)}</td>
                             <td class="text-end tabular fw-semibold">{usd(run.spend)}</td>

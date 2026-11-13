@@ -57,15 +57,16 @@ stays in every plan built from a spec.
 - `TopRun.started_by: string | null`.
 - `Column` gains `"started_by"`; a `SortHeader` labelled "Started by" sits
   after "Status"; the cell shows `run.started_by || "—"`. Sorting reads
-  `run.started_by || null`, so the sort helper puts empty values last.
+  `run.started_by || null`, so empty values group together the way the shared
+  sort helper treats a null in the other columns.
 
-- [ ] Write the failing tests: the row shows its `started_by` and a row
+- [x] Write the failing tests: the row shows its `started_by` and a row
       without one shows `—`; clicking "Started by" orders the rows by it.
-- [ ] Run them and confirm the failure.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`,
+- [x] Run them and confirm the failure.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`,
       and `yarn build`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Commit, with the boxes of this task checked.
 
 ## Deploy note
 

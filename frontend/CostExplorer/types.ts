@@ -68,6 +68,7 @@ export interface TopRun {
     spend: number;
     coverage: Coverage;
     spot_terminated: boolean;
+    started_by: string | null;
 }
 
 export interface CoverageCounts {
