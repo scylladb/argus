@@ -29,9 +29,11 @@ screenshot fitted to the window.
    `load` event, and make `actual()` zoom around the top-left corner of the
    fitted image so the top of the screenshot is in view. It is two lines and
    keeps the responsive grid, zoom, pan, keys and swipe from #1141. Risk: a
-   large screenshot opens zoomed, so a touch swipe, which only fires at
-   `scale === 1`, pans instead of moving to the next screenshot. The arrows
-   and the arrow keys still move.
+   large screenshot opens zoomed, and a touch swipe used to fire only at
+   `scale === 1`, so it panned instead of moving to the next screenshot. The
+   swipe now also moves when it starts with the image already at its pan
+   limit in the swipe direction, which is where a screenshot opens for the
+   previous one and where a pan to the right edge leaves it for the next.
 2. **Revert #1141.** It brings back the old layout exactly, but also the
    384px tiles that overflow a narrow window and the viewer without zoom,
    keys or error handling, which ARGUS-260 fixed. Rejected.
@@ -54,6 +56,6 @@ screenshot fitted to the window.
 
 | Risk | Response |
 |---|---|
-| A touch swipe pans a zoomed screenshot instead of moving to the next one | The arrow buttons and keys still move. `0` or the fit button returns to fit, and a swipe works there. |
+| A touch swipe pans a zoomed screenshot instead of moving to the next one | A swipe that starts at the pan limit in its direction moves to the neighbour, so a second swipe after the pan reaches the edge steps on. The arrow buttons and keys still move, and `0` or the fit button returns to fit, where every swipe steps. |
 | A screenshot smaller than the window would be scaled up | `actual()` divides the natural width by the laid-out width, which equals the natural width when the image fits, so the scale is 1. |
 | `load` fires again on each new screenshot | That is intended: every screenshot opens at actual size from the top. |
