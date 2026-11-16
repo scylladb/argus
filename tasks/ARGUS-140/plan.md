@@ -54,12 +54,12 @@ gets a correction in that case.
 
 **Internals:** none.
 
-- [ ] Add a line to `Version Management` covering:
+- [x] Add a line to `Version Management` covering:
   - Renovate proposes the updates for the root `pyproject.toml`, `package.json` and `cli/go.mod`
   - one weekly PR per ecosystem for minor and patch, majors one by one, a monthly lockfile refresh
   - vulnerability fixes at once
   - maintainers merge them by hand
-- [ ] Add a line to `Pull Requests`: Renovate's pull requests carry no Jira key and no
+- [x] Add a line to `Pull Requests`: Renovate's pull requests carry no Jira key and no
       `closes`/`refs` last line.
-- [ ] Run `uv run pre-commit run --all-files`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Run `uv run pre-commit run --all-files`.
+- [x] Commit, with the boxes of this task checked.
