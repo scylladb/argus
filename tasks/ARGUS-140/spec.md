@@ -55,16 +55,17 @@ flowchart TD
 
 Further rules:
 
-- **Range strategy.** Python uses `update-lockfile`. A release inside the
-  declared range changes only `uv.lock`. A release outside it, such as a
-  `~=` pin, rewrites the range. The client's `>=` floors never move. npm
-  keeps Renovate's default.
+- **Range strategy.** Python and npm keep Renovate's default. For Python
+  that is `replace`. A release inside the declared range changes only
+  `uv.lock`. A release outside it, such as past a `~=` or `==` pin, rewrites
+  the range. A `>=` floor is never outside, so the client's floors never move.
 - **Lockfile maintenance.** On the first day of the month one pull request
   re-resolves `uv.lock` and `yarn.lock` within the declared ranges. That
   picks up transitive releases that no direct bump touches.
 - **Go.** `go mod tidy` runs after every update. A major update also
-  rewrites the import paths. The `go` directive gets its own pull request,
-  because it also sets the toolchain CI builds the CLI with.
+  rewrites the import paths. The `go` directive is a minimum, so the default
+  strategy never moves it. It uses `bump` and gets its own pull request,
+  because it also sets the toolchain that CI and the release build the CLI with.
 - **Grouped families.** Packages released together by one project share a
   pull request: Renovate's monorepo presets, plus the four `@fortawesome/*`
   packages.
@@ -77,7 +78,7 @@ Further rules:
 |---|---|
 | The CI of a Renovate PR fails | The PR stays open. A maintainer fixes it on the Renovate branch or closes it, which ignores that version |
 | A release is yanked within 3 days | Never proposed, because of the release age |
-| Renovate cannot update a lockfile | Renovate posts the error on the PR and the dashboard |
+| Renovate cannot update a lockfile, because a declared range or `requires-python` conflicts with the release | Renovate opens the PR anyway, with the error on the PR and the dashboard. In a group, the conflict blocks the whole PR. A maintainer relaxes the conflicting pin on the branch |
 | More than 10 PRs are open | Renovate holds the rest on the dashboard (the `config:recommended` limit) |
 
 ## Contracts
@@ -103,15 +104,15 @@ The configuration, `renovate.json`:
   "lockFileMaintenance": { "enabled": true, "schedule": ["* 0-3 1 * *"] },
   "packageRules": [
     { "matchPackageNames": ["*"], "semanticCommitType": "improvement" },
-    { "matchManagers": ["pep621"], "semanticCommitScope": "python", "rangeStrategy": "update-lockfile" },
+    { "matchManagers": ["pep621"], "semanticCommitScope": "python" },
     { "matchManagers": ["npm"], "semanticCommitScope": "frontend" },
-    { "matchManagers": ["gomod"], "semanticCommitScope": "cli/go" },
+    { "matchManagers": ["gomod"], "semanticCommitScope": "cli/go", "commitMessageTopic": "{{depName}}" },
     { "matchManagers": ["pep621"], "matchUpdateTypes": ["minor", "patch"], "groupName": "python non-major" },
     { "matchManagers": ["npm"], "matchUpdateTypes": ["minor", "patch"], "groupName": "frontend non-major" },
     { "matchManagers": ["gomod"], "matchUpdateTypes": ["minor", "patch"], "groupName": "cli non-major" },
     { "matchPackageNames": ["@fortawesome/**"], "groupName": "fontawesome" },
-    { "matchDepTypes": ["golang"], "groupName": null },
-    { "matchUpdateTypes": ["lockFileMaintenance"], "semanticCommitScope": "dependencies",
+    { "matchDepTypes": ["golang"], "groupName": null, "rangeStrategy": "bump" },
+    { "matchUpdateTypes": ["lockFileMaintenance"], "semanticCommitType": "improvement", "semanticCommitScope": "dependencies",
       "commitBody": "Re-resolve the lockfiles to the newest versions the declared ranges allow." }
   ],
   "osvVulnerabilityAlerts": true,
@@ -127,13 +128,16 @@ The configuration, `renovate.json`:
 
 A later rule in `packageRules` wins over an earlier one. The first rule
 overrides the `chore`/`fix` types that `config:recommended` would set.
+Lockfile maintenance has no package name, so the first rule misses it, and
+its own rule sets the type. The gomod manager prefixes its topic with
+`module`, so the gomod rule resets the topic.
 
 Commit and pull request title, one for each kind of update:
 
 ```
 improvement(python): bump python non-major
 improvement(frontend): bump @sveltejs/vite-plugin-svelte to v8
-improvement(cli/go): bump go to 1.26.1
+improvement(cli/go): bump go to v1.27.4
 improvement(dependencies): lock file maintenance
 fix(python): bump requests to v2.34.2
 ```
@@ -181,3 +185,5 @@ table, one row per package:
 - Bot PRs carry no Jira key and no `closes`/`refs` last line. They are not tasks. (spec)
 - No reviewers are assigned. The repository has no CODEOWNERS; the dashboard and the PR list are the queue. (spec)
 - Vulnerability fixes come from OSV, because GitHub's alerts are off. (spec)
+- Python keeps the default range strategy. The pep621 manager does not support `update-lockfile` and falls back to `replace`, which already leaves `>=` floors alone. (build)
+- The `go` directive uses `bump`. With the default it never updates, because it reads as a minimum. (build)

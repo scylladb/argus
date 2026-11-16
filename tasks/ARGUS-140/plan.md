@@ -13,8 +13,8 @@ stays in every plan built from a spec.
   older than two weeks. Nothing is added to `package.json`.
 - The change adds no runtime code, so it adds no unit test. The Renovate config
   validator and a local dry run take the place of the failing test.
-- Run the dry run with `XDG_CACHE_HOME` and `RENOVATE_BASE_DIR` pointing to a scratch
-  directory, so it leaves nothing in the checkout or the user cache.
+- Every Renovate run works on a scratch clone and writes its cache in the
+  container, so it leaves nothing in the checkout or the user cache.
 
 ## Task 1 — Renovate configuration
 
@@ -25,23 +25,25 @@ stays in every plan built from a spec.
 unchanged unless the validator or the dry run proves a key wrong. The spec
 gets a correction in that case.
 
-- [ ] Run `npx --yes --package renovate@44.199.2 -- renovate-config-validator --strict renovate.json`
-      before the file exists and confirm it fails.
-- [ ] Write `renovate.json` from the spec.
-- [ ] Run the validator again and confirm it passes with no warnings.
-- [ ] Dry run against the checkout:
-      `LOG_LEVEL=debug npx --yes --package renovate@44.199.2 -- renovate --platform=local --dry-run=lookup`.
-      Confirm all four:
-  - [ ] Deps are extracted from `pyproject.toml`, `package.json` and `cli/go.mod` only,
+- [x] Run `npx --yes --package renovate@44.199.2 -- renovate-config-validator --strict` from the
+      repository root before the file exists and confirm it fails.
+- [x] Write `renovate.json` from the spec.
+- [x] Run the validator again and confirm it passes with no warnings.
+- [x] Dry run in the `ghcr.io/renovatebot/renovate:44.199.2` container. The local Node 22 lacks
+      `RegExp.escape`. Use a scratch clone with `renovate.json` committed: the local platform reads
+      tracked files only. Run `--platform=local --dry-run=lookup`. Confirm all four:
+  - [x] Deps are extracted from `pyproject.toml`, `package.json` and `cli/go.mod` only,
         and none from `qatools-health/` or `pytest-argus-reporter/`.
-  - [ ] Minor and patch updates fall into the three groups: `python non-major`,
+  - [x] Minor and patch updates fall into the three groups: `python non-major`,
         `frontend non-major` and `cli non-major`.
-  - [ ] Majors and the `go` directive stay separate branches.
-  - [ ] The commit messages carry the spec's types and scopes.
-- [ ] Feed the longest header from the spec, with a table body, through commitlint
-      (`npx --yes commitlint@<pinned>` with `commitlint.config.cjs`) and confirm it passes.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+  - [x] Majors and the `go` directive stay separate branches.
+  - [x] The `>=` floors in `pyproject.toml` keep their value.
+- [x] Render the commit messages. The local platform does not, so run Renovate for real against
+      a throwaway Gitea container, with the schedule cleared in the clone. Feed every branch's
+      commit message through `@commitlint/cli@19.8.1` with `commitlint.config.cjs` and confirm
+      each passes.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
 
 ## Task 2 — Documentation
 
