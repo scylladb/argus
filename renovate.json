@@ -1,0 +1,75 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "enabledManagers": ["pep621", "npm", "gomod"],
+  "ignorePaths": ["**/node_modules/**", "qatools-health/**", "pytest-argus-reporter/**"],
+  "schedule": ["* * * * 0,6"],
+  "minimumReleaseAge": "3 days",
+  "labels": ["dependencies"],
+  "semanticCommits": "enabled",
+  "commitMessageAction": "bump",
+  "commitMessageTopic": "{{depName}}",
+  "commitBodyTable": true,
+  "postUpdateOptions": ["gomodTidy", "gomodUpdateImportPaths"],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["* 0-3 1 * *"]
+  },
+  "packageRules": [
+    {
+      "matchPackageNames": ["*"],
+      "semanticCommitType": "improvement"
+    },
+    {
+      "matchManagers": ["pep621"],
+      "semanticCommitScope": "python"
+    },
+    {
+      "matchManagers": ["npm"],
+      "semanticCommitScope": "frontend"
+    },
+    {
+      "matchManagers": ["gomod"],
+      "semanticCommitScope": "cli/go",
+      "commitMessageTopic": "{{depName}}"
+    },
+    {
+      "matchManagers": ["pep621"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "python non-major"
+    },
+    {
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "frontend non-major"
+    },
+    {
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "cli non-major"
+    },
+    {
+      "matchPackageNames": ["@fortawesome/**"],
+      "groupName": "fontawesome"
+    },
+    {
+      "matchDepTypes": ["golang"],
+      "groupName": null,
+      "rangeStrategy": "bump"
+    },
+    {
+      "matchUpdateTypes": ["lockFileMaintenance"],
+      "semanticCommitType": "improvement",
+      "semanticCommitScope": "dependencies",
+      "commitBody": "Re-resolve the lockfiles to the newest versions the declared ranges allow."
+    }
+  ],
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "semanticCommitType": "fix",
+    "commitMessageSuffix": "",
+    "schedule": [],
+    "minimumReleaseAge": null,
+    "addLabels": ["security"]
+  }
+}
