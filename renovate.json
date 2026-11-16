@@ -22,7 +22,8 @@
     },
     {
       "matchManagers": ["pep621"],
-      "semanticCommitScope": "python"
+      "semanticCommitScope": "python",
+      "rangeStrategy": "update-lockfile"
     },
     {
       "matchManagers": ["npm"],
@@ -47,6 +48,12 @@
       "matchManagers": ["gomod"],
       "matchUpdateTypes": ["minor", "patch"],
       "groupName": "cli non-major"
+    },
+    {
+      "matchManagers": ["pep621", "npm"],
+      "matchCurrentVersion": "<1.0.0",
+      "matchUpdateTypes": ["minor"],
+      "groupName": null
     },
     {
       "matchPackageNames": ["@fortawesome/**"],

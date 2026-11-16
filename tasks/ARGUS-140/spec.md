@@ -7,7 +7,8 @@ which the scylladb organization already runs for scylla-cluster-tests. Every
 weekend Renovate opens pull requests for the dependencies of the root
 `pyproject.toml` (backend and client), the root `package.json` (frontend) and
 `cli/go.mod` (CLI). Each ecosystem gets one grouped pull request for its minor
-and patch releases, and each major release gets its own pull request. A
+and patch releases. Each major release, and each `0.x` minor release in
+Python and npm, gets its own pull request. A
 monthly pull request refreshes the lockfiles. Vulnerability fixes skip the
 schedule. The existing CI runs on every pull request, and a maintainer merges
 it by hand.
@@ -46,7 +47,7 @@ flowchart TD
     V -->|yes| S[Own PR at once, type fix]
     V -->|no| A{Older than 3 days?}
     A -->|no| W[Wait, listed on the dashboard]
-    A -->|yes| M{Major?}
+    A -->|yes| M{Major, or a 0.x minor?}
     M -->|yes| P[Own PR per package, next weekend]
     M -->|no| G[Ecosystem group PR, next weekend]
     S & P & G --> C[CI: test.yml, lint.yml, cli-test.yml]
@@ -55,10 +56,10 @@ flowchart TD
 
 Further rules:
 
-- **Range strategy.** Python and npm keep Renovate's default. For Python
-  that is `replace`. A release inside the declared range changes only
-  `uv.lock`. A release outside it, such as past a `~=` or `==` pin, rewrites
-  the range. A `>=` floor is never outside, so the client's floors never move.
+- **Range strategy.** Python uses `update-lockfile`. A release inside the
+  declared range changes only `uv.lock`. A release outside it, such as past
+  a `~=` or `==` pin, rewrites the range. A `>=` floor is never outside, so
+  the client's floors never move. npm keeps Renovate's default.
 - **Lockfile maintenance.** On the first day of the month one pull request
   re-resolves `uv.lock` and `yarn.lock` within the declared ranges. That
   picks up transitive releases that no direct bump touches.
@@ -66,6 +67,12 @@ Further rules:
   rewrites the import paths. The `go` directive is a minimum, so the default
   strategy never moves it. It uses `bump` and gets its own pull request,
   because it also sets the toolchain that CI and the release build the CLI with.
+- **`0.x` minors.** For Python and npm, a minor update of a package still
+  below 1.0 gets its own pull request, like a major. Semver lets a `0.x`
+  minor break the API, and inside the group one break would block every
+  other update. A `0.x` patch stays in the group. Go keeps its `0.x` minors
+  grouped: the `golang.org/x` modules stay below 1.0 for good and keep
+  compatibility.
 - **Grouped families.** Packages released together by one project share a
   pull request: Renovate's monorepo presets, plus the four `@fortawesome/*`
   packages.
@@ -79,7 +86,8 @@ Further rules:
 | The CI of a Renovate PR fails | The PR stays open. A maintainer fixes it on the Renovate branch or closes it, which ignores that version |
 | A release is yanked within 3 days | Never proposed, because of the release age |
 | Renovate cannot update a lockfile, because a declared range or `requires-python` conflicts with the release | Renovate opens the PR anyway, with the error on the PR and the dashboard. In a group, the conflict blocks the whole PR. A maintainer relaxes the conflicting pin on the branch |
-| More than 10 PRs are open | Renovate holds the rest on the dashboard (the `config:recommended` limit) |
+| More than 10 PRs are open, or 2 opened in the last hour | Renovate holds the rest on the dashboard (Renovate's default `prConcurrentLimit` and `prHourlyLimit`) |
+| More than 10 vulnerability PRs are open | Renovate holds the rest. Vulnerability PRs skip the hourly limit and count against their own limit of 10 |
 
 ## Contracts
 
@@ -104,12 +112,13 @@ The configuration, `renovate.json`:
   "lockFileMaintenance": { "enabled": true, "schedule": ["* 0-3 1 * *"] },
   "packageRules": [
     { "matchPackageNames": ["*"], "semanticCommitType": "improvement" },
-    { "matchManagers": ["pep621"], "semanticCommitScope": "python" },
+    { "matchManagers": ["pep621"], "semanticCommitScope": "python", "rangeStrategy": "update-lockfile" },
     { "matchManagers": ["npm"], "semanticCommitScope": "frontend" },
     { "matchManagers": ["gomod"], "semanticCommitScope": "cli/go", "commitMessageTopic": "{{depName}}" },
     { "matchManagers": ["pep621"], "matchUpdateTypes": ["minor", "patch"], "groupName": "python non-major" },
     { "matchManagers": ["npm"], "matchUpdateTypes": ["minor", "patch"], "groupName": "frontend non-major" },
     { "matchManagers": ["gomod"], "matchUpdateTypes": ["minor", "patch"], "groupName": "cli non-major" },
+    { "matchManagers": ["pep621", "npm"], "matchCurrentVersion": "<1.0.0", "matchUpdateTypes": ["minor"], "groupName": null },
     { "matchPackageNames": ["@fortawesome/**"], "groupName": "fontawesome" },
     { "matchDepTypes": ["golang"], "groupName": null, "rangeStrategy": "bump" },
     { "matchUpdateTypes": ["lockFileMaintenance"], "semanticCommitType": "improvement", "semanticCommitScope": "dependencies",
@@ -132,14 +141,16 @@ Lockfile maintenance has no package name, so the first rule misses it, and
 its own rule sets the type. The gomod manager prefixes its topic with
 `module`, so the gomod rule resets the topic.
 
-Commit and pull request title, one for each kind of update:
+Commit and pull request title, one for each kind of update. A vulnerability
+fix goes to the lowest release that fixes it:
 
 ```
 improvement(python): bump python non-major
 improvement(frontend): bump @sveltejs/vite-plugin-svelte to v8
 improvement(cli/go): bump go to v1.27.4
 improvement(dependencies): lock file maintenance
-fix(python): bump requests to v2.34.2
+improvement(python): bump fastapi to v0.162.5
+fix(python): bump requests to v2.33.0
 ```
 
 The longest header any of our direct dependencies can produce is 67
@@ -185,5 +196,6 @@ table, one row per package:
 - Bot PRs carry no Jira key and no `closes`/`refs` last line. They are not tasks. (spec)
 - No reviewers are assigned. The repository has no CODEOWNERS; the dashboard and the PR list are the queue. (spec)
 - Vulnerability fixes come from OSV, because GitHub's alerts are off. (spec)
-- Python keeps the default range strategy. The pep621 manager does not support `update-lockfile` and falls back to `replace`, which already leaves `>=` floors alone. (build)
+- Python uses `update-lockfile`. With the default, Renovate proposes nothing for a `>=` dependency whose new release is already inside the range. (build)
 - The `go` directive uses `bump`. With the default it never updates, because it reads as a minimum. (build)
+- A `0.x` minor update gets its own pull request in Python and npm. Go keeps its `0.x` minors grouped. (review)
