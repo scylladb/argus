@@ -28,6 +28,8 @@ Title a pull request `type(scope): summary`. Describe the intent and the manual
 validation steps. Add a screenshot for a UI change and a payload snippet for an
 API change. End the body with `closes <KEY>` when the merge finishes the task,
 and with `refs <KEY>` when a later pull request does.
+Renovate's dependency pull requests are the exception: they carry no Jira key
+and no `closes` or `refs` line. Merge one by hand after its CI passes.
 
 Compose a commit around one logical change. Run the verify sequence in
 `CLAUDE.md` before you push.

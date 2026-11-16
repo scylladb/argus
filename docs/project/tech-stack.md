@@ -164,6 +164,14 @@ The `web-backend` extra also carries the SCT event processing:
 - The Python package publishes to PyPI as `argus-alm` on `v*` tags.
 - The CLI publishes GitHub release binaries on `cli/v*` tags.
 - Lockfiles for all three ecosystems are committed.
+- Renovate (`renovate.json`) proposes dependency updates for the root
+  `pyproject.toml`, `package.json` and `cli/go.mod`:
+  - one weekend pull request per ecosystem for minor and patch releases older than 3 days
+  - one pull request per major release
+  - a monthly lockfile refresh
+  - vulnerability fixes from OSV at once
+
+  Maintainers merge them by hand.
 
 ---
 *Last updated*: 2026-09-07
