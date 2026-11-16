@@ -63,3 +63,27 @@ gets a correction in that case.
       `closes`/`refs` last line.
 - [x] Run `uv run pre-commit run --all-files`.
 - [x] Commit, with the boxes of this task checked.
+
+## Task 3 — `0.x` minors and the Python range strategy
+
+**Files:**
+- Modify: `renovate.json`
+- Modify: `tasks/ARGUS-140/spec.md`
+
+**Internals:** a package rule for Python and npm that gives a minor update below
+1.0 its own pull request. `rangeStrategy: update-lockfile` returns to the
+Python rule.
+
+- [x] Dry run with the default Python range strategy and confirm the gap: `>=`
+      dependencies such as fastapi, uvicorn and click get no update.
+- [x] Restore `update-lockfile` and add the `0.x` rule.
+- [x] Run the validator and confirm it passes.
+- [x] Dry run and confirm all three:
+  - [x] The `>=` dependencies get lockfile-only updates, and no floor moves.
+  - [x] Every `0.x` minor leaves its group for a branch of its own: fastapi, uvicorn,
+        tiktoken, tokenizers, ruff, pytest-subtests and sv.
+  - [x] `0.x` patches and Go's `0.x` minors stay grouped.
+- [x] Update the spec: the range strategy, the `0.x` rule, the PR limits, and the
+      header examples.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked.
