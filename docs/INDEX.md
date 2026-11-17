@@ -56,7 +56,7 @@ Python 3.14 target against a `py310` linter floor, 4-space indentation and a 120
 Let the code speak, comment sparingly, no change-history comments.
 
 #### Conventions (`standards/global/conventions.md`)
-Layer ownership for a new file, the documents to update on an architecture change, the commitlint rules enforced at `commit-msg` (type enum, required scope, header and body limits), pull request format with the `closes <KEY>` or `refs <KEY>` last line and the Renovate exception, the `ai-assisted` label, SHA-pinned actions, committed lockfiles in all three ecosystems, uv as the only Python tool runner, secrets in gitignored config files, and non-blocking review feedback tracked as a follow-up issue.
+Layer ownership for a new file, the documents to update on an architecture change, the commitlint rules enforced at `commit-msg` (type enum, required scope, header and body limits), pull request format with the `closes <KEY>` or `refs <KEY>` last line and the Renovate exception, SHA-pinned actions, committed lockfiles in all three ecosystems, uv as the only Python tool runner, secrets in gitignored config files, and non-blocking review feedback tracked as a follow-up issue.
 
 #### Error Handling (`standards/global/error-handling.md`)
 Typed exceptions (`APIException`, `DataValidationError`, `<Domain>Error`) with `raise ... from`, no blind except, raising instead of returning an error dictionary, handling at the boundary, failing fast because the database enforces nothing, graceful degradation when Jira, GitHub, Jenkins or the event processing fails, retry with backoff, and resource cleanup.
