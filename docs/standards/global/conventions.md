@@ -34,10 +34,6 @@ and no `closes` or `refs` line. Merge one by hand after its CI passes.
 Compose a commit around one logical change. Run the verify sequence in
 `CLAUDE.md` before you push.
 
-### AI-Assisted Transparency
-A workflow adds the `ai-assisted` label when it finds an AI marker in the pull
-request body or in a commit trailer. Keep the marker in place.
-
 ### Pinned GitHub Actions
 Every workflow pins a third-party action to a full commit SHA with a `# vX.Y.Z`
 comment. Keep new entries in that form.
