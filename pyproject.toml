@@ -76,7 +76,7 @@ web-backend = [
 ]
 docker-image = ["supervisor ~= 4.2.4"]
 dev = [
-  "pytest == 8.3.5",
+  "pytest ==9.0.3",
   "coverage == 7.8.2",
   "docker == 7.1.0",
   "ipython ~= 8.36.0",
