@@ -5,7 +5,7 @@ go 1.25.4
 require (
 	github.com/adrg/xdg v0.5.3
 	github.com/gosimple/slug v1.15.0
-	github.com/klauspost/compress v1.18.5
+	github.com/klauspost/compress v1.20.2
 	github.com/olekukonko/tablewriter v1.1.4
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/cobra v1.10.2
