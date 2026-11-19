@@ -9,11 +9,11 @@ stays in every plan built from a spec.
 
 ## Rules
 
-- The first box of Task 7, the "before" screenshots, runs before Task 1.
-- One commit per task, in the order below. A task's commit removes its code
-  from `suppressedSvelteCodes` in `vite.config.ts` and touches no other line
-  of that file.
-- The failing check of every task is the build: remove the code first, run
+- The first box of Task 8, the "before" screenshots, runs before Task 1.
+- One commit per task, in the order below. Tasks 1-6 each remove their code
+  from `suppressedSvelteCodes` in `vite.config.ts` and touch no other line
+  of that file. Task 7 does not touch `vite.config.ts`.
+- The failing check of Tasks 1-6 is the build: remove the code first, run
   `yarn build`, and see its warnings. The task is done when the a11y count
   below drops to the expected number. Count with:
 
@@ -29,13 +29,15 @@ stays in every plan built from a spec.
   prints shifted lines for a `lang="ts"` component.
 - A Vitest test is written first where the task adds behaviour a test can
   hold in jsdom: a new prop, Escape, focus. A markup-only swap is covered by
-  the build count and the live check of Task 7.
+  the build count and the live check of Task 8.
 - Each task runs `uv run pre-commit run --all-files`, `yarn build` and
-  `yarn test`. Task 7 runs the full verify sequence, `uv run pytest`
-  included.
+  `yarn test`. `uv run pytest` runs once on the finished branch; the change
+  touches no backend code.
 - Never touch `frontend/Common/ModalWindow.svelte`, the Font Awesome files,
-  `templates/base.html.j2`, or the `{@html}` lines of the ARGUS-278
-  components. An `<i class="fas">` moves with its parent unchanged.
+  `templates/`, the `{@html}` and `marked` lines of `Discussion/*.svelte`
+  and `ViewHighlights/*.svelte`, the toast code of `Alerts/AlertWidget.svelte`
+  or the tooltip code of `TestRun/ResultsGraph.svelte`. An `<i class="fas">`
+  moves with its parent unchanged.
 - No comment that explains the change. A `svelte-ignore` line is a
   directive, and only Task 4 adds one.
 - Commit header `fix(frontend): <verb> ...`, at most 72 characters; the body
@@ -50,15 +52,15 @@ stays in every plan built from a spec.
 - Test: `frontend/TestRun/ResultsGraphs.test.ts`
 
 **Internals:** the tab `<a class="nav-link">` becomes
-`<button type="button" class="nav-link" class:active aria-current={activeTab === i ? "page" : undefined}>`.
+`<button type="button" class="nav-link" class:active aria-current={activeTab === i ? "true" : undefined}>`.
 Bootstrap styles `button.nav-link` as a tab.
 
-- [ ] Remove the code; `yarn build` shows 1 `a11y_missing_attribute`.
-- [ ] Add a test: each tab is a `button` named by its text, and clicking
+- [x] Remove the code; `yarn build` shows 1 `a11y_missing_attribute`.
+- [x] Add a test: each tab is a `button` named by its text, and clicking
       `+ View` opens the New View form. Run it and confirm the failure.
-- [ ] Swap the element. The build shows no `a11y_missing_attribute`; the
+- [x] Swap the element. The build shows no `a11y_missing_attribute`; the
       click_events and no_static counts drop by 1 each.
-- [ ] Run `yarn test` and pre-commit, then commit
+- [x] Run `yarn test` and pre-commit, then commit
       `fix(frontend): turn on the a11y_missing_attribute warning`.
 
 ## Task 2 — `a11y_interactive_supports_focus`
@@ -68,15 +70,14 @@ Bootstrap styles `button.nav-link` as a tab.
 - Modify: `frontend/Teams/TeamMember.svelte:85`, `:109`
 
 **Internals:** each `<div class="px-2" role="button">` becomes
-`<button type="button" class="btn btn-sm btn-link text-reset text-decoration-none px-2 py-0 border-0 rounded-0" class:border-end aria-expanded={show...}>`.
+`<button type="button" class="btn btn-link px-2 py-0 border-0 rounded-0 text-reset text-decoration-none" class:border-end aria-expanded={show...}>`.
 The visible text stays the icon and the count. `aria-label` reads
-`"{stats.total} not investigated, show details"` and
-`"{stats.total} investigated, show details"`, so the visible count is part
-of the name.
+`"{stats.total} not investigated"` and `"{stats.total} investigated"`, so
+the visible count is part of the name.
 
-- [ ] Remove the code; the build shows 2 `a11y_interactive_supports_focus`.
-- [ ] Swap both elements. The build shows none; click_events drops by 2.
-- [ ] Run `yarn test` and pre-commit, then commit.
+- [x] Remove the code; the build shows 2 `a11y_interactive_supports_focus`.
+- [x] Swap both elements. The build shows none; click_events drops by 2.
+- [x] Run `yarn test` and pre-commit, then commit.
 
 ## Task 3 — `a11y_no_noninteractive_element_to_interactive_role`
 
@@ -90,7 +91,7 @@ of the name.
 **Internals:**
 - `ReleaseManagerGroup` props gain `selected = false` and `onselect`
   (spec, Contracts). The name `<div>` becomes
-  `<button type="button" class="btn btn-link text-reset text-decoration-none text-start p-0 border-0 flex-fill" aria-current={selected ? "true" : undefined} onclick={onselect}>`.
+  `<button type="button" class="btn btn-link p-0 border-0 rounded-0 flex-fill align-self-stretch text-start text-reset text-decoration-none" aria-current={selected ? "true" : undefined} onclick={onselect}>`.
 - `ReleaseManager` drops `role="button"` and `onclick` from the `<li>`, keeps
   `class:selected`, and passes `selected={currentGroup?.id == group.id}` and
   `onselect={() => handleGroupChange(group)}`.
@@ -102,15 +103,15 @@ of the name.
   and holds `<button type="button" class="list-group-item list-group-item-action border-0 border-bottom" class:active aria-current={n.id == selectedNotification?.id ? "true" : undefined}>`
   with the old content and the old `onclick`. `.list-group-flush > .list-group-item`
   no longer matches the nested button, so the border utilities replace its
-  flush borders; the screenshots of Task 7 confirm the look.
+  flush borders; the screenshots of Task 8 confirm the look.
 
-- [ ] Remove the code; the build shows 2 warnings of it.
-- [ ] Write `ReleaseManagerGroup.test.ts`: the name button calls `onselect`;
+- [x] Remove the code; the build shows 2 warnings of it.
+- [x] Write `ReleaseManagerGroup.test.ts`: the name button calls `onselect`;
       `aria-current="true"` follows `selected`; Edit and Delete do not call
       `onselect`. Run it and confirm the failure.
-- [ ] Make the change. The build shows none of this code; click_events
+- [x] Make the change. The build shows none of this code; click_events
       drops by 4 and no_static by 2.
-- [ ] Run `yarn test` and pre-commit, then commit.
+- [x] Run `yarn test` and pre-commit, then commit.
 
 ## Task 4 — `a11y_no_noninteractive_element_interactions`
 
@@ -123,11 +124,16 @@ of the name.
 - Test: `frontend/TestRun/ResultsGraphs.test.ts`
 
 **Internals:**
-- `overlayFocus(node: HTMLElement, active = true): ActionReturn<boolean>`.
-  On open it stores `document.activeElement` and calls
-  `node.focus({ preventScroll: true })`. On close or destroy it returns the
+- `overlayFocus(node: HTMLElement, active = true): { update(next: boolean): void; destroy(): void }`.
+  On open it stores `document.activeElement` and, after `tick()`, calls
+  `node.focus({ preventScroll: true })`; an overlay hidden by a class is
+  still `display: none` until that DOM update lands. On close or destroy it returns the
   focus to the stored element when that is still connected. `update(next)`
-  opens or closes on a change of `active`. Same idea as `dialogOpen` in
+  opens or closes on a change of `active`. A `keydown` listener on the node
+  wraps Tab from the last shown, enabled control to the first and Shift+Tab
+  from the first, or from the node, to the last; a control is skipped when
+  it is `:disabled`, `hidden`, or under an ancestor with `display: none` or
+  `visibility: hidden` inside the node. Same idea as `dialogOpen` in
   `ScreenshotModal.svelte`, which this task leaves alone.
 - `AvatarCropper`: the line above the viewport `<div>` gets
   `<!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_no_noninteractive_tabindex -->`.
@@ -141,17 +147,17 @@ of the name.
   `createBubbler` and `stopPropagation` imports of lines 3-5 go. The close
   `×` buttons gain `aria-label="Close"`.
 
-- [ ] Remove the code; the build shows 4 warnings of it, and 1
+- [x] Remove the code; the build shows 4 warnings of it, and 1
       `a11y_no_noninteractive_tabindex`.
-- [ ] Write `overlayFocus.test.ts`: focus moves to the node on mount and on
+- [x] Write `overlayFocus.test.ts`: focus moves to the node on mount and on
       `update(true)`, and back to the trigger on `update(false)` and on
       destroy. Add to `ResultsGraphs.test.ts`: the New View dialog is found
       by `getByRole("dialog", { name: "New View" })` and has the focus;
       Escape closes it; a click on the backdrop closes it; a click in the
       form does not. Run them and confirm the failures.
-- [ ] Make the change. The build shows no warning of this code and no
+- [x] Make the change. The build shows no warning of this code and no
       `a11y_no_noninteractive_tabindex`; click_events drops by 6.
-- [ ] Run `yarn test` and pre-commit, then commit.
+- [x] Run `yarn test` and pre-commit, then commit.
 
 ## Task 5 — `a11y_click_events_have_key_events`
 
@@ -163,22 +169,25 @@ of the name.
 
 **Internals:**
 - `NumberStats`: the investigation bar `<div ... cursor-pointer onclick>`
-  becomes `<button type="button" class="align-self-start d-inline-flex shadow-sm overflow-hidden border rounded p-0 bg-transparent text-reset" aria-expanded={extended} aria-controls=...>`.
+  becomes `<button type="button" class="align-self-start d-inline-flex shadow-sm overflow-hidden border rounded p-0 bg-transparent text-reset" aria-expanded={extended}>`.
   An `extended` `$state` flips in `toggleExtendedInvestigations`, which the
-  Hide button also calls. The inner `<div role="button">` lose the role. The
-  unused `.cursor-pointer` rule goes if nothing else uses it.
+  Hide button also calls. The inner `<div role="button">` lose the role, and
+  each status icon gets `title={TestInvestigationStatusStrings[...]}` so the
+  button's name reads the status names with their counts. The unused
+  `.cursor-pointer` rule goes.
 - `GraphsWidget`: each `.card-header` loses its `onclick`; its heading wraps
-  a `<button type="button" class="btn w-100 text-start p-0 border-0 d-flex align-items-center" aria-expanded aria-controls="test-{testId}">`
+  a `<button type="button" class="w-100 p-0 border-0 bg-transparent text-reset text-start fw-medium d-flex align-items-center" aria-expanded aria-controls="test-{testId}">`
   (and `view-{view.id}`) holding the existing `<i>` chevron and the name.
+  No `.btn` class, so the heading keeps its font size and weight.
 - `ResultsGraph`: `.modal-content` loses `onclick={stopPropagation(bubble('click'))}`;
   no component listens to `click` on `ResultsGraph` (P4). The
   `createBubbler` and `stopPropagation` imports and the `bubble` constant go;
   `run` stays. Its `×` button
   gains `aria-label="Close"`.
 
-- [ ] Remove the code; the build shows 4 warnings of it.
-- [ ] Make the change. The build shows none; no_static drops by 4.
-- [ ] Run `yarn test` and pre-commit, then commit.
+- [x] Remove the code; the build shows 4 warnings of it.
+- [x] Make the change. The build shows none; no_static drops by 4.
+- [x] Run `yarn test` and pre-commit, then commit.
 
 ## Task 6 — `a11y_no_static_element_interactions`
 
@@ -200,41 +209,123 @@ of the name.
 - `suppressedSvelteCodes` is `[]`. Keep the `onwarn` hook: it is the place
   for a future entry with a stated reason.
 
-- [ ] Remove the last code; the build shows 3 warnings of it.
-- [ ] Add to `ReleaseManagerGroup.test.ts`: Edit opens the editor as a
+- [x] Remove the last code; the build shows 3 warnings of it.
+- [x] Add to `ReleaseManagerGroup.test.ts`: Edit opens the editor as a
       dialog named `Edit group` with the focus; Escape closes it and returns
       the focus to Edit. Run it and confirm the failure.
-- [ ] Make the change. `yarn build` prints no `a11y_*` line; `svelte-check`
+- [x] Make the change. `yarn build` prints no `a11y_*` line; `svelte-check`
       prints only the CheckParam warning.
-- [ ] Run `yarn test` and pre-commit, then commit.
+- [x] Run `yarn test` and pre-commit, then commit.
 
-## Task 7 — Verify and live check
+## Task 7 — Icon-only button names
+
+**Files:** the 33 components the search below lists on `14e76bed`, plus
+`frontend/WorkArea/TestRuns.svelte`; test: `frontend/WorkArea/TestRunsSelector.test.ts`.
+
+**Internals:** each button gains `title="X" aria-label="X"` (spec, P6);
+a toggle gains `aria-expanded` or `aria-pressed` as listed. Hidden copy
+buttons (`d-none`, shown on hover) get names as well. `TestRunsSelector`
+gains a `graphShown = false` prop, and `TestRuns` passes
+`graphShown={clickedGraph}`; a Vitest case checks `aria-expanded` and
+`aria-controls` on "Show graph".
+
+The search; it prints `0` when done:
+
+```bash
+python3 - <<'PY'
+import re, glob
+attr = r'((?:[^>{]|\{(?:[^{}]|\{[^{}]*\})*\})*)'
+n = 0
+for f in sorted(glob.glob('frontend/**/*.svelte', recursive=True)):
+    s = open(f).read()
+    for m in re.finditer(r'<button\b' + attr + r'>(.*?)</button>', s, re.S):
+        a, body = m.group(1), m.group(2)
+        rest = re.sub(r'<Fa\b' + attr + r'/>|<i\b[^>]*>\s*</i>|\{#if[^}]*\}|\{:else[^}]*\}|\{/if\}', '', body, flags=re.S).strip()
+        if not rest and ('<Fa' in body or '<i ' in body) and not re.search(r'aria-label|\btitle=|aria-labelledby', a):
+            n += 1
+            print(f'{f}:{s.count(chr(10), 0, m.start()) + 1}')
+print(n)
+PY
+```
+
+| Component | Names |
+|---|---|
+| AdminPanel/UserManager | `Dismiss error` |
+| AdminPanel/ViewWidget | `Edit widget`, `Remove widget` |
+| AdminPanel/ViewsManager | `Add widget` |
+| Discussion/CommentEditor | `Bold`, `Italic`, `Underline`, `Quote`, `Code`, `Link`, `Numbered list`, `Bulleted list`, `Task list` |
+| Discussion/MentionSelector | `Close` |
+| Profile/NotificationsReader | `Previous page`, `Next page` |
+| Profile/PlannedJob | `Details` + `aria-expanded` |
+| Profile/ProfileJob | `Investigation` + `aria-expanded` |
+| ReleaseDashboard/TestPopoutSelector | `Scroll to top` |
+| ReleasePlanner/CommentTableRow | `Save comment`, `Edit comment` |
+| ReleasePlanner/ReleasePlan | `Details` + `aria-expanded`, `Create a plan from this one`, `Edit plan`, `Copy plan to a release`, `Delete plan` |
+| ReleasePlanner/ReleasePlanCreator | `Grid view`, `Split group into tests`, `Remove` |
+| ReleasePlanner/ReleasePlanEditor | `Remove test` |
+| ReleasePlanner/ReleasePlannerGridView | `Deselect test`, `Deselect group` |
+| ReleasePlanner/Schedule | `Close`, `Reassign` |
+| Teams/TeamDetail | `Edit name` |
+| Teams/TeamMember | `All jobs` (Bootstrap's collapse sets `aria-expanded`) |
+| TestRun/Components/ResultTable | `Copy as Markdown` |
+| TestRun/Pytest/PytestItem | `Details` + `aria-expanded`, `Copy message`, `Copy value` |
+| TestRun/ResultsGraph | `Copy to clipboard` (the modal copy button, away from the tooltip code) |
+| TestRun/RuntimeConfig | `Details` + `aria-expanded`, `Copy parameter` |
+| TestRun/SCT/SctEvent | `Copy message` |
+| TestRun/SCT/SctNemesis | `Events` + `aria-expanded` |
+| TestRun/SCT/SctSetup | `Details` + `aria-expanded`, `Copy command` |
+| TestRun/SCTSubTests/Gemini/GeminiTabBodyComponent | `Copy command` |
+| Views/ViewRow | `Favorite` + `aria-pressed` |
+| Views/Widgets/PytestWidget/PytestResultRow | `Select test`, `Details` + `aria-expanded`, `Copy message`, `Filter by this value`, `Copy value` |
+| Views/Widgets/PytestWidget/ViewPytestOverview | `Remove marker`, `Negate filter` + `aria-pressed`, `Remove filter` |
+| Views/Widgets/SummaryWidget/SummaryWidget | `Previous version`, `Next version`, `Details` + `aria-expanded` |
+| Views/Widgets/ViewHighlights/ActionItem | `Edit` + `aria-pressed` |
+| Views/Widgets/ViewHighlights/Comment | `Edit` + `aria-pressed` |
+| Views/Widgets/ViewHighlights/HighlightItem | `Edit` + `aria-pressed` |
+| WorkArea/TestRunsSelector | `Show graph` + `aria-expanded={graphShown}` and `aria-controls="collapse-graphs"` while shown, `Show more runs` |
+
+- [x] Run the search; it prints 65.
+- [x] Add the names. The search prints 0.
+- [x] Check the diff touches no `{@html}`, `marked`, toast or tooltip line.
+- [x] Run `yarn build`, `yarn test` and pre-commit, then commit
+      `fix(frontend): name the icon-only buttons`.
+
+## Task 8 — Verify and live check
 
 **Files:** none in the repository. Scripts and screenshots go to
 `/tmp/claude-1000/-home-komachi-development-argus/953332aa-7103-4aeb-981d-ae86661cd75b/scratchpad/ARGUS-276/`.
 
-- [ ] Before Task 1, capture the "before" screenshots: run the steps below
+- [x] Before Task 1, capture the "before" screenshots: run the steps below
       on the plan commit, at 1920 and 1280 px wide.
-- [ ] Run `yarn build:dev` in the worktree. Start
+- [x] Run `yarn build:dev` in the worktree. Start
       `uv run uvicorn --factory argus_backend:create_app --port 5016` as a
       background task. Never touch the user's server on :5000; stop this one
       by its task id.
-- [ ] Log in: `curl -c jar -F username=admin -F password=admin http://127.0.0.1:5016/auth/login`.
+- [x] Log in: `curl -c jar -F username=admin -F password=admin http://127.0.0.1:5016/auth/login`.
       Keep the `#HttpOnly_` line when reading the session cookie from the jar.
-- [ ] Start `google-chrome --headless=new --remote-debugging-port=9336 --user-data-dir=<scratch>/chrome`
+- [x] Start `google-chrome --headless=new --remote-debugging-port=9336 --user-data-dir=<scratch>/chrome`
       and drive it from a Node script over CDP: set the cookie, open a page,
       send Tab with `Input.dispatchKeyEvent` until `document.activeElement`
       is the target, then Enter or Space, and read the result from the DOM.
-- [ ] Sample, one per pattern, using what the dev database holds:
-  - [ ] `/teams/`: a TeamMember stat toggle opens on Enter, `aria-expanded` flips (P1).
-  - [ ] `/admin/`, releases: a group name selects on Space, `aria-current` moves (P2); Edit opens
+- [x] Sample, one per pattern, using what the dev database holds:
+  - [x] `/teams/`: a TeamMember stat toggle opens on Enter, `aria-expanded` flips (P1).
+  - [x] `/admin/`, releases: a group name selects on Space, `aria-current` moves (P2); Edit opens
         the editor with the focus inside, Escape closes it and the focus returns to Edit (P3).
-  - [ ] `/notifications/`: a row opens on Enter (P2).
-  - [ ] A test run with generic results: the `+ View` tab opens the dialog on Enter, Escape
+  - [ ] `/notifications/`: a row opens on Enter (P2). The dev data holds no notification for
+        the admin user.
+  - [x] A test run with generic results: the `+ View` tab opens the dialog on Enter, Escape
         closes it (P1, P3).
-  - [ ] A release dashboard: the investigation bar expands on Enter (P1).
-  - [ ] A view with a graphs widget, when one exists: a header toggles on Space (P1).
-- [ ] Take the "after" screenshots and compare each element with its "before"
+  - [x] A release dashboard: the investigation bar expands on Enter (P1).
+  - [ ] A view with a graphs widget, when one exists: a header toggles on Space (P1). No view
+        on the dev data holds one.
+- [x] Read Chrome's accessibility tree (`Accessibility.getPartialAXTree`) on
+      two pages with icon buttons, such as a test run and the release planner,
+      and confirm each sampled button has the name of Task 7.
+- [x] Take the "after" screenshots and compare each element with its "before"
       at both widths. A shifted layout is a bug in its task's commit.
-- [ ] Run the full verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Stop the server and Chrome by their task ids.
+- [x] Run `uv run pre-commit run --all-files`, `yarn test` and `yarn build`.
+      `yarn build` prints no `a11y_*` line and `suppressedSvelteCodes` is `[]`.
+- [x] `uv run pytest`, on the finished branch: 1980 passed.
+- [x] Live-check the Tab wrap in "Edit group": Tab past Update reaches the first control,
+      Shift+Tab from there returns to Update.
+- [x] Stop the server and Chrome by their task ids.
