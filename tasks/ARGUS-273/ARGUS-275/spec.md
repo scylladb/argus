@@ -19,7 +19,7 @@ the nav bar. The icon markup does not change.
 - No new dependency. `@fortawesome/fontawesome-free` 7.0.0 already ships the
   webfonts and the SCSS.
 - The frontend targets Baseline Widely available. A newer feature needs a
-  fallback.
+  fallback. The icons waive this target; see `Decisions`.
 - uvicorn and the release bundle serve `public/dist` at `/s/dist/`. A URL
   that Vite writes into `style.css` must resolve there.
 - The pull request shows the size and the first paint before and after, with
@@ -87,9 +87,11 @@ Two things replace it:
 
 - The Font Awesome 7 core CSS sets `content: var(--fa); content: var(--fa) /
   "";`. Where the alt-text syntax works, the glyph adds nothing to the
-  accessible name. Elsewhere the first declaration applies and a private-use
-  glyph joins the name. The alt-text syntax is Baseline 2024, so the first
-  declaration is the fallback.
+  accessible name. The first declaration is no fallback: a declaration with
+  `var()` is valid at parse time, so the second one always wins the cascade.
+  A browser without the syntax (Firefox before 128, Safari before 17.4) finds
+  it invalid at computed-value time, `content` computes to `none`, and no
+  Font Awesome glyph draws. The icon box keeps its width.
 - The `<i>` icons in the two Jinja templates get `aria-hidden="true"`. ARGUS-276
   handles the `<i>` icons in Svelte components.
 
@@ -118,7 +120,7 @@ With the webfont, the `<i>` stays in the DOM and a class change redraws it.
 | The woff2 is slow | `font-display: block` keeps the glyph invisible for up to 3 s. The box keeps its width, so the layout does not shift |
 | The woff2 fails | After 3 s the fallback font draws the private-use glyph, usually blank. The text labels stay |
 | An unknown icon name | Nothing draws, as today |
-| A browser without the alt-text syntax | The glyph joins the accessible name; the template icons stay hidden through `aria-hidden` |
+| A browser without the alt-text syntax | No Font Awesome glyph draws; the box keeps its width and the text labels stay |
 
 ## Contracts
 
@@ -205,5 +207,10 @@ bundle, the most of any main page.
   path would resolve to `/fa-solid-900.woff2`. (spec)
 - Only the solid font is preloaded. The regular font draws two nav icons and
   is 19 KB. (spec)
-- The Jinja template icons get `aria-hidden="true"`, which covers a browser
-  without the alt-text syntax; the Svelte icons stay with ARGUS-276. (review)
+- The Jinja template icons get `aria-hidden="true"`. The markup then states
+  that the icons are decorative, whatever the stylesheet does, as the icons
+  guide asks. The Svelte icons stay with ARGUS-276. (review)
+- The Font Awesome icons need Firefox 128+ or Safari 17.4+; Chrome and Edge
+  77+ already qualify. The Baseline Widely available target is waived here,
+  because Argus is an internal tool used on current browsers. Komachi
+  accepted this after review. (review)
