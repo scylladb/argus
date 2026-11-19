@@ -13,7 +13,10 @@ or `<a>` becomes a `<button>`, an overlay becomes a focusable `role="dialog"`
 that closes on Escape, and a handler that only stopped a click from bubbling
 is deleted. The sixth commit leaves the list empty, and `yarn build` prints
 no `a11y_*` warning. The seventh gives each icon-only button that has no
-name an `aria-label` and a matching `title`.
+name an `aria-label` and a matching `title`. Review fixes follow as their
+own commits: the padding of a selectable row and of a collapsible header
+moves into its button, and the investigation bar moves the focus when it
+hides itself.
 
 ## Constraints
 
@@ -90,20 +93,36 @@ flowchart TD
 **P1, native button.** A single clickable control becomes
 `<button type="button">`. A disclosure carries `aria-expanded`, a filter
 toggle `aria-pressed`. A tab without `href` becomes `<button class="nav-link">`.
-A collapsible card header keeps its heading and wraps its content in the button.
+A collapsible card header keeps its heading and wraps its content in the
+button. The header's padding moves into the button (`p-0` on the header,
+`py-2 px-3` on the button), so a click anywhere in the header toggles it,
+as the header's click did, and the header keeps its size.
 
 ```svelte
-<h5 class="mb-0">
-    <button type="button" class="btn w-100 text-start ..." aria-expanded={open} aria-controls="test-{id}" onclick={toggle}>
-        <i class="fas fa-chevron-{open ? 'down' : 'right'} me-2"></i><span>{name}</span>
-    </button>
-</h5>
+<div class="card-header p-0">
+    <h5 class="mb-0">
+        <button type="button" class="w-100 py-2 px-3 border-0 bg-transparent text-start ..." aria-expanded={open} aria-controls="test-{id}" onclick={toggle}>
+            <i class="fas fa-chevron-{open ? 'down' : 'right'} me-2"></i><span>{name}</span>
+        </button>
+    </h5>
+</div>
 ```
+
+A disclosure that hides its own toggle when it opens, as the investigation
+bar of `NumberStats` does, moves the focus to the first control it shows,
+and back to the toggle when it closes, with `preventScroll: true`. Without
+the move the focus stays on a hidden button and the keyboard user loses
+their place.
 
 **P2, button inside a row.** A list row that selects an item keeps
 `<li>` and its list semantics. The click moves from the `<li>` to a
 `<button>` that fills the row's free space and carries `aria-current`.
-Controls already in the row stay siblings of that button.
+Controls already in the row stay siblings of that button. The `<li>`
+padding moves into the button (`p-0` on the `<li>`, `py-2 ps-3` on the
+button, `py-2` on the controls and `pe-3` on the row), so a click on the
+row's edge selects, as the row's click did, and the row keeps its height.
+The button draws its focus ring inset, because the next row paints over a
+ring drawn outside it.
 
 **P3, overlay dialog.** The element that takes the backdrop click becomes
 the dialog: `role="dialog"`, `aria-modal="true"`, a name from its title
@@ -219,7 +238,8 @@ function overlayFocus(node: HTMLElement, active = true): { update(next: boolean)
 | Risk | Response |
 |---|---|
 | A `<button>` brings Bootstrap button padding, border or colour and shifts a layout | Reset with Bootstrap utilities (`p-0`, `border-0`, `text-reset`, `text-start`, `w-100`); compare each element before and after in the live check |
-| A row's click area shrinks to the name button | The button takes the row's free space (`flex-fill`); the controls already stopped propagation |
+| A row's or a header's click area shrinks to its button | The padding moves into the button, which takes the free space (`flex-fill`, `w-100`); the controls already stopped propagation |
+| The space around the switch, Edit and Delete of a group row selects nothing | Accepted: the strips beside those three controls and the row's right padding stay inert; the controls act on their own |
 | Moving the focus into an overlay scrolls the page | Focus with `preventScroll: true` |
 | ARGUS-275 converts the `<i class="fas">` chevrons of GraphsWidget | Textual conflict only; the second branch to merge rebases |
 | A `title` adds a hover tooltip to 65 buttons | The tooltip names the action, as on the 48 buttons that have one |
@@ -249,3 +269,5 @@ function overlayFocus(node: HTMLElement, active = true): { update(next: boolean)
 - Vitest covers new behaviour only: the new props, Escape and focus. (review)
 - A P3 overlay keeps Tab and Shift+Tab inside itself, since `aria-modal="true"` tells assistive technology the page behind is out of reach. (review)
 - The "Show graph" toggle exposes its state through a `graphShown` prop from `TestRuns`, so its name stays one name. (review)
+- A row's and a header's padding moves into its button rather than a mouse-only `onclick` on the `<li>`, which would bring back the warnings this task removes. (review)
+- The investigation bar focuses the first quick-select button when it opens, or Hide when no status has a count. (review)
