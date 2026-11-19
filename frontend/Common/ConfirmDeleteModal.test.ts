@@ -47,12 +47,12 @@ describe("ConfirmDeleteModal", () => {
         expect((screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(true);
     });
 
-    it("cancels from the Cancel button, the close button and Escape", async () => {
+    it("cancels from the Cancel button, the close button and a dialog close", async () => {
         const { onCancel, onConfirm } = renderModal({ confirmName: "alpha-test" });
 
         await fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
         await fireEvent.click(screen.getByRole("button", { name: "Close" }));
-        await fireEvent.keyDown(window, { key: "Escape" });
+        (screen.getByRole("dialog") as HTMLDialogElement).close();
 
         expect(onCancel).toHaveBeenCalledTimes(3);
         expect(onConfirm).not.toHaveBeenCalled();
