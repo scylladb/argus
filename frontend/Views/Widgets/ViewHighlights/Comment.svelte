@@ -74,7 +74,7 @@
             </div>
             {#if comment.creator_id === currentUserId && !isArchived}
             <div class="d-flex align-items-start ms-2">
-                <button class="btn btn-sm btn-outline-secondary me-1" onclick={() => isEditing = !isEditing}>
+                <button title="Edit" aria-label="Edit" aria-pressed={isEditing} class="btn btn-sm btn-outline-secondary me-1" onclick={() => isEditing = !isEditing}>
                     <Fa icon={faEdit}/>
                 </button>
                 <button class="btn btn-sm btn-outline-danger" title="Delete comment" aria-label="Delete comment" onclick={deleteComment}>

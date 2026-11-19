@@ -269,7 +269,7 @@
                 <div class="alert alert-danger d-flex align-items-center">
                     <div>{lastError}</div>
                     <div class="text-end ms-auto">
-                        <button class="btn" onclick={() => lastError = ""}><Fa icon={faTimes} /></button>
+                        <button title="Dismiss error" aria-label="Dismiss error" class="btn" onclick={() => lastError = ""}><Fa icon={faTimes} /></button>
                     </div>
                 </div>
             </div>

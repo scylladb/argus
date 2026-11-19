@@ -43,6 +43,8 @@
         <div class="overflow-hidden test-name">
             {test.name}
             <button
+                title="Select test"
+                aria-label="Select test"
                 class="btn btn-sm btn-dark d-none"
                 onclick={() => dispatch("testSelect", test.name)}
             >
@@ -62,7 +64,7 @@
             {test.status}
         </div>
         <div class="ms-2">
-            <button class="btn btn-sm btn-primary" onclick={() => { showDetails = !showDetails; testExpanded = true; }}><Fa icon={showDetails ? faChevronUp : faChevronDown}/></button>
+            <button title="Details" aria-label="Details" aria-expanded={showDetails} class="btn btn-sm btn-primary" onclick={() => { showDetails = !showDetails; testExpanded = true; }}><Fa icon={showDetails ? faChevronUp : faChevronDown}/></button>
         </div>
     </div>
     <div class="mb-2">
@@ -73,7 +75,7 @@
     <div class:show={showDetails} class="rounded overflow-hidden bg-main collapse">
         {#if test.message}
             <div class="mb-2 bg-white p-1">
-                <h6 class="mb-1">Message <button class="btn btn-sm btn-success" onclick={() => navigator.clipboard.writeText(test.message)}><Fa icon={faCopy}/></button></h6>
+                <h6 class="mb-1">Message <button title="Copy message" aria-label="Copy message" class="btn btn-sm btn-success" onclick={() => navigator.clipboard.writeText(test.message)}><Fa icon={faCopy}/></button></h6>
                 <pre class="bg-main code rounded p-2 markdown-body" style="white-space: pre-wrap;">{test.message}</pre>
             </div>
         {/if}
@@ -97,7 +99,7 @@
                                 <tr>
                                     <td class="key-cell">
                                         <span class="fw-bold">{key}</span>
-                                        <button class="btn btn-sm btn-dark d-none" onclick={() => dispatch("filterSelect", { filter: key, value: value })}>
+                                        <button title="Filter by this value" aria-label="Filter by this value" class="btn btn-sm btn-dark d-none" onclick={() => dispatch("filterSelect", { filter: key, value: value })}>
                                             <Fa icon={faFilter} />
                                         </button>
                                     </td>
@@ -110,6 +112,8 @@
                                             {value}
                                         {/if}
                                         <button
+                                            title="Copy value"
+                                            aria-label="Copy value"
                                             class="btn btn-sm btn-dark d-none"
                                             onclick={() => navigator.clipboard.writeText(value)}
                                         >

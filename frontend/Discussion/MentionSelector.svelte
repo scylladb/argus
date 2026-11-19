@@ -65,6 +65,8 @@
         </Select>
     </div>
     <button
+        title="Close"
+        aria-label="Close"
         class="ms-1 btn btn-dark"
         onclick={(e) => {
             e.stopPropagation();

@@ -89,3 +89,19 @@ describe("TestRunsSelector run deletion", () => {
         expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
     });
 });
+
+describe("TestRunsSelector graph button", () => {
+    it("exposes whether the graphs are shown", async () => {
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 200 }));
+        const props = { testInfo: TEST_INFO, testId: TEST_INFO.test.id, runs: RUNS, clickedTestRuns: {} };
+
+        render(TestRunsSelector, { props: { ...props, graphShown: false } });
+        expect((await screen.findByRole("button", { name: "Show graph" })).getAttribute("aria-expanded")).toBe("false");
+        cleanup();
+
+        render(TestRunsSelector, { props: { ...props, graphShown: true } });
+        const shown = await screen.findByRole("button", { name: "Show graph" });
+        expect(shown.getAttribute("aria-expanded")).toBe("true");
+        expect(shown.getAttribute("aria-controls")).toBe("collapse-graphs");
+    });
+});

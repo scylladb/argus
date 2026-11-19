@@ -42,7 +42,7 @@
 
 <div class="p-2">
     <div class="mb-2">
-        <h4><button class="btn btn-sm btn-secondary d-inline-block me-2" onclick={() => (collapsed = !collapsed)}><Fa icon={collapsed ? faAngleUp : faAngleDown}/></button>Stress Commands
+        <h4><button title="Details" aria-label="Details" aria-expanded={!collapsed} class="btn btn-sm btn-secondary d-inline-block me-2" onclick={() => (collapsed = !collapsed)}><Fa icon={collapsed ? faAngleUp : faAngleDown}/></button>Stress Commands
         </h4>
         <p class="text-muted" style="font-size: 0.8rem">
             Stress commands executed during the test run.
@@ -63,7 +63,7 @@
                                 <td>
                                     <div class="input-group">
                                         <textarea class="form-control" style="resize: none" rows=4 disabled>{cmd.cmd}</textarea>
-                                        <button class="d-none btn btn-success btn-sm" onclick={() => navigator.clipboard.writeText(cmd.cmd)}><Fa icon={faCopy}/></button>
+                                        <button title="Copy command" aria-label="Copy command" class="d-none btn btn-success btn-sm" onclick={() => navigator.clipboard.writeText(cmd.cmd)}><Fa icon={faCopy}/></button>
                                     </div>
                                     <div class="d-flex">
                                         {#if cmd.log_name}

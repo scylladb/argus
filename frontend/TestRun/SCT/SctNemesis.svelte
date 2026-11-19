@@ -58,7 +58,7 @@
                 <div class="ms-2"><button class="btn btn-sm btn-primary" onclick={() => (showTrace = !showTrace)}><Fa icon={showTrace ? faCheck : faTimes} /> Show Trace</button></div>
             {/if}
             {#if innerEvents.length > 0}
-                <div class="ms-2"><button class="btn btn-sm btn-primary" onclick={() => (expandEvents = !expandEvents)}><Fa icon={expandEvents ? faArrowUp : faArrowDown} /></button></div>
+                <div class="ms-2"><button title="Events" aria-label="Events" aria-expanded={expandEvents} class="btn btn-sm btn-primary" onclick={() => (expandEvents = !expandEvents)}><Fa icon={expandEvents ? faArrowUp : faArrowDown} /></button></div>
             {/if}
         </div>
         <div class="d-flex align-items-center mb-1">

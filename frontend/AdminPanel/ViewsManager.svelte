@@ -480,6 +480,8 @@
                     <div class="rounded bg-light-one p-2" style="min-height: 256px; max-height: 512px; overflow-y: scroll">
                         <div class="text-end mb-3">
                             <button
+                                title="Add widget"
+                                aria-label="Add widget"
                                 class="btn btn-success"
                                 onclick={() => createNewWidget()}
                             >

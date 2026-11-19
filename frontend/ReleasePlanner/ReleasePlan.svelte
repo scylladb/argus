@@ -89,24 +89,24 @@
         {#if !detached}
             <div class="ms-2">
                 {#if planStats}
-                    <button onclick={() => { expandedPlans[plan.id] = (!expandedPlans[plan.id]); }} class="btn btn-primary"><Fa icon={expandedPlans[plan.id] ? faChevronUp : faChevronDown}/></button>
+                    <button title="Details" aria-label="Details" aria-expanded={!!expandedPlans[plan.id]} onclick={() => { expandedPlans[plan.id] = (!expandedPlans[plan.id]); }} class="btn btn-primary"><Fa icon={expandedPlans[plan.id] ? faChevronUp : faChevronDown}/></button>
                 {:else}
                     <button class="btn btn-primary" aria-label="Loading" title="Loading"><span class="spinner-grow spinner-grow-sm"></span></button>
                 {/if}
             </div>
             {#if !plan.created_from}
                 <div class="ms-2">
-                    <button class="btn btn-primary" onclick={() => { dispatch("createFromClick", plan); }}><Fa icon={faClone}/></button>
+                    <button title="Create a plan from this one" aria-label="Create a plan from this one" class="btn btn-primary" onclick={() => { dispatch("createFromClick", plan); }}><Fa icon={faClone}/></button>
                 </div>
             {/if}
             <div class="ms-2">
-                <button class="btn btn-warning" onclick={() => { dispatch("editClick", plan); }}><Fa icon={faEdit}/></button>
+                <button title="Edit plan" aria-label="Edit plan" class="btn btn-warning" onclick={() => { dispatch("editClick", plan); }}><Fa icon={faEdit}/></button>
             </div>
             <div class="ms-2">
-                <button class="btn btn-success" onclick={() => { dispatch("copyClick", plan); }}><Fa icon={faCopy}/></button>
+                <button title="Copy plan to a release" aria-label="Copy plan to a release" class="btn btn-success" onclick={() => { dispatch("copyClick", plan); }}><Fa icon={faCopy}/></button>
             </div>
             <div class="ms-2">
-                <button onclick={() => { dispatch("deleteClick", plan); }} class="btn btn-danger"><Fa icon={faTrash}/></button>
+                <button title="Delete plan" aria-label="Delete plan" onclick={() => { dispatch("deleteClick", plan); }} class="btn btn-danger"><Fa icon={faTrash}/></button>
             </div>
         {/if}
     </div>

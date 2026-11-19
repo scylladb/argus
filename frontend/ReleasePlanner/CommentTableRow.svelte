@@ -87,6 +87,8 @@
     <div class="ms-auto">
         {#if editing}
             <button
+                title="Save comment"
+                aria-label="Save comment"
                 class="btn btn-success btn-sm"
                 onclick={() => { updateScheduleComment(); }}
             >
@@ -96,6 +98,8 @@
             <!-- Nothing -->
         {:else}
             <button
+                title="Edit comment"
+                aria-label="Edit comment"
                 class="btn btn-dark btn-sm"
                 onclick={() => { editing = true; }}
             >

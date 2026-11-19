@@ -45,7 +45,7 @@
             {item.status}
         </div>
         <div class="ms-2">
-            <button class="btn btn-sm btn-primary" onclick={() => { showDetails = !showDetails; testExpanded = true; }}><Fa icon={showDetails ? faChevronUp : faChevronDown}/></button>
+            <button title="Details" aria-label="Details" aria-expanded={showDetails} class="btn btn-sm btn-primary" onclick={() => { showDetails = !showDetails; testExpanded = true; }}><Fa icon={showDetails ? faChevronUp : faChevronDown}/></button>
         </div>
     </div>
     <div class:show={showDetails} class="rounded overflow-hidden bg-main collapse">
@@ -56,7 +56,7 @@
         </div>
         {#if item.message}
             <div class="mb-2 bg-white p-1">
-                <h6 class="mb-1">Message <button class="btn btn-sm btn-success" onclick={() => navigator.clipboard.writeText(item.message)}><Fa icon={faCopy}/></button></h6>
+                <h6 class="mb-1">Message <button title="Copy message" aria-label="Copy message" class="btn btn-sm btn-success" onclick={() => navigator.clipboard.writeText(item.message)}><Fa icon={faCopy}/></button></h6>
                 <pre class="bg-main code rounded p-2 markdown-body" style="white-space: pre-wrap;">{item.message}</pre>
             </div>
         {/if}
@@ -90,6 +90,8 @@
                                             {value}
                                         {/if}
                                         <button
+                                            title="Copy value"
+                                            aria-label="Copy value"
                                             class="btn btn-sm btn-dark d-none"
                                             onclick={() => navigator.clipboard.writeText(value)}
                                         >

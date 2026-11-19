@@ -373,7 +373,7 @@
                             <button class="btn btn-sm btn-dark">
                                 {marker}
                             </button>
-                            <button class="btn btn-sm btn-dark" onclick={() => {
+                            <button title="Remove marker" aria-label="Remove marker" class="btn btn-sm btn-dark" onclick={() => {
                                 widgetState.markers = widgetState.markers.filter(m => m != marker);
                                 dirty = true;
                             }}>
@@ -395,7 +395,7 @@
                         {#each widgetState.filters as filter}
                             {@const [filterName, filterValue, negated] = parseFilter(filter)}
                             <div class="btn-group me-1 mb-1">
-                                <button class="btn btn-sm btn-dark" onclick={() => alterFilter(filter)}>
+                                <button title="Negate filter" aria-label="Negate filter" aria-pressed={negated} class="btn btn-sm btn-dark" onclick={() => alterFilter(filter)}>
                                     {#if negated}
                                         <Fa icon={faExclamation}/>
                                     {:else}
@@ -405,7 +405,7 @@
                                 <button class="btn btn-sm btn-dark">
                                     {filterName} = {filterValue}
                                 </button>
-                                <button class="btn btn-sm btn-dark" onclick={() => {
+                                <button title="Remove filter" aria-label="Remove filter" class="btn btn-sm btn-dark" onclick={() => {
                                     widgetState.filters = widgetState.filters.filter(m => m != filter);
                                     dirty = true;
                                 }}>

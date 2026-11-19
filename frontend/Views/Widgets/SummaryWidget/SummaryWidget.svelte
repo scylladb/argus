@@ -285,7 +285,7 @@
             <div class="d-flex justify-content-between align-items-center">
                 <h3 class="mb-0 text-white">Test Results Summary</h3>
                 <div class="d-flex align-items-center">
-                    <button class="btn btn-outline-light me-2"
+                    <button title="Previous version" aria-label="Previous version" class="btn btn-outline-light me-2"
                             onclick={() => selectedVersionItem = versionItems[currentVersionIndex-1]}
                             disabled={currentVersionIndex === 0}>
                         <Fa icon={faChevronLeft}/>
@@ -293,7 +293,7 @@
                     <div style="width: 380px">
                         <Select bind:value={selectedVersionItem} items={versionItems} clearable={false}/>
                     </div>
-                    <button class="btn btn-outline-light ms-2"
+                    <button title="Next version" aria-label="Next version" class="btn btn-outline-light ms-2"
                             onclick={() => selectedVersionItem = versionItems[currentVersionIndex+1]}
                             disabled={currentVersionIndex === versions.length - 1}>
                         <Fa icon={faChevronRight}/>
@@ -315,7 +315,7 @@
                                 <Fa icon={faCheckCircle} class="text-success ms-2"/>
                             {/if}
                         </span>
-                        <button class="btn btn-outline-secondary" onclick={() => toggleTest(testId)}>
+                        <button title="Details" aria-label="Details" aria-expanded={!!expandedTests[testId]} class="btn btn-outline-secondary" onclick={() => toggleTest(testId)}>
                             <Fa icon={expandedTests[testId] ? faChevronUp : faChevronDown}/>
                         </button>
                     </h4>

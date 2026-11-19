@@ -325,7 +325,7 @@
                     <div class="ms-1 p-1 rounded bg-dark text-light">{humanizeDuration(event.duration * 1000, { round: true, largest: 2})}</div>
                 {/if}
                 <div class="ms-2 p-1 bg-light text-dark rounded">{timestampToISODate(event.ts, true)}</div>
-                <button class="ms-2 btn btn-sm btn-success" onclick={() => navigator.clipboard.writeText(event.message)}><Fa icon={faCopy}/></button>
+                <button title="Copy message" aria-label="Copy message" class="ms-2 btn btn-sm btn-success" onclick={() => navigator.clipboard.writeText(event.message)}><Fa icon={faCopy}/></button>
                 {#if !isDuplicate(event)}
                     <SctSimilarEvents {event} runId={event.run_id} issueAttach={issueAttach}/>
                 {/if}

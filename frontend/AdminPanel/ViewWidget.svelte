@@ -73,10 +73,10 @@
             </select>
         </div>
         <div class="ms-2">
-            <button class="btn btn-primary" onclick={() => (editingSettings = true)}><Fa icon={faEdit} /></button>
+            <button title="Edit widget" aria-label="Edit widget" class="btn btn-primary" onclick={() => (editingSettings = true)}><Fa icon={faEdit} /></button>
         </div>
         <div class="ms-2">
-            <button class="btn btn-danger" onclick={() => dispatch("removeWidget", widgetSettings)}><Fa icon={faTrash} /></button>
+            <button title="Remove widget" aria-label="Remove widget" class="btn btn-danger" onclick={() => dispatch("removeWidget", widgetSettings)}><Fa icon={faTrash} /></button>
         </div>
     </div>
 </div>

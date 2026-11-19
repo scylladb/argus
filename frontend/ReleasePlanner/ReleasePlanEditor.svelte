@@ -348,6 +348,8 @@
                                 <div>{test.name}</div>
                                 <div class="ms-auto">
                                     <button
+                                        title="Remove test"
+                                        aria-label="Remove test"
                                         class="btn btn-dark btn-sm"
                                         disabled={lockButtons}
                                         onclick={() => {

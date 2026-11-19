@@ -92,6 +92,8 @@
                 {#if notifications.length > 0 && perPageLimit == notifications.length}
                     <div class="d-flex justify-content-center align-items-between p-4">
                         <button
+                        title="Previous page"
+                        aria-label="Previous page"
                         class="btn btn-primary"
                         onclick={() => {
                             nextPage = prevPage;
@@ -101,6 +103,8 @@
                             <Fa icon={faArrowLeft} />
                         </button>
                         <button
+                            title="Next page"
+                            aria-label="Next page"
                             class="ms-auto btn btn-primary"
                             onclick={() => {
                                 prevPage = notifications[0].id;

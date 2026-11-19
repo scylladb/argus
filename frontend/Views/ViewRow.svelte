@@ -53,7 +53,7 @@
     <div class="mb-2 rounded bg-white shadow-sm overflow-hidden">
         <div class="border-bottom px-2 py-1 fs-4 d-flex align-items-center bg-light-two">
             <div>{view.display_name || view.name}</div>
-            <button class="ms-auto btn btn-danger" onclick={() => toggleFavorite(view)}><Fa icon={isFavorite(view) ? faHeart : faHeartEmpty} /></button>
+            <button title="Favorite" aria-label="Favorite" aria-pressed={isFavorite(view)} class="ms-auto btn btn-danger" onclick={() => toggleFavorite(view)}><Fa icon={isFavorite(view) ? faHeart : faHeartEmpty} /></button>
             <div class="ms-2"><a href="/view/{view.name}" class="btn btn-primary"><Fa icon={faDashboard}/> View Dashboard</a></div>
         </div>
         <div class="p-2 d-flex align-items-center">
