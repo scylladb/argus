@@ -1,8 +1,6 @@
 <script lang="ts">
     import { ResultsRoutes } from "../Common/ResultsRoutes";
-    import { createBubbler, stopPropagation } from 'svelte/legacy';
-
-    const bubble = createBubbler();
+    import { overlayFocus } from "../Common/overlayFocus";
     import {createEventDispatcher} from "svelte";
     import queryString from "query-string";
     import {sendMessage} from "../Stores/AlertStore";
@@ -262,12 +260,21 @@
 </div>
 
 {#if showModal}
-    <div class="modal show d-block" tabindex="-1" role="dialog" onclick={closeModal}>
-        <div class="modal-dialog" role="document" onclick={stopPropagation(bubble('click'))}>
+    <div
+        class="modal show d-block"
+        tabindex="-1"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="new-view-title-{test_id}"
+        use:overlayFocus
+        onkeydown={(e) => e.key === "Escape" && closeModal()}
+        onclick={(e) => e.target === e.currentTarget && closeModal()}
+    >
+        <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">New View</h5>
-                    <button type="button" class="close" onclick={closeModal}>&times;</button>
+                    <h5 class="modal-title" id="new-view-title-{test_id}">New View</h5>
+                    <button type="button" class="close" aria-label="Close" onclick={closeModal}>&times;</button>
                 </div>
                 <div class="modal-body">
                     <div class="form-group">
@@ -289,12 +296,21 @@
 {/if}
 
 {#if showAddGraphModal}
-    <div class="modal show d-block" tabindex="-1" role="dialog" onclick={closeAddGraphModal}>
-        <div class="modal-dialog" role="document" onclick={stopPropagation(bubble('click'))}>
+    <div
+        class="modal show d-block"
+        tabindex="-1"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-graph-title-{test_id}"
+        use:overlayFocus
+        onkeydown={(e) => e.key === "Escape" && closeAddGraphModal()}
+        onclick={(e) => e.target === e.currentTarget && closeAddGraphModal()}
+    >
+        <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Add Graph to View</h5>
-                    <button type="button" class="close" onclick={closeAddGraphModal}>&times;</button>
+                    <h5 class="modal-title" id="add-graph-title-{test_id}">Add Graph to View</h5>
+                    <button type="button" class="close" aria-label="Close" onclick={closeAddGraphModal}>&times;</button>
                 </div>
                 <div class="modal-body">
                     <div class="form-group">
@@ -317,12 +333,21 @@
 {/if}
 
 {#if showRemoveGraphModal}
-    <div class="modal show d-block" tabindex="-1" role="dialog" onclick={closeRemoveGraphModal}>
-        <div class="modal-dialog" role="document" onclick={stopPropagation(bubble('click'))}>
+    <div
+        class="modal show d-block"
+        tabindex="-1"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="remove-graph-title-{test_id}"
+        use:overlayFocus
+        onkeydown={(e) => e.key === "Escape" && closeRemoveGraphModal()}
+        onclick={(e) => e.target === e.currentTarget && closeRemoveGraphModal()}
+    >
+        <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Remove Graph?</h5>
-                    <button type="button" class="close" onclick={closeRemoveGraphModal}>&times;</button>
+                    <h5 class="modal-title" id="remove-graph-title-{test_id}">Remove Graph?</h5>
+                    <button type="button" class="close" aria-label="Close" onclick={closeRemoveGraphModal}>&times;</button>
                 </div>
                 <div class="modal-body">
                     <p>Remove <strong>{selectedGraph?.options?.plugins?.title?.text}</strong> from this view?</p>

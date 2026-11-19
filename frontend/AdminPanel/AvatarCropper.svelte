@@ -87,6 +87,7 @@
 </script>
 
 <div class="d-flex flex-column align-items-center gap-2">
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_no_noninteractive_tabindex -->
     <div
         class="viewport rounded"
         style:width="{VIEWPORT}px"
