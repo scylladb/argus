@@ -26,10 +26,11 @@
     }
     type SeverityValueType = typeof SCTEventSeverity[keyof typeof SCTEventSeverity];
 
-    enum TimelineEventType {
-        Nemesis = "nemesis",
-        Event = "event",
-    }
+    const TimelineEventType = {
+        Nemesis: "nemesis",
+        Event: "event",
+    } as const;
+    type TimelineEventType = typeof TimelineEventType[keyof typeof TimelineEventType];
 
     interface SCTEventApiResponse {
         status: string
@@ -58,7 +59,9 @@
             this.opts = opts;
             this.tsEnd = tsEnd;
             this.innerEvents = innerEvents || [];
-            this.id = `${this.type}-${this.severity}-${this.ts}`;
+            this.id = type === TimelineEventType.Event
+                ? `event-${(event as SCTEvent).event_id}`
+                : `nemesis-${(event as NemesisInfo).name}-${(event as NemesisInfo).target_node?.name}-${this.ts}`;
         }
     }
 
@@ -357,7 +360,7 @@
         </div>
     {/if}
     <div bind:this={container} class="p-2 bg-light-one rounded" style="max-height: 1024px; overflow-y: scroll">
-        {#each timeline as event}
+        {#each timeline as event (event.id)}
             {#if event.type == TimelineEventType.Event}
                 {#if severityFilter[event.severity]}
                     <div class="mb-2">
