@@ -329,3 +329,53 @@ PY
 - [x] Live-check the Tab wrap in "Edit group": Tab past Update reaches the first control,
       Shift+Tab from there returns to Update.
 - [x] Stop the server and Chrome by their task ids.
+
+## Task 9 — Click area of the group rows and the graph headers
+
+**Files:**
+- Modify: `frontend/AdminPanel/ReleaseManager.svelte` (the group `<li>`)
+- Modify: `frontend/AdminPanel/ReleaseManagerGroup.svelte`
+- Modify: `frontend/Views/Widgets/GraphsWidget/GraphsWidget.svelte`
+
+**Internals:**
+- Group row (spec, P2): the `<li>` gains `p-0`. The name button trades
+  `p-0` for `py-2 ps-3 pe-0` and a scoped `group-select` class that sets
+  `--bs-btn-focus-box-shadow` to the same ring drawn `inset`. The row
+  `<div>` gains `pe-3`, and the Edit and Delete wrappers gain `py-2`, so the
+  row keeps its height.
+- GraphsWidget headers (spec, P1): each `.card-header` gains `p-0`, and its
+  button trades `p-0` for `py-2 px-3`.
+
+No Vitest test: jsdom has no layout, so the click area is a live check.
+
+- [ ] Make the changes. `yarn build` prints no `a11y_*` line.
+- [ ] Live check at 1920 and 1280 px against screenshots of `057b462d`:
+      the group rows match pixel for pixel; a mouse click on the left, top
+      and bottom edge of a group row selects it, and the switch, Edit and
+      Delete do not. No dev view holds a graphs widget, so its header markup
+      is checked as a replica on a view page: the button covers the header,
+      which keeps its size.
+- [ ] Run `yarn test`, pre-commit and `yarn build`, then commit.
+
+## Task 10 — Focus of the investigation bar
+
+**Files:**
+- Modify: `frontend/Stats/NumberStats.svelte`
+- Test: `frontend/Stats/NumberStats.test.ts` (new)
+
+**Internals:** (spec, P1) `allowedStatuses` moves from an `{@const}` to a
+`$derived` in the script. The bar, Hide and each quick-select button are
+bound with `bind:this`; the quick-select buttons into a record keyed
+`"{investigationStatus}:{status}"`. `toggleExtendedInvestigations` ends
+with `focus({ preventScroll: true })` on the first bound quick-select button
+in render order, or Hide, when it opens, and on the bar when it closes.
+
+- [ ] Write `NumberStats.test.ts`: the bar starts with `aria-expanded="false"`;
+      a click sets it to `"true"` and focuses the first quick-select button;
+      Hide sets it back to `"false"` and focuses the bar; with no counts the
+      focus goes to Hide. Run it and confirm the focus cases fail.
+- [ ] Make the change. `yarn build` prints no `a11y_*` line.
+- [ ] Live check: the investigation bar matches its screenshots pixel for
+      pixel; Enter on the bar moves the focus into the panel, and Enter on
+      Hide collapses it and brings the focus back to the bar.
+- [ ] Run `yarn test`, pre-commit and `yarn build`, then commit.
