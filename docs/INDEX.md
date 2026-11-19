@@ -26,7 +26,7 @@ Languages (Python 3.14, TypeScript and JavaScript, Go), backend and frontend fra
 Layered web application with a plugin layer for test sources. Covers the web backend layers, the plugin contract, the frontend, the command line tool, the SCT event processing, the client library, data flow, data model rules, external integrations, configuration and deployment.
 
 ### Roadmap (`project/roadmap.md`)
-The current priorities, and the known debt: lint coverage, the Python version floor, the Docker requirement in the test suite, the legacy Svelte imports, an unreferenced bundle, and hand-written API documentation.
+The current priorities, and the known debt: lint coverage, the Docker requirement in the test suite, the legacy Svelte imports, an unreferenced bundle, and hand-written API documentation.
 
 ---
 
@@ -50,7 +50,7 @@ Located in `docs/standards/global/`
 These standards apply across the entire codebase, regardless of frontend/backend context.
 
 #### Coding Style (`standards/global/coding-style.md`)
-Python 3.14 target against a `py310` linter floor, 4-space indentation and a 120-character line width, the reach of Ruff (`exclude = ["argus/"]` leaves the web backend unchecked), the explicit preview rule set, the pre-commit hooks, the installed but unrun ESLint, Prettier and svelte-check, Python and frontend naming, no dead code, and no backward compatibility without a stated need.
+Python 3.14 target against a `py313` linter floor, 4-space indentation and a 120-character line width, the reach of Ruff (`exclude = ["argus/"]` leaves the web backend unchecked), the explicit preview rule set, the pre-commit hooks, the installed but unrun ESLint, Prettier and svelte-check, Python and frontend naming, no dead code, and no backward compatibility without a stated need.
 
 #### Commenting (`standards/global/commenting.md`)
 Let the code speak, comment sparingly, no change-history comments.

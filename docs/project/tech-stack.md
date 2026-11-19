@@ -11,8 +11,9 @@ pipelines that use long-running resources.
 
 - **Usage**: about 283 files. The web backend, the client SDK and the
   maintenance scripts.
-- **Floor**: `pyproject.toml` sets `requires-python = ">=3.10"` and Ruff sets
-  `target-version = "py310"`. All three CI workflows pin 3.14.
+- **Floor**: `pyproject.toml` sets `requires-python = ">=3.13"` and Ruff sets
+  `target-version = "py313"`, the version of the release bundle. All three CI
+  workflows pin 3.14.
 - **Style**: 4-space indentation and a 120-character line width.
 
 ### TypeScript and JavaScript
