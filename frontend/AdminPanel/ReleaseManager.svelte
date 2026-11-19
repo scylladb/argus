@@ -498,13 +498,13 @@
                         {#each releaseGroups.sort((a, b) => a.name > b.name ? 1 : -1) as group (group.id)}
                             <li
                                 class="list-group-item d-flex"
-                                role="button"
                                 class:selected={currentGroup?.id == group.id}
-                                onclick={() => handleGroupChange(group)}
                             >
                                 <ReleaseManagerGroup
                                     {group}
                                     groups={releaseGroups}
+                                    selected={currentGroup?.id == group.id}
+                                    onselect={() => handleGroupChange(group)}
                                     on:groupDelete={handleGroupDelete}
                                     on:groupUpdate={handleGroupUpdate}
                                     on:visibilityToggleGroup={(e) => {

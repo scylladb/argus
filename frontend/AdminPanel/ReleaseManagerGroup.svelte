@@ -5,7 +5,7 @@
     import Fa from "svelte-fa";
     import { Modal } from "bootstrap/dist/js/bootstrap.esm";
     import { faEdit, faTrash } from "@fortawesome/free-solid-svg-icons";
-    let { group = $bindable(), groups } = $props();
+    let { group = $bindable(), groups, selected = false, onselect } = $props();
     const dispatch = createEventDispatcher();
     let editing = $state(false);
     let editedGroup = $state(Object.assign({}, group));
@@ -13,8 +13,7 @@
     let deleteTests = $state(true);
     let newGroupId = $state("");
 
-    const handleGroupUpdate = function (e) {
-        e.stopPropagation();
+    const handleGroupUpdate = function () {
         dispatch("groupUpdate", {
             group_id: editedGroup.id,
             name: editedGroup.name,
@@ -24,8 +23,7 @@
         });
     };
 
-    const handleGroupDelete = function (e) {
-        e.stopPropagation();
+    const handleGroupDelete = function () {
         dispatch("groupDelete", {
             group_id: group.id,
             delete_tests: deleteTests,
@@ -33,8 +31,7 @@
         });
     };
 
-    const handleVisibilityToggle = function(e) {
-        e.stopPropagation();
+    const handleVisibilityToggle = function() {
         dispatch("visibilityToggleGroup", {
             groupId: group.id,
             enabled: !group.enabled,
@@ -47,11 +44,16 @@
 </script>
 
 <div class="d-flex align-items-center w-100">
-    <div>
+    <button
+        type="button"
+        class="btn btn-link p-0 border-0 rounded-0 flex-fill align-self-stretch text-start text-reset text-decoration-none"
+        aria-current={selected ? "true" : undefined}
+        onclick={onselect}
+    >
         {group.name} {#if group.pretty_name}
             [{group.pretty_name}]
         {/if}
-    </div>
+    </button>
     <div class="ms-auto">
         <div class="form-check form-switch">
             <input class="form-check-input" type="checkbox" role="switch" onclick={handleVisibilityToggle} bind:checked={group.enabled}>
@@ -61,8 +63,7 @@
         <button
             class="btn btn-light"
             title="Edit"
-            onclick={(e) => {
-                e.stopPropagation();
+            onclick={() => {
                 editing = true;
             }}
         >
@@ -73,8 +74,7 @@
         <button
             class="btn btn-light"
             title="Delete"
-            onclick={(e) => {
-                e.stopPropagation();
+            onclick={() => {
                 Modal.getOrCreateInstance(modal).show();
             }}
         >
@@ -83,7 +83,7 @@
     </div>
 </div>
 
-<div class="position-fixed popup-group-editor" class:d-none={!editing}  onclick={(e) => e.stopPropagation()}>
+<div class="position-fixed popup-group-editor" class:d-none={!editing}>
     <div
         class="row justify-content-center align-items-center h-100"
         onmousedown={self(() => {
@@ -146,7 +146,6 @@
     tabindex="-1"
     bind:this={modal}
     id="modalGroupConfirmDelete-{editedGroup.id}"
-    onclick={(e) => e.stopPropagation()}
 >
     <div class="modal-dialog">
         <div class="modal-content">
