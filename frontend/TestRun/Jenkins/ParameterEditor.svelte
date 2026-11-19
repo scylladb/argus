@@ -4,6 +4,7 @@
     import SctParameterWizard from "./SCTParameterWizard.svelte";
     import WizardUnavailable from "./WizardUnavailable.svelte";
     import { sendMessage } from "../../Stores/AlertStore";
+    import { sanitizeHtml } from "../../Common/safeHtml";
 
 
     /**
@@ -95,7 +96,7 @@
                         {:else}
                             <input class="form-control" id={param.name} type="text" bind:value={buildParams[param.name]}>
                         {/if}
-                        <div id="paramHelp{sanitizeSelector(param.name)}" class="form-text">{@html param.description}</div>
+                        <div id="paramHelp{sanitizeSelector(param.name)}" class="form-text">{@html sanitizeHtml(param.description)}</div>
                     </div>
                 {/if}
             {/each}

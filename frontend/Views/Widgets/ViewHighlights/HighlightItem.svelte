@@ -5,9 +5,7 @@
     import {createEventDispatcher} from 'svelte';
     import {getPicture} from "../../../Common/UserUtils";
     import CommentEditor from "../../../Discussion/CommentEditor.svelte";
-    import { marked } from "marked";
-    import {markdownRendererOptions} from "../../../markdownOptions";
-    import {MarkdownUserMention} from "../../../Discussion/MarkedMentionExtension";
+    import { renderMarkdown } from "../../../Common/markdown";
 
     let { highlight = $bindable(), currentUserId, users = {} } = $props();
 
@@ -36,9 +34,6 @@
         release_id: '',
         test_run_id: '',
         posted_at: new Date(),
-    });
-    marked.use({
-        extensions: [MarkdownUserMention]
     });
     const dispatch = createEventDispatcher();
 
@@ -79,7 +74,7 @@
                  data-bs-toggle="tooltip"
                  title="{creator?.username}"></div>
             <div class="d-flex align-items-center flex-grow-1 no-bottom-margin-p markdown-body">
-                <span class="no-bottom-margin">{@html marked.parse(highlight.content, markdownRendererOptions)}</span>
+                <span class="no-bottom-margin">{@html renderMarkdown(highlight.content, { mentions: true })}</span>
             </div>
             <div class="d-flex align-items-center">
                 <small class="text-muted me-2">{highlight.createdAt.toLocaleDateString("en-CA")}</small>

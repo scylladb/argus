@@ -6,6 +6,7 @@
     import Fa from "svelte-fa";
     import { faCheck, faTimes } from "@fortawesome/free-solid-svg-icons";
     import { JENKINS_ADVANCED_SETTINGS } from "../../Common/JenkinsSettingsHelp";
+    import { sanitizeHtml } from "../../Common/safeHtml";
 
     /**
      * @typedef {Object} Props
@@ -231,7 +232,7 @@
         </div>
         {#if validationMessage}
             <div class="alert alert-danger my-2">
-                {@html validationMessage}
+                {@html sanitizeHtml(validationMessage)}
             </div>
         {/if}
         {#if advancedSettings}

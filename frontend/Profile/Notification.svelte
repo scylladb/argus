@@ -4,6 +4,7 @@
     import NotificationCommentWrapper from "./NotificationCommentWrapper.svelte";
     import { ArgusNotification, ArgusShortSummary, NotificationSource, NotificationsState } from "../Common/ArgusNotification";
     import NotificationTestRunWrapper from "./NotificationTestRunWrapper.svelte";
+    import { sanitizeHtml } from "../Common/safeHtml";
     interface Props {
         summary: ArgusShortSummary;
     }
@@ -83,7 +84,7 @@
 {#if notification}
     <div>
         <p class="border-bottom mb-2">
-            {@html notification.content}
+            {@html sanitizeHtml(notification.content)}
         </p>
         {#if supportDataReady && supportData}
             {@const SvelteComponent = ComponentSourceMap[notification.source]}

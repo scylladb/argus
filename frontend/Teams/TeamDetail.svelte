@@ -2,14 +2,12 @@
     import { run } from 'svelte/legacy';
 
     import { faCalendar, faEdit, faSave, faTimes, faUserPlus } from "@fortawesome/free-solid-svg-icons";
-    import { marked as parse } from "marked";
-    import DOMPurify from "dompurify";
     import format from "string-template";
     import Fa from "svelte-fa";
     import { applicationCurrentUser } from "../argus";
     import type { Users, User as IUser } from "../Common/UserTypes";
     import { getUser, getPicture } from "../Common/UserUtils";
-    import { markdownRendererOptions } from "../markdownOptions";
+    import { renderMarkdown } from "../Common/markdown";
     import { sendMessage } from "../Stores/AlertStore";
     import { userList } from "../Stores/UserlistSubscriber";
     import TeamMember from "./TeamMember.svelte";
@@ -189,7 +187,7 @@
             <h4>Message of the day</h4>
             <div class="bg-light-one p-2 rounded">
                 <div class="border rounded p-2 markdown-body">
-                    {@html DOMPurify.sanitize(parse(team.motd, markdownRendererOptions))}
+                    {@html renderMarkdown(team.motd)}
                 </div>
             </div>
         </div>

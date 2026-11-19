@@ -3,12 +3,11 @@
 
     import Fa from "svelte-fa";
     import { faCopy } from "@fortawesome/free-solid-svg-icons";
-    import { parse } from "marked";
     import { onMount } from "svelte";
     import { getScyllaPackage, getKernelPackage, getUpgradedScyllaPackage, getRelocatableScyllaPackage,
         getOperatorPackage, getOperatorHelmPackage, getOperatorHelmRepoPackage,
     } from "../Common/RunUtils";
-    import { markdownRendererOptions } from "../markdownOptions";
+    import { renderMarkdown } from "../Common/markdown";
     import { sendMessage } from "../Stores/AlertStore";
     import { clusterTypeLabel, networkTypeLabel, getDbNodeSetup } from "../Common/CloudSetupUtils";
     let { test_run = {}, test } = $props();
@@ -70,8 +69,8 @@
     });
 
     onMount(() => {
-        renderedElement.innerHTML = parse(templateElement.innerHTML, markdownRendererOptions);
-        renderedShortElement.innerHTML = parse(shortTemplateElement.innerHTML, markdownRendererOptions);
+        renderedElement.innerHTML = renderMarkdown(templateElement.innerHTML);
+        renderedShortElement.innerHTML = renderMarkdown(shortTemplateElement.innerHTML);
         issueTemplateText = templateElement.innerHTML;
     });
 </script>

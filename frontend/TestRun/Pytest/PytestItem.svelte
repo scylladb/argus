@@ -4,6 +4,7 @@
     import {type PytestData, PytestStatus} from "./types";
     import { faChevronDown, faChevronUp, faClipboard, faCopy, faFilter } from "@fortawesome/free-solid-svg-icons";
     import humanizeDuration from "humanize-duration";
+    import { sanitizeHtml } from "../../Common/safeHtml";
 
     interface Props {
         item: PytestData;
@@ -85,7 +86,7 @@
                                         {#if value.startsWith("http")}
                                             <a href="{value}">{value}</a>
                                         {:else if value.search(/^<a.*>/) != -1}
-                                            {@html value}
+                                            {@html sanitizeHtml(value)}
                                         {:else}
                                             {value}
                                         {/if}

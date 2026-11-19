@@ -8,6 +8,7 @@
     import {faExpand, faCopy} from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
     import {sendMessage} from "../Stores/AlertStore";
+    import { sanitizeHtml } from "../Common/safeHtml";
 
     interface Props {
         graph?: any;
@@ -246,7 +247,7 @@
                     });
 
                     innerHtml += "</div>";
-                    tooltipEl.innerHTML = innerHtml;
+                    tooltipEl.innerHTML = sanitizeHtml(innerHtml);
                 }
 
                 const position = context.chart.canvas.getBoundingClientRect();

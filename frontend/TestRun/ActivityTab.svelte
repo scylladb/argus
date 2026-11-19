@@ -3,6 +3,7 @@
 
     import { onMount } from "svelte";
     import { userList } from "../Stores/UserlistSubscriber";
+    import { sanitizeHtml } from "../Common/safeHtml";
 
     let users = $state({});
     run(() => {
@@ -67,7 +68,7 @@
                         class="img-profile"
                         src={getPictureForId(event.user_id)}
                         alt=""
-                    /> {@html activity.events[event.id]}
+                    /> {@html sanitizeHtml(activity.events[event.id])}
                     <small class="text-muted"
                         >{new Date(
                             event.created_at

@@ -2,7 +2,6 @@
     import { run } from 'svelte/legacy';
 
     import { createEventDispatcher, onMount } from "svelte";
-    import { parse as markdownParse } from "marked";
     import Fa from "svelte-fa";
     import {
         faHeading,
@@ -21,7 +20,7 @@
     import sha1 from "js-sha1";
     import MentionSelector from "./MentionSelector.svelte";
     import { userList } from "../Stores/UserlistSubscriber";
-    import { markdownRendererOptions } from "../markdownOptions";
+    import { renderMarkdown } from "../Common/markdown";
     interface Props {
         mode?: string;
         runId?: string;
@@ -332,10 +331,7 @@
             {#if commentBody.message}
                 <div class="p-2 rounded bg-light preview-body">
                     <div class="border rounded p-2 bg-white markdown-body">
-                        {@html markdownParse(
-                            commentBody.message,
-                            markdownRendererOptions
-                        )}
+                        {@html renderMarkdown(commentBody.message, { mentions: true })}
                     </div>
                 </div>
             {:else}
