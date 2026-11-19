@@ -81,7 +81,7 @@ dev = [
   "docker == 7.1.0",
   "ipython ~= 8.36.0",
   "pre-commit >= 4.2.0",
-  "ruff ~= 0.11.11",
+  "ruff ~=0.17.5",
   "autopep8 >= 2.3.2",
   "requests-mock ~= 1.12.1",
   "codecov ~= 2.1.12",
