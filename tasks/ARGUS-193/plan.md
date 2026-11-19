@@ -106,4 +106,4 @@ stays in every plan built from a spec.
     page as before with it off.
   - [x] Check the light and dark themes.
   - [ ] Check the copy button. Headless Chrome has no clipboard; the Vitest test covers it.
-- [ ] Leave the code uncommitted for review. The commit carries the checked boxes.
+- [x] Leave the code uncommitted for review. The commit carries the checked boxes.

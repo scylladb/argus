@@ -23,8 +23,9 @@
         filterString: string,
         issueAttach: (url: string) => void,
         eventFilterString: string,
+        showSummaries: boolean,
     }
-    let { event, run, duplicateIdShowTable = $bindable(), eventMap, focusDuplicate, issues = $bindable(), refreshIssues, filterState, innerEvents, options, issueAttach, filterString = $bindable(), eventFilterString = $bindable()}: Props = $props();
+    let { event, run, duplicateIdShowTable = $bindable(), eventMap, focusDuplicate, issues = $bindable(), refreshIssues, filterState, innerEvents, options, issueAttach, filterString = $bindable(), eventFilterString = $bindable(), showSummaries}: Props = $props();
 
     let hasErrors = $derived(innerEvents.filter((evt: TimelineEvent) => [SCTEventSeverity.CRITICAL, SCTEventSeverity.ERROR].includes((evt.event as SCTEvent).severity)).length > 0);
     let visibleEvents = $derived(innerEvents.map((evt: TimelineEvent) => !(evt.event as SCTEvent).duplicate_id || (duplicateIdShowTable[(evt.event as SCTEvent).duplicate_id])).some((v) => v));
@@ -75,7 +76,7 @@
             <div class="rounded shadow bg-light-one p-2 collapse" class:show={expandEvents}>
                 {#each innerEvents as event}
                     <div class="mb-2">
-                        <SctEvent {focusDuplicate} bind:duplicateIdShowTable bind:this={eventMap[`${event.id}-${event.event.event_id}`]} {refreshIssues} issues={issues.filter((i) => i.event_id == (event.event as SCTEvent).event_id)} {run} event={(event.event as SCTEvent)} filterState={filterState} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString}/>
+                        <SctEvent {focusDuplicate} bind:duplicateIdShowTable bind:this={eventMap[`${event.id}-${event.event.event_id}`]} {refreshIssues} issues={issues.filter((i) => i.event_id == (event.event as SCTEvent).event_id)} {run} event={(event.event as SCTEvent)} filterState={filterState} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString} {showSummaries}/>
                     </div>
                 {/each}
             </div>
