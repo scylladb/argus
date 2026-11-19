@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -121,6 +122,20 @@ type Client struct {
 	cfAccessClientSecret string
 }
 
+// userAgent is the User-Agent header of every request. [SetVersion] sets the version in it.
+var userAgent = UserAgent("dev")
+
+// UserAgent returns the User-Agent header of the CLI at version, in the form
+// "argus-cli/<version> (<os>/<arch>)". Argus reads it to tell the CLI and its version apart
+// from other clients.
+func UserAgent(version string) string {
+	return fmt.Sprintf("argus-cli/%s (%s/%s)", version, runtime.GOOS, runtime.GOARCH)
+}
+
+// SetVersion sets the CLI version that the User-Agent header of every request names. main calls
+// it once, before any request.
+func SetVersion(version string) { userAgent = UserAgent(version) }
+
 // ClientOption is a functional option for [New].
 type ClientOption func(*Client)
 
@@ -215,8 +230,8 @@ func RunPageURL(base, pluginName, runID string) string {
 
 // NewRequest constructs an [http.Request] for the given method and path.
 // If body is non-nil it is JSON-encoded and the Content-Type header is set to
-// "application/json". The configured session cookie and/or API token are
-// attached automatically.
+// "application/json". The User-Agent header, the configured session cookie
+// and/or API token are attached automatically.
 func (c *Client) NewRequest(ctx context.Context, method, path string, body any) (*http.Request, error) {
 	rel, err := url.Parse(path)
 	if err != nil {
@@ -239,6 +254,7 @@ func (c *Client) NewRequest(ctx context.Context, method, path string, body any) 
 		return nil, fmt.Errorf("%w: %w", ErrBuildingRequest, err)
 	}
 
+	req.Header.Set("User-Agent", userAgent)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
