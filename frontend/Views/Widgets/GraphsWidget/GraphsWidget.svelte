@@ -162,10 +162,18 @@
         <div class="accordion" id="graphsAccordion">
             {#each Object.entries(testViews) as [testId, views]}
                 <div class="card mb-3">
-                    <div class="card-header bg-light" onclick={() => toggleTest(testId)}>
-                        <h5 class="mb-0 d-flex align-items-center">
-                            <i class="fas fa-chevron-{expandedTests.has(testId) ? 'down' : 'right'} me-2"></i>
-                            <span>{testsDetails[testId]?.name || `Test ID: ${testId}`}</span>
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">
+                            <button
+                                type="button"
+                                class="w-100 p-0 border-0 bg-transparent text-reset text-start fw-medium d-flex align-items-center"
+                                aria-expanded={expandedTests.has(testId)}
+                                aria-controls="test-{testId}"
+                                onclick={() => toggleTest(testId)}
+                            >
+                                <i class="fas fa-chevron-{expandedTests.has(testId) ? 'down' : 'right'} me-2"></i>
+                                <span>{testsDetails[testId]?.name || `Test ID: ${testId}`}</span>
+                            </button>
                         </h5>
                     </div>
 
@@ -173,15 +181,23 @@
                         <div class="card-body">
                             {#each views as view}
                                 <div class="card mb-3">
-                                    <div class="card-header bg-transparent" onclick={() => toggleView(view.id)}>
-                                        <div class="d-flex align-items-center">
-                                            <i
-                                                class="fas fa-chevron-{expandedViews.has(view.id)
-                                                    ? 'down'
-                                                    : 'right'} me-2"
-></i>
-                                            <h6 class="mb-0">{view.name}</h6>
-                                        </div>
+                                    <div class="card-header bg-transparent">
+                                        <h6 class="mb-0">
+                                            <button
+                                                type="button"
+                                                class="w-100 p-0 border-0 bg-transparent text-reset text-start fw-medium d-flex align-items-center"
+                                                aria-expanded={expandedViews.has(view.id)}
+                                                aria-controls="view-{view.id}"
+                                                onclick={() => toggleView(view.id)}
+                                            >
+                                                <i
+                                                    class="fas fa-chevron-{expandedViews.has(view.id)
+                                                        ? 'down'
+                                                        : 'right'} me-2"
+                                                ></i>
+                                                {view.name}
+                                            </button>
+                                        </h6>
                                     </div>
 
                                     <div

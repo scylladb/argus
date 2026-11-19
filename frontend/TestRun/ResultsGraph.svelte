@@ -1,7 +1,6 @@
 <script lang="ts">
-    import { run, createBubbler, stopPropagation } from 'svelte/legacy';
+    import { run } from 'svelte/legacy';
 
-    const bubble = createBubbler();
     import { Chart, registerables, Tooltip } from "chart.js";
     import { createEventDispatcher, onDestroy, onMount } from "svelte";
     import "chartjs-adapter-date-fns";
@@ -365,8 +364,8 @@
 
 {#if showModal}
     <div class="modal">
-        <div class="modal-content bg-white" onclick={stopPropagation(bubble('click'))}>
-            <button class="close-btn" onclick={closeModal}>&times;</button>
+        <div class="modal-content bg-white">
+            <button class="close-btn" aria-label="Close" onclick={closeModal}>&times;</button>
             <button class="modal-copy-btn" onclick={() => copyToClipboard(true)}>
                 <Fa icon={faCopy}/>
             </button>
