@@ -3,7 +3,7 @@ import nox
 nox.options.default_venv_backend = "uv"
 
 
-@nox.session(python=["3.10", "3.11", "3.12", "3.13", "3.14"])
+@nox.session(python=["3.13", "3.14"])
 def tests(session):
     """Run the test suite with coverage."""
 
@@ -23,7 +23,7 @@ def tests(session):
     )
 
 
-@nox.session(python=["3.12", "3.13", "3.14"])
+@nox.session(python=["3.13", "3.14"])
 def pre_commit(session):
     """Run pre-commit checks."""
     session.install(".[dev]")
