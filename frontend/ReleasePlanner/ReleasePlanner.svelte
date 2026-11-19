@@ -147,7 +147,7 @@
 </script>
 
 {#if creatingPlan}
-    <ModalWindow on:modalClose={() => (creatingPlan = false)}>
+    <ModalWindow dismissible={false} on:modalClose={() => (creatingPlan = false)}>
         {#snippet title()}
                 <div >
                 Creating a release plan
@@ -165,7 +165,7 @@
 {/if}
 
 {#if createFromPlan}
-    <ModalWindow on:modalClose={() => {selectedPlan = undefined; createFromPlan = false;}}>
+    <ModalWindow dismissible={false} on:modalClose={() => {selectedPlan = undefined; createFromPlan = false;}}>
         {#snippet title()}
                 <div >
                 Creating <span class="fw-bold">Execution plan</span> from <span class="fw-bold">{selectedPlan.name}</span>
@@ -184,7 +184,7 @@
 {/if}
 
 {#if copyingPlan}
-    <ModalWindow on:modalClose={() => { selectedPlan = undefined; copyingPlan = false; }}>
+    <ModalWindow dismissible={false} on:modalClose={() => { selectedPlan = undefined; copyingPlan = false; }}>
         {#snippet title()}
                 <div >
                 Copying plan...
@@ -214,7 +214,7 @@
 {/if}
 
 {#if editingPlan}
-    <ModalWindow on:modalClose={() => {selectedPlan = undefined; editingPlan = false;}}>
+    <ModalWindow dismissible={false} on:modalClose={() => {selectedPlan = undefined; editingPlan = false;}}>
         {#snippet title()}
                 <div >
                 Editing <span class="fw-bold">{selectedPlan.name}</span>

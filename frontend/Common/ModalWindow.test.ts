@@ -165,6 +165,29 @@ describe("ModalWindow", () => {
         expect(onClose).not.toHaveBeenCalled();
     });
 
+    it("stays open on a click outside the box when not dismissible", async () => {
+        const { dialog, onClose } = renderModal({ dismissible: false });
+        const frame = dialog.firstElementChild as HTMLElement;
+
+        for (const target of [dialog, frame]) {
+            await fireEvent.pointerDown(target);
+            await fireEvent.pointerUp(target);
+            await fireEvent.click(target);
+        }
+
+        expect(dialog.open).toBe(true);
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it("closes from the close button and a dialog close when not dismissible", async () => {
+        const { dialog, onClose } = renderModal({ dismissible: false });
+
+        await fireEvent.click(screen.getByRole("button", { name: "Close" }));
+        dialog.close();
+
+        expect(onClose).toHaveBeenCalledTimes(2);
+    });
+
     it("lists the dialog as open while it is mounted", () => {
         const { dialog, unmount } = renderModal();
 

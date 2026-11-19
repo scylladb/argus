@@ -67,7 +67,7 @@
     };
 </script>
 
-<ModalWindow on:modalClose={onClose}>
+<ModalWindow dismissible={false} on:modalClose={onClose}>
     {#snippet title()}Assistant identity on {connection}{/snippet}
     {#snippet body()}
         <form class="d-flex flex-column gap-3" onsubmit={(event) => { event.preventDefault(); save(); }}>

@@ -8,9 +8,10 @@
         widthClass?: string;
         title?: Snippet;
         body?: Snippet;
+        dismissible?: boolean;
     }
 
-    let { widthClass = "w-50", title, body }: Props = $props();
+    let { widthClass = "w-50", title, body, dismissible = true }: Props = $props();
     let innerWidth = $state(0);
     let dialog: HTMLDialogElement | undefined = $state();
     let frame: HTMLElement | undefined = $state();
@@ -21,7 +22,7 @@
     const outside = (target: EventTarget | null) => target === dialog || target === frame;
 
     const closeOnOutsideClick = (event: MouseEvent) => {
-        const close = pressedOutside && releasedOutside && outside(event.target);
+        const close = dismissible && pressedOutside && releasedOutside && outside(event.target);
         pressedOutside = false;
         releasedOutside = false;
         if (close) dialog?.close();
