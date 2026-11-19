@@ -32,6 +32,7 @@
 
     let shortBlock = $state();
     let extendedBlock = $state();
+    let extended = $state(false);
 
     const dispatch = createEventDispatcher();
     const normalize = function(val, max, min) {
@@ -39,6 +40,7 @@
     };
 
     const toggleExtendedInvestigations = function () {
+        extended = !extended;
         new Collapse(shortBlock, { toggle: true });
         new Collapse(extendedBlock, {toggle: true });
     };
@@ -116,21 +118,20 @@
             class="mt-2 collapse show"
             bind:this={shortBlock}
         >
-            <div
-                class="align-self-start d-inline-flex shadow-sm overflow-hidden border rounded cursor-pointer"
+            <button
+                type="button"
+                class="align-self-start d-inline-flex shadow-sm overflow-hidden border rounded p-0 bg-transparent text-reset"
+                aria-expanded={extended}
                 onclick={toggleExtendedInvestigations}
             >
                 {#each Object.values(TestInvestigationStatus) as investigationStatus, idx}
                     {@const statusStats = calculateStatusStats(stats, investigationStatus, allowedStatuses)}
-                    <div
-                        class="flex-fill text-center {idx > 0 ? "border-start" : ""} px-3 py-2"
-                        role="button"
-                    >
-                        <Fa icon={InvestigationStatusIcon[investigationStatus]}/>
+                    <div class="flex-fill text-center {idx > 0 ? "border-start" : ""} px-3 py-2">
+                        <Fa icon={InvestigationStatusIcon[investigationStatus]} title={TestInvestigationStatusStrings[investigationStatus]}/>
                         {statusStats?.total}
                     </div>
                 {/each}
-            </div>
+            </button>
         </div>
         <div class="collapse mt-2" bind:this={extendedBlock}>
             <div class="d-inline-flex flex-column">
@@ -176,10 +177,6 @@
 <style>
     .cursor-question {
         cursor: help;
-    }
-
-    .cursor-pointer {
-        cursor: pointer;
     }
 
     .text-small {
