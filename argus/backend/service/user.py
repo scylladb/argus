@@ -24,6 +24,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 from argus.backend.db import ScyllaCluster
 from argus.backend.error_handlers import APIException, AuthorizationError, DataValidationError, UIRedirect
+from argus.backend.models.runtime_store import RuntimeStore
 from argus.backend.models.web import User, UserOauthToken, UserRoles, WebFileStorage
 from argus.backend.util.common import gen_pass
 
@@ -71,6 +72,8 @@ def hash_api_token(token: str) -> str:
 
 class UserService:
     EMAIL_RE = re.compile(r"^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", re.IGNORECASE)
+    PREFERENCE_DEFAULTS: dict[str, bool] = {"event_summaries": False}
+
     def __init__(self) -> None:
         self.cluster = ScyllaCluster.get()
 
@@ -409,6 +412,26 @@ class UserService:
             raise UserServiceException("Cannot use '@' in the username")
         user.username = new_username
         await user.save()
+
+    @staticmethod
+    def _preference_key(user: User, key: str) -> str:
+        return f"user_pref_{user.id}_{key}"
+
+    async def get_preferences(self, user: User) -> dict[str, bool]:
+        preferences = {}
+        for key, default in self.PREFERENCE_DEFAULTS.items():
+            try:
+                preferences[key] = (await RuntimeStore.get(key=self._preference_key(user, key))).value
+            except DocumentNotFound:
+                preferences[key] = default
+        return preferences
+
+    async def set_preference(self, user: User, key: str, value: bool) -> None:
+        if key not in self.PREFERENCE_DEFAULTS:
+            raise UserServiceException(f"Unknown preference: {key}")
+        preference = RuntimeStore(key=self._preference_key(user, key))
+        preference.value = value
+        await preference.save()
 
     async def update_name(self, user: User, new_name: str):
         user.full_name = new_name

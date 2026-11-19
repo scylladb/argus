@@ -560,6 +560,14 @@ async def user_planned_jobs(user: User = Depends(api_current_user)):
     })
 
 
+@router.get("/user/preferences", name="api.user_preferences")
+async def user_preferences(user: User = Depends(api_current_user)):
+    return APIResponse({
+        "status": "ok",
+        "response": await UserService().get_preferences(user),
+    })
+
+
 @router.api_route("/zeus/{endpoint:path}", methods=["GET", "POST", "HEAD", "PUT", "DELETE"],
                   name="api.zeus_proxy")
 async def zeus_proxy(asgi_request: Request, endpoint: str,

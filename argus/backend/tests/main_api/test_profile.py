@@ -304,3 +304,39 @@ def test_error_page_shows_logged_out_nav_for_anonymous_user(anon_client):
     res = anon_client.get("/error/", params={"type": "404"})
     assert res.status_code == 200
     assert "fa-sign-in-alt" in res.text  # Login link present
+
+
+def _event_summaries(client) -> bool:
+    res = client.get("/api/v1/user/preferences")
+    assert res.status_code == 200
+    return res.json()["response"]["event_summaries"]
+
+
+def test_preferences_default_off(profile_client):
+    assert _event_summaries(profile_client) is False
+
+
+def test_update_preferences_turns_event_summaries_on_and_off(profile_client):
+    res = profile_client.post("/profile/update/preferences", data={"event_summaries": "on"},
+                              follow_redirects=False)
+    assert res.status_code == 302
+    assert "/profile" in res.headers["Location"]
+    assert _event_summaries(profile_client) is True
+
+    profile_client.post("/profile/update/preferences", data={}, follow_redirects=False)
+    assert _event_summaries(profile_client) is False
+
+
+def test_preferences_survive_username_change(profile_client):
+    profile_client.post("/profile/update/preferences", data={"event_summaries": "on"}, follow_redirects=False)
+    profile_client.post("/profile/update/username", data={"new_username": f"renamed_{uuid.uuid4().hex[:8]}"},
+                        follow_redirects=False)
+    assert _event_summaries(profile_client) is True
+
+
+def test_profile_page_renders_event_summaries_switch_state(profile_client):
+    assert 'name="event_summaries"' in profile_client.get("/profile/").text
+    profile_client.post("/profile/update/preferences", data={"event_summaries": "on"}, follow_redirects=False)
+    page = profile_client.get("/profile/").text
+    switch = page[page.index('id="formEventSummaries"'):].split(">", 1)[0]
+    assert "checked" in switch

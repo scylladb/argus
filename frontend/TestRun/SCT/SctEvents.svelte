@@ -14,6 +14,7 @@
         target_node?: string;
         nemesis_status?: string;
         known_issue?: string;
+        summary?: string | null;
     }
 
     export const SCTEventSeverity = {
@@ -113,6 +114,7 @@
     });
 
     let eventMap: {[key: string]: SctEvent} = {};
+    let showSummaries = $state(false);
 
     let eventFilterString = $state("");
     let nemesisFilterString = $state("");
@@ -277,7 +279,21 @@
 
     let timeline: TimelineEvent[] = $derived(createTimeline(nemeses, events, eventDisplayMode));
 
+    const fetchPreferences = async function () {
+        try {
+            const res = await fetch("/api/v1/user/preferences");
+            const json = await res.json();
+            if (json.status !== "ok") {
+                throw json;
+            }
+            showSummaries = json.response.event_summaries === true;
+        } catch (error) {
+            console.log("Failed to fetch user preferences", error);
+        }
+    };
+
     onMount(async () => {
+        fetchPreferences();
         events = await fetchEvents(false, 10000);
         await fetchIssuesForEvents();
         updateCounters();
@@ -345,7 +361,7 @@
             {#if event.type == TimelineEventType.Event}
                 {#if severityFilter[event.severity]}
                     <div class="mb-2">
-                        <SctEvent {focusDuplicate} bind:this={eventMap[event.event.event_id]} bind:duplicateIdShowTable {refreshIssues} issues={issues.filter((i) => i.event_id == (event.event as SCTEvent).event_id)} event={(event.event as SCTEvent)} run={testRun} filterState={severityFilter} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString} />
+                        <SctEvent {focusDuplicate} bind:this={eventMap[event.event.event_id]} bind:duplicateIdShowTable {refreshIssues} issues={issues.filter((i) => i.event_id == (event.event as SCTEvent).event_id)} event={(event.event as SCTEvent)} run={testRun} filterState={severityFilter} options={event.opts || {}} issueAttach={issueAttach} bind:filterString={eventFilterString} {showSummaries} />
                     </div>
                 {/if}
             {:else if event.type == TimelineEventType.Nemesis}

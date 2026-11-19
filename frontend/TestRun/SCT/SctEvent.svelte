@@ -25,8 +25,9 @@
         refreshIssues: () => void,
         filterString: string,
         duplicateIdShowTable: { [key: string]: boolean },
+        showSummaries: boolean,
     }
-    let { event, focusDuplicate, duplicateIdShowTable = $bindable() ,run, issues, refreshIssues, filterState, options, issueAttach, filterString = $bindable()}: Props = $props();
+    let { event, focusDuplicate, duplicateIdShowTable = $bindable() ,run, issues, refreshIssues, filterState, options, issueAttach, filterString = $bindable(), showSummaries}: Props = $props();
     const MESSAGE_CUTOFF = 600;
     const SHORT_MESSAGE_LEN = 500;
     let showingIssueTable = $state(false);
@@ -34,6 +35,9 @@
     let newIssueUrl = $state("");
     let submitting = $state(false);
     let highlighting = $state(false);
+    let showOriginal = $state(false);
+    let hasSummary = $derived(showSummaries && !!event.summary);
+    let summaryView = $derived(hasSummary && !showOriginal);
 
 
     const sliceMessage = function (message: string): string {
@@ -364,7 +368,21 @@
             </div>
         </div>
         <div class:duplicate-body={isDuplicate(event)} class="bg-body p-2">
-            <pre class="font-monospace p-2 rounded m-1 bg-light-two" style="white-space: pre-wrap !important">{sliceMessage(event.message)} {#if event.message.length > MESSAGE_CUTOFF}<button class="btn btn-sm btn-light" onclick={() => fullMessage = !fullMessage}>{#if fullMessage}X{:else}...{/if}</button>{/if}</pre>
+            {#if hasSummary}
+                <div class="d-flex align-items-center m-1">
+                    {#if summaryView}
+                        <span class="badge ai-summary-badge me-2">AI summary</span>
+                        <button class="btn btn-sm btn-light" onclick={() => showOriginal = true}>Show original</button>
+                    {:else}
+                        <button class="btn btn-sm btn-light" onclick={() => showOriginal = false}>Show summary</button>
+                    {/if}
+                </div>
+            {/if}
+            {#if summaryView}
+                <pre class="font-monospace p-2 rounded m-1 bg-light-two" style="white-space: pre-wrap !important">{event.summary}</pre>
+            {:else}
+                <pre class="font-monospace p-2 rounded m-1 bg-light-two" style="white-space: pre-wrap !important">{sliceMessage(event.message)} {#if event.message.length > MESSAGE_CUTOFF}<button class="btn btn-sm btn-light" onclick={() => fullMessage = !fullMessage}>{#if fullMessage}X{:else}...{/if}</button>{/if}</pre>
+            {/if}
         </div>
     </div>
 </div>
@@ -449,6 +467,11 @@
         background-color: #c8e3ef !important;
     }
 
+    .ai-summary-badge {
+        background-color: #6f42c1;
+        color: #ffffff;
+    }
+
     :global([data-bs-theme="dark"]) .bg-titlebar {
         background-color: #2b3035;
         color: #dee2e6;
@@ -460,6 +483,11 @@
 
     :global([data-bs-theme="dark"]) .duplicate {
         background-color: #1a3a4a !important;
+    }
+
+    :global([data-bs-theme="dark"]) .ai-summary-badge {
+        background-color: #a98eda;
+        color: #1a1d20;
     }
 
     :global([data-bs-theme="dark"]) .duplicate-body {
