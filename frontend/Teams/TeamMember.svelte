@@ -82,9 +82,16 @@
     {#if userJobs}
         <div class="ms-auto d-flex border p-1 rounded">
             {#await aggregateJobs(userJobs, (job) => job.investigation_status == TestInvestigationStatus.NOT_INVESTIGATED && job.status != TestStatus.PASSED) then stats}
-                <div class="px-2" role="button" class:border-end={showNotInvestigatedDetailedStats} onclick={() => (showNotInvestigatedDetailedStats = !showNotInvestigatedDetailedStats)}>
+                <button
+                    type="button"
+                    class="btn btn-link px-2 py-0 border-0 rounded-0 text-reset text-decoration-none"
+                    class:border-end={showNotInvestigatedDetailedStats}
+                    aria-label="{stats.total} not investigated"
+                    aria-expanded={showNotInvestigatedDetailedStats}
+                    onclick={() => (showNotInvestigatedDetailedStats = !showNotInvestigatedDetailedStats)}
+                >
                     <Fa icon={faEyeSlash} /> {stats.total}
-                </div>
+                </button>
                 <div class:d-flex={showNotInvestigatedDetailedStats} class:d-none={!showNotInvestigatedDetailedStats}>
                     <div class="ms-2">
                         <Fa icon={faCircle} class={StatusCSSClassMap.failed}/> {stats.failed}
@@ -106,9 +113,16 @@
         </div>
         <div class="ms-2 d-flex border p-1 rounded">
             {#await aggregateJobs(userJobs, (job) => job.investigation_status == TestInvestigationStatus.INVESTIGATED || job.status == TestStatus.PASSED) then stats}
-                <div class="px-2" class:border-end={showInvestigatedDetailedStats} role="button" onclick={() => (showInvestigatedDetailedStats = !showInvestigatedDetailedStats)}>
+                <button
+                    type="button"
+                    class="btn btn-link px-2 py-0 border-0 rounded-0 text-reset text-decoration-none"
+                    class:border-end={showInvestigatedDetailedStats}
+                    aria-label="{stats.total} investigated"
+                    aria-expanded={showInvestigatedDetailedStats}
+                    onclick={() => (showInvestigatedDetailedStats = !showInvestigatedDetailedStats)}
+                >
                     <Fa icon={faEye} /> {stats.total}
-                </div>
+                </button>
                 <div class:d-flex={showInvestigatedDetailedStats} class:d-none={!showInvestigatedDetailedStats}>
                     <div class="ms-2">
                         <Fa icon={faCircle} class={StatusCSSClassMap.failed}/> {stats.failed}
