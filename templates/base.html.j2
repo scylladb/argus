@@ -40,6 +40,7 @@
     </script>
     <title>Argus - {%block title%}{%endblock%}</title>
     <link rel="stylesheet" href="/s/dist/style.css">
+    <link rel="preload" href="/s/dist/fa-solid-900.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="shortcut icon" href="/s/argus.png" type="image/png">
     {% block javascripts %}
     <script>
@@ -50,7 +51,6 @@
         var gArgusCurrentUser = {{ g.user | safe_user | tojson | safe }};
     </script>
     {% endif %}
-    <script src="/s/dist/fontAwesome.bundle.js"></script>
     <script type="module" src="/s/dist/main.bundle.js"></script>
     <script type="module" src="/s/dist/globalAlert.bundle.js"></script>
     <script type="module" defer src="/s/dist/notificationCounter.bundle.js"></script>
