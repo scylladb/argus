@@ -20,6 +20,7 @@ export default defineConfig({
         }),
     ],
     publicDir: false,
+    base: "/s/dist/",
     build: {
         outDir: "public/dist",
         emptyOutDir: true,
@@ -29,7 +30,6 @@ export default defineConfig({
         rolldownOptions: {
             input: {
                 main: "./frontend/argus.js",
-                fontAwesome: "./frontend/font-awesome.js",
                 globalAlert: "./frontend/Alert.js",
                 notificationCounter: "./frontend/notification-counter.js",
                 healthIndicator: "./frontend/health-indicator.js",
