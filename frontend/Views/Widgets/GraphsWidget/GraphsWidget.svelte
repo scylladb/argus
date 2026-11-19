@@ -162,11 +162,11 @@
         <div class="accordion" id="graphsAccordion">
             {#each Object.entries(testViews) as [testId, views]}
                 <div class="card mb-3">
-                    <div class="card-header bg-light">
+                    <div class="card-header bg-light p-0">
                         <h5 class="mb-0">
                             <button
                                 type="button"
-                                class="w-100 p-0 border-0 bg-transparent text-reset text-start fw-medium d-flex align-items-center"
+                                class="w-100 py-2 px-3 border-0 bg-transparent text-reset text-start fw-medium d-flex align-items-center"
                                 aria-expanded={expandedTests.has(testId)}
                                 aria-controls="test-{testId}"
                                 onclick={() => toggleTest(testId)}
@@ -181,11 +181,11 @@
                         <div class="card-body">
                             {#each views as view}
                                 <div class="card mb-3">
-                                    <div class="card-header bg-transparent">
+                                    <div class="card-header bg-transparent p-0">
                                         <h6 class="mb-0">
                                             <button
                                                 type="button"
-                                                class="w-100 p-0 border-0 bg-transparent text-reset text-start fw-medium d-flex align-items-center"
+                                                class="w-100 py-2 px-3 border-0 bg-transparent text-reset text-start fw-medium d-flex align-items-center"
                                                 aria-expanded={expandedViews.has(view.id)}
                                                 aria-controls="view-{view.id}"
                                                 onclick={() => toggleView(view.id)}
