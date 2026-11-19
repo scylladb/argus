@@ -1,5 +1,6 @@
 <script lang="ts">
     import { createEventDispatcher, type Snippet } from "svelte";
+    import { addModal, removeModal } from "../Stores/ModalStore";
 
     const dispatch = createEventDispatcher();
 
@@ -30,8 +31,11 @@
         if (!dialog) return;
         const active = document.activeElement;
         const opener = active instanceof HTMLElement && active !== document.body ? active : null;
-        dialog.showModal();
+        const shown = dialog;
+        shown.showModal();
+        addModal(shown);
         return () => {
+            removeModal(shown);
             const focused = document.activeElement;
             if (opener?.isConnected && (focused === null || focused === document.body)) {
                 opener.focus();

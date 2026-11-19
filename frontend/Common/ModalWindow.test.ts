@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/svelte";
 import { createRawSnippet } from "svelte";
+import { get } from "svelte/store";
 
 import ModalWindow from "./ModalWindow.svelte";
+import { openModals } from "../Stores/ModalStore";
 
 const snippet = (html: string) => createRawSnippet(() => ({ render: () => html }));
 
@@ -161,5 +163,15 @@ describe("ModalWindow", () => {
 
         expect(dialog.open).toBe(true);
         expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it("lists the dialog as open while it is mounted", () => {
+        const { dialog, unmount } = renderModal();
+
+        expect(get(openModals)).toEqual([dialog]);
+
+        unmount();
+
+        expect(get(openModals)).toEqual([]);
     });
 });

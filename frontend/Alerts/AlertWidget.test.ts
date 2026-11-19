@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup, waitFor } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { alertStore, sendMessage } from "../Stores/AlertStore";
+import { openModals } from "../Stores/ModalStore";
 import AlertWidget from "./AlertWidget.svelte";
 
 describe("AlertWidget — sendMessage integration", () => {
@@ -9,11 +10,13 @@ describe("AlertWidget — sendMessage integration", () => {
         vi.useFakeTimers();
         // Reset store to empty between tests
         alertStore.set({});
+        openModals.set([]);
     });
 
     afterEach(() => {
         vi.useRealTimers();
         cleanup();
+        document.body.replaceChildren();
     });
 
     it("renders an error message after sendMessage is called", async () => {
@@ -115,5 +118,74 @@ describe("AlertWidget — sendMessage integration", () => {
 
         expect(screen.getByText("Flash error")).toBeTruthy();
         expect(screen.getByText("Flash success")).toBeTruthy();
+    });
+
+    it("opens the error console as a modal dialog and closes it with Clear all", async () => {
+        render(AlertWidget);
+        await tick();
+        sendMessage("error", "Saved error");
+        await tick();
+        await tick();
+        screen.getByRole("button", { name: "Dismiss" }).click();
+        await tick();
+
+        screen.getByRole("button", { name: "Show errors" }).click();
+        await tick();
+        await tick();
+
+        const errorConsole = screen.getByRole("dialog", { name: "Error console" }) as HTMLDialogElement;
+        expect(errorConsole.open).toBe(true);
+        expect(errorConsole.textContent).toContain("Saved error");
+
+        screen.getByRole("button", { name: "Clear all" }).click();
+        await tick();
+        await tick();
+
+        expect(screen.queryByRole("dialog", { name: "Error console" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "Show errors" })).toBeNull();
+    });
+
+    it("closes the error console when its dialog closes", async () => {
+        render(AlertWidget);
+        await tick();
+        sendMessage("error", "Saved error");
+        await tick();
+        await tick();
+        screen.getByRole("button", { name: "Dismiss" }).click();
+        await tick();
+        screen.getByRole("button", { name: "Show errors" }).click();
+        await tick();
+        await tick();
+
+        (screen.getByRole("dialog", { name: "Error console" }) as HTMLDialogElement).close();
+        await tick();
+        await tick();
+
+        expect(screen.queryByRole("dialog", { name: "Error console" })).toBeNull();
+        expect(screen.getByRole("button", { name: "Show errors" })).toBeTruthy();
+    });
+
+    it("moves the toast stack into the open modal and back when it closes", async () => {
+        const { container } = render(AlertWidget);
+        await tick();
+        sendMessage("error", "Failed save");
+        await tick();
+        await tick();
+        const stack = document.getElementById("alertWidget") as HTMLElement;
+        const home = stack.parentElement;
+        const modal = document.createElement("dialog");
+        document.body.append(modal);
+
+        openModals.set([modal]);
+        await tick();
+
+        expect(stack.parentElement).toBe(modal);
+        expect(modal.textContent).toContain("Failed save");
+
+        openModals.set([]);
+        await tick();
+
+        expect(stack.parentElement).toBe(home);
+        expect(container.contains(stack)).toBe(true);
     });
 });
