@@ -231,54 +231,72 @@
                         <Fa icon={faHeading} class="editor-icon" />
                     </button>
                     <button
+                        title="Bold"
+                        aria-label="Bold"
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("bold")}
                     >
                         <Fa icon={faBold} class="editor-icon" />
                     </button>
                     <button
+                        title="Italic"
+                        aria-label="Italic"
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("italic")}
                     >
                         <Fa icon={faItalic} class="editor-icon" />
                     </button>
                     <button
+                        title="Underline"
+                        aria-label="Underline"
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("underline")}
                     >
                         <Fa icon={faUnderline} class="editor-icon" />
                     </button>
                     <button
+                        title="Quote"
+                        aria-label="Quote"
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("quote")}
                     >
                         <Fa icon={faQuoteLeft} class="editor-icon" />
                     </button>
                     <button
+                        title="Code"
+                        aria-label="Code"
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("code")}
                     >
                         <Fa icon={faCode} class="editor-icon" />
                     </button>
                     <button
+                        title="Link"
+                        aria-label="Link"
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("link")}
                     >
                         <Fa icon={faLink} class="editor-icon" />
                     </button>
                     <button
+                        title="Numbered list"
+                        aria-label="Numbered list"
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("listOl")}
                     >
                         <Fa icon={faListOl} class="editor-icon" />
                     </button>
                     <button
+                        title="Bulleted list"
+                        aria-label="Bulleted list"
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("listUl")}
                     >
                         <Fa icon={faListUl} class="editor-icon" />
                     </button>
                     <button
+                        title="Task list"
+                        aria-label="Task list"
                         class="btn btn-sm btn-outline-dark ms-1"
                         onclick={() => performButtonAction("tasks")}
                     >

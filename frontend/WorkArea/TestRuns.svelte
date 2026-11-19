@@ -509,6 +509,7 @@
                         {testInfo}
                         {testId}
                         bind:clickedTestRuns
+                        graphShown={clickedGraph}
                         on:runClick={handleTestRunClick}
                         on:closeRun={handleTestRunClose}
                         on:runDeleted={handleRunDeleted}

@@ -13,7 +13,8 @@
         testInfo = {},
         testId,
         runs = [],
-        clickedTestRuns = {}
+        clickedTestRuns = {},
+        graphShown = false
     } = $props();
 
     const dispatch = createEventDispatcher();
@@ -87,6 +88,10 @@
     {#if showGraphButton}
         <div class="me-2 mb-2 d-inline-block">
             <button
+                    title="Show graph"
+                    aria-label="Show graph"
+                    aria-expanded={graphShown}
+                    aria-controls={graphShown ? "collapse-graphs" : undefined}
                     class="btn btn-light"
                     onclick={() => {
                 dispatch("showGraph");
@@ -133,6 +138,8 @@
     {/each}
     <div class="me-2 mb-2 d-inline-block">
         <button
+            title="Show more runs"
+            aria-label="Show more runs"
             class="btn btn-light"
             onclick={() => {
                 dispatch("increaseLimit");

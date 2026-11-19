@@ -152,6 +152,8 @@
         {/if}
     {/if}
     <button
+        title="All jobs"
+        aria-label="All jobs"
         class="ms-2 btn btn-sm btn-primary"
         data-bs-toggle="collapse"
         data-bs-target="#showAllJobs-{member.id}"

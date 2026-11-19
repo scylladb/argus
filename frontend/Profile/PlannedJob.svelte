@@ -35,7 +35,7 @@
         </a>
     </div>
     <div class="me-2">
-        <button class="btn btn-sm btn-primary" onclick={() => (expanded = !expanded)}>
+        <button title="Details" aria-label="Details" aria-expanded={expanded} class="btn btn-sm btn-primary" onclick={() => (expanded = !expanded)}>
             <Fa icon={expanded ? faChevronUp : faChevronDown} /></button>
     </div>
 

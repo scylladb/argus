@@ -16,6 +16,8 @@
                 value="{testRun.gemini_command}"
             />
             <button
+                title="Copy command"
+                aria-label="Copy command"
                 class="btn btn-success"
                 type="button"
                 onclick={() => {

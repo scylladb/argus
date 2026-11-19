@@ -147,7 +147,7 @@
             <div class="d-flex">
                 <div>{team.name}</div>
                 {#if currentUser.id == team.leader}
-                    <button class="ms-2 btn btn-sm btn-primary" onclick={() => (editingName = true)}><Fa icon={faEdit}/></button>
+                    <button title="Edit name" aria-label="Edit name" class="ms-2 btn btn-sm btn-primary" onclick={() => (editingName = true)}><Fa icon={faEdit}/></button>
                 {/if}
             </div>
         {/if}

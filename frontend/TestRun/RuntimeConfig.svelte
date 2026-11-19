@@ -87,7 +87,7 @@
 
 <div class="mb-2 bg-light-one p-1 rounded">
     <h4>
-        <button class="btn btn-sm btn-secondary d-inline-block me-2" onclick={() => (collapsed = !collapsed)}><Fa icon={collapsed ? faAngleUp : faAngleDown}/></button><span>{LOCALIZED_CONFIG_NAMES[name] || name}</span>
+        <button title="Details" aria-label="Details" aria-expanded={!collapsed} class="btn btn-sm btn-secondary d-inline-block me-2" onclick={() => (collapsed = !collapsed)}><Fa icon={collapsed ? faAngleUp : faAngleDown}/></button><span>{LOCALIZED_CONFIG_NAMES[name] || name}</span>
     </h4>
     <div class="mb-1">
         <input type="text" class="form-control w-100" bind:value={filterString} placeholder="Filter configuration...">
@@ -121,7 +121,7 @@
                                     }
                                     navigator.clipboard.writeText(target);
                                 }}><Fa icon={faLink}/></button>
-                                <button class="d-none btn btn-success" onclick={() => navigator.clipboard.writeText(`${param.name}: ${param.value}`)}><Fa icon={faCopy}/></button>
+                                <button title="Copy parameter" aria-label="Copy parameter" class="d-none btn btn-success" onclick={() => navigator.clipboard.writeText(`${param.name}: ${param.value}`)}><Fa icon={faCopy}/></button>
                             </div>
                         </td>
                     </tr>

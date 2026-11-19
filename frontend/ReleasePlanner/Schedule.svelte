@@ -131,7 +131,7 @@
         class="border rounded bg-white shadow-sm mb-3 p-3 d-flex flex-column align-items-start justify-content-center"
     >
         <div class="text-end w-100">
-            <button class="btn btn-sm btn-dark" on:click={
+            <button title="Close" aria-label="Close" class="btn btn-sm btn-dark" on:click={
                 (e) => {
                     e.stopPropagation();
                     dispatch("closeSchedule", scheduleData);
@@ -232,6 +232,8 @@
                         {/each}
                     </ul>
                     <button
+                        title="Reassign"
+                        aria-label="Reassign"
                         class="btn btn-dark ms-1"
                         on:click={() => (reassigning = true)}
                     >

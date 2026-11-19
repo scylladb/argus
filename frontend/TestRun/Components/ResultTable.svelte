@@ -191,7 +191,7 @@
                     <thead class="thead-dark">
                     <tr>
                         <th>
-                            <button class="btn btn-link p-1" onclick={async () => await copyResultTableAsMarkdown()}>
+                            <button title="Copy as Markdown" aria-label="Copy as Markdown" class="btn btn-link p-1" onclick={async () => await copyResultTableAsMarkdown()}>
                                 <Fa icon={faMarkdown} size="sm"/>
                             </button>
                         </th>

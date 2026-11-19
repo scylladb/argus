@@ -366,7 +366,7 @@
     <div class="modal">
         <div class="modal-content bg-white">
             <button class="close-btn" aria-label="Close" onclick={closeModal}>&times;</button>
-            <button class="modal-copy-btn" onclick={() => copyToClipboard(true)}>
+            <button title="Copy to clipboard" aria-label="Copy to clipboard" class="modal-copy-btn" onclick={() => copyToClipboard(true)}>
                 <Fa icon={faCopy}/>
             </button>
             <canvas id="modal-graph-{test_id}-{index}"></canvas>

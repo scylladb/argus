@@ -78,7 +78,7 @@
                 </div>
             </div>
             <div class="ms-2 text-end align-self-center">
-                <button class="btn btn-dark" onclick={() => investigating = !investigating}>
+                <button title="Investigation" aria-label="Investigation" aria-expanded={investigating} class="btn btn-dark" onclick={() => investigating = !investigating}>
                     {#if investigating}
                         <Fa icon={faChevronCircleUp}/>
                     {:else}

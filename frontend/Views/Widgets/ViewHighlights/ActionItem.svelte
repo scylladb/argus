@@ -98,7 +98,7 @@
                 </button>
                 {#if !action.isArchived}
                     {#if action.creator_id === currentUserId}
-                        <button class="btn btn-sm btn-outline-secondary me-1" onclick={() => isEditing = !isEditing}>
+                        <button title="Edit" aria-label="Edit" aria-pressed={isEditing} class="btn btn-sm btn-outline-secondary me-1" onclick={() => isEditing = !isEditing}>
                             <Fa icon={faEdit}/>
                         </button>
                     {/if}

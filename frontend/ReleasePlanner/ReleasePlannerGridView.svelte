@@ -196,7 +196,7 @@
                             <span class="fw-bold">T</span> {gridView.tests[testId].name}
                         </div>
                         <div class="ms-1">
-                            <button class="btn btn-sm btn-primary" onclick={() => (clickedTests[testId] = false)}><Fa icon={faTimesCircle}/></button>
+                            <button title="Deselect test" aria-label="Deselect test" class="btn btn-sm btn-primary" onclick={() => (clickedTests[testId] = false)}><Fa icon={faTimesCircle}/></button>
                         </div>
                     </div>
                 {/if}
@@ -209,7 +209,7 @@
                             <span class="fw-bold">G</span> {group.pretty_name || group.name}
                         </div>
                         <div class="ms-1">
-                            <button class="btn btn-sm btn-success" onclick={() => (clickedGroups[groupId] = false)}><Fa icon={faTimesCircle}/></button>
+                            <button title="Deselect group" aria-label="Deselect group" class="btn btn-sm btn-success" onclick={() => (clickedGroups[groupId] = false)}><Fa icon={faTimesCircle}/></button>
                         </div>
                     </div>
                 {/if}

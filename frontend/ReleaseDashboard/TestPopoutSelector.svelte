@@ -60,7 +60,7 @@
 </script>
 
 <div class="position-fixed" style="top: 95%; left: 98%" class:d-none={!sticky}>
-    <button class="btn btn-primary" onclick={() => window.scrollTo({behavior: "smooth", top: 0 })}><Fa icon={faArrowUp}/></button>
+    <button title="Scroll to top" aria-label="Scroll to top" class="btn btn-primary" onclick={() => window.scrollTo({behavior: "smooth", top: 0 })}><Fa icon={faArrowUp}/></button>
 </div>
 <div class="">
     <div bind:this={top}></div>

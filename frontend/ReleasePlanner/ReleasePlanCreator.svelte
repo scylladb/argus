@@ -632,7 +632,7 @@
                     </div>
                 </Select>
             </div>
-            <button class="ms-2 btn btn-primary" onclick={() => (gridViewOpen = true)}>
+            <button title="Grid view" aria-label="Grid view" class="ms-2 btn btn-primary" onclick={() => (gridViewOpen = true)}>
                 <Fa icon={faThLarge}/>
             </button>
         </div>
@@ -695,9 +695,9 @@
                     </Select>
                 </div>
                 {#if item.type == "group"}
-                    <button class="ms-2 btn btn-sm btn-primary" onclick={() => explodeGroup(item.id)}><Fa icon={faExpand}/></button>
+                    <button title="Split group into tests" aria-label="Split group into tests" class="ms-2 btn btn-sm btn-primary" onclick={() => explodeGroup(item.id)}><Fa icon={faExpand}/></button>
                 {/if}
-                <button class="ms-2 btn btn-sm btn-warning" onclick={() => removeSelectedItem(item.id)}><Fa icon={faTrash}/></button>
+                <button title="Remove" aria-label="Remove" class="ms-2 btn btn-sm btn-warning" onclick={() => removeSelectedItem(item.id)}><Fa icon={faTrash}/></button>
             </div>
         {:else}
             <option value="!!">No tests selected.</option>
