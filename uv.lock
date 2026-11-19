@@ -159,7 +159,7 @@ requires-dist = [
     { name = "gunicorn", marker = "extra == 'web-backend'", specifier = ">=26.0.0" },
     { name = "httpx", marker = "python_full_version >= '3.13' and extra == 'web-backend'", specifier = ">=0.27.0" },
     { name = "httpx2", marker = "extra == 'web-backend'", specifier = ">=2.12.0" },
-    { name = "humanize", marker = "extra == 'web-backend'", specifier = "~=3.13.1" },
+    { name = "humanize", marker = "extra == 'web-backend'", specifier = "~=4.17.0" },
     { name = "ipython", marker = "extra == 'dev'", specifier = "~=8.36.0" },
     { name = "itsdangerous", marker = "extra == 'web-backend'", specifier = ">=2.2.0" },
     { name = "jinja2", marker = "extra == 'web-backend'", specifier = ">=3.1.0" },
@@ -800,11 +800,11 @@ wheels = [
 
 [[package]]
 name = "humanize"
-version = "3.13.1"
+version = "4.17.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/8a/b6/e7d99d1cc225a069f3f7a906a213cb1a0148dac27119290c41dc257ffe53/humanize-3.13.1.tar.gz", hash = "sha256:12f113f2e369dac7f35d3823f49262934f4a22a53a6d3d4c86b736f50db88c7b", size = 72109, upload-time = "2021-11-29T22:03:49.674Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d0/a7/5391f6db94bf16289ca63ce2632eef2eba7b9991e701016ac66f04539d47/humanize-4.17.0.tar.gz", hash = "sha256:1d6a36c453dbfbb3f0b34601d2e0b4ce5d48d780305cd45714843f0068fde6ac", size = 90688, upload-time = "2026-11-12T12:33:34.37Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/46/a8/74f8bf12c7d93bb2e111d13bae198996032d9a53dbbfc3bf4837a466cbe9/humanize-3.13.1-py3-none-any.whl", hash = "sha256:a6f7cc1597db69a4e571ad5e19b4da07ee871da5a9de2b233dbfab02d98e9754", size = 98524, upload-time = "2021-11-29T22:03:47.479Z" },
+    { url = "https://files.pythonhosted.org/packages/0c/74/bb970f876202aa0e8c4a1e9904f0b3482e73c752512962b7e957091d5acf/humanize-4.17.0-py3-none-any.whl", hash = "sha256:02d0899527760efe18011944f882df4970943b4cdff7b5a0ba7fed43a576ef98", size = 133715, upload-time = "2026-11-12T12:33:32.955Z" },
 ]
 
 [[package]]
