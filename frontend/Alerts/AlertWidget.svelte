@@ -1,5 +1,6 @@
 <script lang="ts">
     import { alertStore } from "../Stores/AlertStore.js";
+    import { openModals } from "../Stores/ModalStore";
     import { onDestroy } from "svelte";
     import AlertMessage from "./AlertMessage.svelte";
     import { topLayer } from "./topLayer";
@@ -12,6 +13,9 @@
     let messages = $state([]);
     let showOldMessages = $state(false);
     let oldMessages = $state([]);
+    let errorConsole: HTMLDialogElement | undefined = $state();
+    const consoleTitleId = $props.id();
+    let layer = $derived({ key: messages.at(-1)?.id, host: $openModals.at(-1), shown: !showOldMessages });
     messages = flashes.map((val) => {
         return {
             id: uuidv4(),
@@ -36,30 +40,38 @@
     });
 
     onDestroy(unsubscribe);
+
+    $effect(() => {
+        errorConsole?.showModal();
+    });
 </script>
 
 <svelte:window bind:innerWidth />
 
 {#if smallScreen}
 <!-- Mobile: fixed bottom bar -->
-<div class="alert-mobile-bar" id="alertWidget" use:topLayer={messages.at(-1)?.id}>
-    {#if oldMessages.length > 0}
-        <button class="btn btn-danger btn-sm w-100 alert-mobile-errors-btn" onclick={() => (showOldMessages = true)}>
-            Show errors ({oldMessages.length})
-        </button>
-    {/if}
-    <div class="alert-mobile-messages">
-        {#each messages as message (message.id)}
-            <AlertMessage {message} compact={true} on:deleteMessage={handleCloseEvent}/>
-        {/each}
+<div>
+    <div class="alert-mobile-bar" id="alertWidget" use:topLayer={layer}>
+        {#if oldMessages.length > 0}
+            <button class="btn btn-danger btn-sm w-100 alert-mobile-errors-btn" onclick={() => (showOldMessages = true)}>
+                Show errors ({oldMessages.length})
+            </button>
+        {/if}
+        <div class="alert-mobile-messages">
+            {#each messages as message (message.id)}
+                <AlertMessage {message} compact={true} on:deleteMessage={handleCloseEvent}/>
+            {/each}
+        </div>
     </div>
 </div>
 {:else}
 <!-- Desktop: original top-left overlay -->
-<div class="position-fixed top-0 start-0" id="alertWidget" use:topLayer={messages.at(-1)?.id}>
-    {#each messages as message (message.id)}
-        <AlertMessage {message} on:deleteMessage={handleCloseEvent}/>
-    {/each}
+<div>
+    <div class="position-fixed top-0 start-0" id="alertWidget" use:topLayer={layer}>
+        {#each messages as message (message.id)}
+            <AlertMessage {message} on:deleteMessage={handleCloseEvent}/>
+        {/each}
+    </div>
 </div>
 
 {#if oldMessages.length > 0}
@@ -70,19 +82,22 @@
 {/if}
 
 {#if showOldMessages}
-    <div class="alert-bucket-modal">
+    <dialog
+        bind:this={errorConsole}
+        class="alert-bucket-modal"
+        aria-labelledby={consoleTitleId}
+        onclose={() => (showOldMessages = false)}
+    >
         <div class="d-flex align-items-center justify-content-center p-2 p-md-4" class:h-100={smallScreen}>
             <div class="rounded alert-console-panel p-3 p-md-4" class:alert-console-mobile={smallScreen} class:h-50={!smallScreen} class:w-75={!smallScreen}>
                 <div class="mb-2 d-flex border-bottom pb-2">
-                    <h5 class="mb-0">Error console</h5>
+                    <h5 class="mb-0" id={consoleTitleId}>Error console</h5>
                     <div class="ms-auto">
                         <button
                             class="btn btn-close"
                             aria-label="Close"
                             title="Close"
-                            onclick={() => {
-                                showOldMessages = false;
-                            }}
+                            onclick={() => errorConsole?.close()}
                         ></button>
                     </div>
                 </div>
@@ -101,12 +116,12 @@
                 <div class="mt-2">
                     <button class="btn btn-primary w-100" onclick={() => {
                         oldMessages = [];
-                        showOldMessages = false;
+                        errorConsole?.close();
                     }}>Clear all</button>
                 </div>
             </div>
         </div>
-    </div>
+    </dialog>
 {/if}
 
 
@@ -134,20 +149,33 @@
         width: auto;
     }
 
+    :global(#alertWidget[popover]:not(:popover-open)) {
+        display: none;
+    }
+
     #alertBucket {
         top: 95%;
         left: 32px;
     }
 
-    .alert-bucket-modal {
+    dialog.alert-bucket-modal {
         position: fixed;
-        top: 0;
-        left: 0;
+        inset: 0;
         width: 100%;
         height: 100%;
-        overflow-y: scroll;
+        max-width: none;
+        max-height: none;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    dialog.alert-bucket-modal::backdrop {
         background-color: rgba(0, 0, 0, 0.55);
-        z-index: 9999;
     }
 
     /* Error console panel — light mode */

@@ -1,21 +1,46 @@
 import type { ActionReturn } from "svelte/action";
 
-export function topLayer(node: HTMLElement, key: unknown): ActionReturn<unknown> {
-    if (!("showPopover" in HTMLElement.prototype)) return {};
+export interface TopLayerParams {
+    key: unknown;
+    host?: HTMLElement | null;
+    shown?: boolean;
+}
 
-    let current = key;
-    node.setAttribute("popover", "manual");
-    node.showPopover();
+export function topLayer(node: HTMLElement, params: TopLayerParams): ActionReturn<TopLayerParams> {
+    const home = node.parentElement;
+    const popover = "showPopover" in HTMLElement.prototype;
+    let current = params;
+    let open = false;
+
+    const place = (next: TopLayerParams, raise: boolean) => {
+        const target = next.host ?? home;
+        if (target && node.parentElement !== target) {
+            target.append(node);
+            open = false;
+        }
+        if (!popover) return;
+        if (next.shown === false) {
+            if (open) node.hidePopover();
+            open = false;
+        } else if (raise || !open) {
+            if (open) node.hidePopover();
+            node.showPopover();
+            open = true;
+        }
+    };
+
+    if (popover) node.setAttribute("popover", "manual");
+    place(params, true);
 
     return {
         update(next) {
-            if (next === current) return;
+            const raise = next.key !== current.key;
             current = next;
-            node.hidePopover();
-            node.showPopover();
+            place(next, raise);
         },
         destroy() {
-            node.hidePopover();
+            if (open) node.hidePopover();
+            if (node.parentElement !== home) node.remove();
         },
     };
 }
