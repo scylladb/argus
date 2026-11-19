@@ -6,7 +6,6 @@ const suppressedSvelteCodes = [
     "a11y_no_static_element_interactions",
     "a11y_no_noninteractive_element_interactions",
     "a11y_no_noninteractive_element_to_interactive_role",
-    "a11y_missing_attribute",
     "a11y_interactive_supports_focus",
 ];
 

@@ -49,6 +49,15 @@ describe("ResultsGraphs routes", () => {
         }));
     });
 
+    it("renders each view tab as a button named by its text", async () => {
+        render(ResultsGraphs, { props: { test_id: TEST_ID } });
+
+        expect(await screen.findByRole("button", { name: VIEW.name })).toBeTruthy();
+        await fireEvent.click(screen.getByRole("button", { name: "+ View" }));
+
+        expect(screen.getByLabelText("Name")).toBeTruthy();
+    });
+
     it("updates a graph view through the results router", async () => {
         render(ResultsGraphs, { props: { test_id: TEST_ID } });
 
