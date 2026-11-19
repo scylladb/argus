@@ -1,6 +1,6 @@
 # ARGUS-274 — implementation plan
 
-**Spec:** `tasks/ARGUS-273/ARGUS-274/spec.md`
+**Spec:** `tasks/ARGUS-274/spec.md`
 
 A decision during the build that changes what the spec states updates the
 spec in the same commit. A line in its `Decisions` section records the
