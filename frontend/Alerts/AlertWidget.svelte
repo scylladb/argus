@@ -2,6 +2,7 @@
     import { alertStore } from "../Stores/AlertStore.js";
     import { onDestroy } from "svelte";
     import AlertMessage from "./AlertMessage.svelte";
+    import { topLayer } from "./topLayer";
     import { v4 as uuidv4 } from "uuid";
     let { flashes = [] } = $props();
 
@@ -41,7 +42,7 @@
 
 {#if smallScreen}
 <!-- Mobile: fixed bottom bar -->
-<div class="alert-mobile-bar" id="alertWidget">
+<div class="alert-mobile-bar" id="alertWidget" use:topLayer={messages.at(-1)?.id}>
     {#if oldMessages.length > 0}
         <button class="btn btn-danger btn-sm w-100 alert-mobile-errors-btn" onclick={() => (showOldMessages = true)}>
             Show errors ({oldMessages.length})
@@ -55,7 +56,7 @@
 </div>
 {:else}
 <!-- Desktop: original top-left overlay -->
-<div class="position-absolute top-0 start-0" id="alertWidget">
+<div class="position-fixed top-0 start-0" id="alertWidget" use:topLayer={messages.at(-1)?.id}>
     {#each messages as message (message.id)}
         <AlertMessage {message} on:deleteMessage={handleCloseEvent}/>
     {/each}
@@ -113,6 +114,24 @@
     /* Desktop alert widget */
     :global(#alertWidget:not(.alert-mobile-bar)) {
         width: 512px;
+    }
+
+    :global(#alertWidget[popover]) {
+        margin: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+    }
+
+    :global(#alertWidget[popover]:not(.alert-mobile-bar)) {
+        inset: 0 auto auto 0;
+        padding: 0;
+        overflow: visible;
+    }
+
+    :global(#alertWidget.alert-mobile-bar[popover]) {
+        inset: auto 0 0 0;
+        width: auto;
     }
 
     #alertBucket {
