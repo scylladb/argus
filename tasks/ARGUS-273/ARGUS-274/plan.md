@@ -34,6 +34,7 @@ stays in every plan built from a spec.
 
 **Files:**
 - Modify: `frontend/Common/ModalWindow.svelte` (whole file, lines 1-67)
+- Create: `frontend/Common/lightDismiss.ts`
 - Create: `frontend/vitest.setup.ts`
 - Modify: `vitest.config.mjs:9-12` (add `setupFiles`)
 - Test: `frontend/Common/ModalWindow.test.ts` (new)
@@ -58,14 +59,29 @@ stays in every plan built from a spec.
     `opener?.isConnected` and `document.activeElement` is `null` or
     `document.body`.
   - Markup: `<dialog bind:this={dialog} class="modal-window"
-    aria-labelledby={title ? titleId : undefined} onclose={() =>
-    dispatch("modalClose")}>` around today's inner markup. The `h5` gets
+    aria-labelledby={title ? titleId : undefined} use:lightDismiss={frame}
+    onclose={() => dispatch("modalClose")}>` around today's inner markup.
+    The frame div, `d-flex … p-4`, gets `bind:this={frame}`, with
+    `let frame: HTMLElement | undefined = $state();`. The `h5` gets
     `id={titleId}` and renders `{@render title?.()}`. The body renders
     `{@render body?.()}`. The close button keeps its classes, its
     `aria-label`, its `title` and its `onclick` dispatch.
   - Style: keep `.w-50` and `.w-75`. Replace `.modal-window` with the two
     rules of the spec's Design section: `dialog.modal-window` and
     `dialog.modal-window::backdrop`. Set no `display` on the dialog.
+- `frontend/Common/lightDismiss.ts`:
+
+  ```ts
+  export function lightDismiss(
+      dialog: HTMLDialogElement, frame: HTMLElement | undefined,
+  ): ActionReturn<HTMLElement | undefined>
+  ```
+
+  `outside(target)` is `target === dialog || target === frame`. A
+  `pointerdown` listener stores `outside(event.target)`. A `click` listener
+  calls `dialog.close()` when the stored value and `outside(event.target)`
+  are both true. `update(frame)` replaces the frame. `destroy` removes both
+  listeners.
 
 - [ ] Write `ModalWindow.test.ts`. Render through `@testing-library/svelte`
   with snippets from `createRawSnippet`, and collect `modalClose` through the
@@ -85,10 +101,17 @@ stays in every plan built from a spec.
     button before `unmount()`. It keeps the focus.
   - `does_not_throw_when_the_opener_is_gone`: remove the opener before
     `unmount()`. The focus is on `document.body`.
+  - `closes_on_a_click_outside_the_box`: `pointerDown` and `click` on the
+    dialog, then the same on the frame. Each closes the dialog and gives one
+    `modalClose`.
+  - `stays_open_on_a_click_inside_the_box`: `pointerDown` and `click` on the
+    title. No call, and `open` stays true.
+  - `stays_open_after_a_drag_from_the_box_to_the_outside`: `pointerDown` on
+    a body input, `click` on the dialog. No call.
 - [ ] Run `yarn test frontend/Common/ModalWindow.test.ts` and confirm the
   failures: no dialog role, and the Escape case dispatches.
-- [ ] Add `vitest.setup.ts` and the `setupFiles` line, then rewrite
-  `ModalWindow.svelte`.
+- [ ] Add `vitest.setup.ts` and the `setupFiles` line, write
+  `lightDismiss.ts`, then rewrite `ModalWindow.svelte`.
 - [ ] In `ConfirmDeleteModal.test.ts`, the case `cancels from the Cancel
   button, the close button and Escape` replaces
   `fireEvent.keyDown(window, { key: "Escape" })` with
@@ -100,9 +123,11 @@ stays in every plan built from a spec.
 - [ ] Commit `improvement(frontend): open ModalWindow as a native dialog`.
 
 What jsdom proves: the dialog role and name, the `modalClose` mapping, no
-window Escape listener, and the focus rule at teardown. What it cannot
+window Escape listener, the focus rule at teardown, and the outside rule of
+light dismiss. What it cannot
 prove: the top layer, the inert page, the focus containment, Escape to
-`cancel` and `close`, the backdrop and the scroll containment. Task 5 checks
+`cancel` and `close`, the backdrop, the scroll containment, and which
+targets real pointer input produces. Task 5 checks
 those in Chrome.
 
 ## Task 2 — Results graph tooltip inside the dialog
@@ -216,8 +241,8 @@ Setup:
   focus and user activation are real. `probe/probe.mjs` from round 1 has the
   helpers.
 
-Checks. Each one records pass or fail, with a screenshot for L1, L5, L6 and
-L7:
+Checks. Each one records pass or fail, with a screenshot for L1, L5, L6, L7, L8 and
+L10:
 
 - [ ] L1 `/admin/users`, the change email modal. On open the focus is in the
   dialog, and the dialog matches `:modal`. Ten Tab presses keep the focus in
@@ -236,7 +261,17 @@ L7:
   hit test. Click the point: the "Open" link wins the hit test.
 - [ ] L6 Make an action in a modal fail, for example a proxy tunnel host the
   server rejects. The toast is drawn above the backdrop.
-- [ ] L7 At 400 px width, `/workspace`, the Sidebar drawer: delete a test.
+- [ ] L7 Light dismiss on the L1 modal. A click on the dim area beside the
+  box closes it, and the focus returns to the trigger. A click on the box's
+  text keeps it open. A drag that selects text in the email input and ends
+  outside the box keeps it open, with the typed text.
+- [ ] L8 Light dismiss on a form modal: the delete confirmation of the
+  Sidebar, or the user manager's change password editor. Type into the
+  input, drag from the input to the outside: it stays open with the text.
+  Click outside: it closes.
+- [ ] L9 A press and a drag on the scrollbar of a tall modal, the L5 graph
+  modal, keep it open.
+- [ ] L10 At 400 px width, `/workspace`, the Sidebar drawer: delete a test.
   Typing in the confirmation input changes its value, and the focus stays
   in the dialog.
 - [ ] Record a check that the dev data cannot reach as skipped, with the
