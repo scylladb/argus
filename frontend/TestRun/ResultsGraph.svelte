@@ -8,6 +8,7 @@
     import Fa from "svelte-fa";
     import {sendMessage} from "../Stores/AlertStore";
     import { sanitizeHtml } from "../Common/safeHtml";
+    import { tooltipAnchor } from "./chartTooltip";
 
     interface Props {
         graph?: any;
@@ -194,7 +195,6 @@
                     tooltipEl = document.createElement("div");
                     tooltipEl.id = "chartjs-tooltip";
                     tooltipEl.innerHTML = "<div></div>";
-                    document.body.appendChild(tooltipEl);
                 }
 
                 const tooltipModel = context.tooltip;
@@ -249,12 +249,15 @@
                     tooltipEl.innerHTML = sanitizeHtml(innerHtml);
                 }
 
-                const position = context.chart.canvas.getBoundingClientRect();
+                const anchor = tooltipAnchor(context.chart.canvas, tooltipModel.caretX, tooltipModel.caretY);
+                if (tooltipEl.parentElement !== anchor.host) {
+                    anchor.host.append(tooltipEl);
+                }
 
                 // Display, position, and set styles for font
                 tooltipEl.style.position = "absolute";
-                tooltipEl.style.left = position.left + window.scrollX + tooltipModel.caretX + "px";
-                tooltipEl.style.top = position.top + window.scrollY + tooltipModel.caretY + "px";
+                tooltipEl.style.left = anchor.left + "px";
+                tooltipEl.style.top = anchor.top + "px";
                 tooltipEl.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
                 tooltipEl.style.color = "#fff";
                 tooltipEl.style.borderRadius = "3px";
