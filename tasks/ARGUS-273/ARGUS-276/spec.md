@@ -4,21 +4,24 @@
 
 ## Overview
 
-One pull request, six commits, one per warning code. Each commit fixes every
+One pull request, seven commits: six, one per warning code, then one for
+the names of icon-only buttons. Each code commit fixes every
 element that reports its code and removes the code from
 `suppressedSvelteCodes`, so each commit builds with no warning of a code it
 has turned on. Fixes use native elements first: a clickable `<div>`, `<li>`
 or `<a>` becomes a `<button>`, an overlay becomes a focusable `role="dialog"`
 that closes on Escape, and a handler that only stopped a click from bubbling
-is deleted. The last commit leaves the list empty, and `yarn build` prints no
-`a11y_*` warning.
+is deleted. The sixth commit leaves the list empty, and `yarn build` prints
+no `a11y_*` warning. The seventh gives each icon-only button that has no
+name an `aria-label` and a matching `title`.
 
 ## Constraints
 
 - One commit per code; each commit builds with no warning of a code it has removed from the list.
 - No edit to `frontend/Common/ModalWindow.svelte` (ARGUS-274).
 - No edit to `font-awesome.js`, `font-awesome.scss`, `templates/base.html.j2`, the `fontAwesome` input or any line of `vite.config.ts` outside `suppressedSvelteCodes` (ARGUS-275). An `<i class="fas">` icon moves with its parent and keeps its markup.
-- No edit near the `{@html}` markdown rendering of the discussion and view highlights components (ARGUS-278). None of those files reports a warning.
+- No edit near the `{@html}` and `marked` lines of `Discussion/*.svelte` and `ViewHighlights/*.svelte` (ARGUS-278). None of those files reports a warning; their icon buttons sit apart from those lines.
+- No edit to the toast code of `Alerts/AlertWidget.svelte` or the tooltip code of `TestRun/ResultsGraph.svelte` (ARGUS-274).
 - Bootstrap 5 classes before custom CSS; Baseline Widely available features only.
 - The visible layout of each control stays as it is.
 
@@ -63,7 +66,9 @@ on `<img>`, a name on `<area>` and `<object>`, `title` on `<iframe>`,
 `lang` on `<html>`. Its one warning is a results-graph tab `<a>` with no
 `href`. It does not check icon-only buttons: `a11y_consider_explicit_label`
 does, it is not suppressed, and it skips a `<button>` whose only child is a
-component such as `<Fa>`. Decorative icons are already hidden: `svelte-fa`
+component such as `<Fa>`. A text search finds 65 such buttons with no
+`aria-label`, `aria-labelledby` or `title` in 33 components; commit 7 names
+them (P6). Decorative icons are already hidden: `svelte-fa`
 renders `aria-hidden="true"` when no `title` is given, and the Font Awesome
 SVG+JS loader adds `aria-hidden="true"` to each `<i>` it replaces.
 
@@ -104,7 +109,10 @@ Controls already in the row stay siblings of that button.
 the dialog: `role="dialog"`, `aria-modal="true"`, a name from its title
 (`aria-labelledby`) or `aria-label`, `tabindex="-1"`. It takes the focus
 when it opens, closes on Escape through `onkeydown`, and closes on a
-backdrop click only when the event target is itself. The inner panel has no
+backdrop click only when the event target is itself. Tab from its last
+shown, enabled control moves to the first, and Shift+Tab from the first
+(or from the dialog itself) moves to the last, so the focus stays inside
+while `aria-modal="true"` hides the page behind it. The inner panel has no
 handler, so the stop-propagation shield goes.
 
 **P4, delete a dead handler.** A handler that stops a click from reaching
@@ -117,6 +125,27 @@ widget. Svelte counts `application` as non-interactive. The element gets
 `<!-- svelte-ignore a11y_no_noninteractive_element_interactions, a11y_no_noninteractive_tabindex -->`
 and keeps its role, `tabindex="0"` and key handling.
 
+**P6, icon-only button name.** A `<button>` whose only content is an icon
+gets `aria-label` and a `title` with the same text, as 48 icon buttons in
+the code base already do; Chrome then reads no duplicate description. The
+text is a short verb phrase for the action, as in `Copy message`,
+`Edit plan`, `Remove filter`. A toggle keeps one name and exposes its state
+through `aria-expanded` (a disclosure) or `aria-pressed` (an on/off
+choice), so the name does not change with the icon. A repeated action in a
+list may name its target when the markup has it at hand, as in
+`Remove {test.name}`. No compiler code checks this pattern, so its check is
+the text search returning zero, and a read of Chrome's accessibility tree
+on a sample.
+
+```svelte
+<button class="btn btn-sm btn-success" title="Copy message" aria-label="Copy message" onclick={...}>
+    <Fa icon={faCopy}/>
+</button>
+<button class="btn btn-sm btn-primary" title="Details" aria-label="Details" aria-expanded={showDetails} onclick={...}>
+    <Fa icon={showDetails ? faChevronUp : faChevronDown}/>
+</button>
+```
+
 ### Commit order
 
 | # | Code removed | Elements fixed | Pattern | Also clears |
@@ -127,12 +156,13 @@ and keeps its role, `tabindex="0"` and key handling.
 | 4 | `a11y_no_noninteractive_element_interactions` | AvatarCropper viewport; ResultsGraphs New View, Add Graph, Remove Graph modals | P5, P3 | 6 click_events, `a11y_no_noninteractive_tabindex` |
 | 5 | `a11y_click_events_have_key_events` | NumberStats investigation bar, GraphsWidget headers (2), ResultsGraph enlarged-graph shield | P1, P4 | 4 no_static |
 | 6 | `a11y_no_static_element_interactions` | ReleaseManagerGroup and ReleaseManagerTest editor overlays, DriverMatrixBreakdown status toggles | P3, P1 | — |
+| 7 | none | The 65 icon-only buttons | P6 | — |
 
 Commit 3 deletes the group-row click, so the two shields in
 ReleaseManagerGroup that kept clicks off that row fall under P4 in the same
 commit. Commit 6 also deletes the `svelte-ignore a11y_click_events_have_key_events`
 above the DriverMatrixBreakdown toggle it replaces. After commit 6 the list
-is `[]`.
+is `[]`. Commit 7 changes attributes only, so it cannot add a warning.
 
 ### ARGUS-274 and the list
 
@@ -167,6 +197,23 @@ interface Props {
 }
 ```
 
+`TestRunsSelector` learns whether `TestRuns` shows the results graphs, so
+its "Show graph" toggle carries `aria-expanded` and, while the graphs show,
+`aria-controls="collapse-graphs"`:
+
+```ts
+interface Props {
+    testInfo; testId; runs; clickedTestRuns;   // unchanged
+    graphShown?: boolean;                       // new: TestRuns passes clickedGraph
+}
+```
+
+`overlayFocus` is the action behind P3:
+
+```ts
+function overlayFocus(node: HTMLElement, active = true): { update(next: boolean): void; destroy(): void };
+```
+
 ## Risks
 
 | Risk | Response |
@@ -175,14 +222,12 @@ interface Props {
 | A row's click area shrinks to the name button | The button takes the row's free space (`flex-fill`); the controls already stopped propagation |
 | Moving the focus into an overlay scrolls the page | Focus with `preventScroll: true` |
 | ARGUS-275 converts the `<i class="fas">` chevrons of GraphsWidget | Textual conflict only; the second branch to merge rebases |
+| A `title` adds a hover tooltip to 65 buttons | The tooltip names the action, as on the 48 buttons that have one |
 | A Svelte upgrade adds a new a11y check | The empty list shows it in the build, which is the goal |
 | No parent spec for ARGUS-273 | The story's Jira text and the sibling briefs set the boundaries; this spec names them in Constraints |
 
 ## Deferred work
 
-- Accessible names for icon-only buttons: 65 `<button>`s in 33 components
-  hold only a `<Fa>` icon and no `aria-label` or `title`. No compiler code
-  reports them. A follow-up issue under ARGUS-273.
 - The release dashboard status blocks (`TestDashboardTest`, `role="button"`
   with `tabindex="-1"`): a keyboard path through a large grid needs its own design.
 - The stale `svelte-ignore` in `SirenadaTestBreakdown`.
@@ -195,8 +240,12 @@ interface Props {
 
 - One pull request, one commit per code, in the order of the table above. (spec)
 - Fix the element rather than suppress the code; the one per-element ignore is the AvatarCropper viewport. (spec)
-- The AvatarCropper ignore keeps `role="application"` over a role Svelte counts as interactive. (open)
-- Icon-only button names stay out of this task and go to a follow-up issue. (open)
+- The AvatarCropper ignore keeps `role="application"` over a role Svelte counts as interactive. (review)
+- The icon-only button names join this pull request as a seventh commit. (review)
+- An icon-only button takes `aria-label` and a matching `title`, the form most icon buttons here already use. (review)
 - The overlays keep their Bootstrap markup and gain dialog semantics in place. (spec)
 - `a11y_no_noninteractive_tabindex` is cleared here, since the acceptance asks for no `a11y_*` warning. (spec)
-- The work continues without a parent spec. (open)
+- The work continues without a parent spec. (review)
+- Vitest covers new behaviour only: the new props, Escape and focus. (review)
+- A P3 overlay keeps Tab and Shift+Tab inside itself, since `aria-modal="true"` tells assistive technology the page behind is out of reach. (review)
+- The "Show graph" toggle exposes its state through a `graphShown` prop from `TestRuns`, so its name stays one name. (review)

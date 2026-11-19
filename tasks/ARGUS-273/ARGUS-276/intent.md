@@ -71,6 +71,7 @@ https://developer.chrome.com/docs/modern-web-guidance/guides/accessibility/acces
 - `yarn build` prints no `a11y_*` warning.
 - Each element the warnings named works from the keyboard: Tab reaches it,
   and Enter or Space does what a click does.
+- Each button whose only content is an icon has an accessible name.
 
 ## Out of scope
 
@@ -79,7 +80,8 @@ https://developer.chrome.com/docs/modern-web-guidance/guides/accessibility/acces
   them.
 - The markdown rendering of the discussion and view highlights components.
   ARGUS-278 owns it.
-- Accessibility problems that no Svelte compiler warning reports, such as an
-  icon-only button with no accessible name, colour contrast or focus order.
+- Accessibility problems that no Svelte compiler warning reports, such as
+  colour contrast or focus order. The one exception is the icon-only button
+  with no accessible name, which this task names as well.
 - The other compiler warnings the build prints, such as
   `state_referenced_locally`.
