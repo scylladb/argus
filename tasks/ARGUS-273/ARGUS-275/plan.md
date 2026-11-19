@@ -20,8 +20,11 @@ stays in every plan built from a spec.
 - Commit with `uv run git commit`. Stage by explicit path. The header follows
   commitlint, with no Jira key in it; the body ends with `Task: ARGUS-275`.
 - No rationale comments in the code.
-- Each commit keeps every icon on screen. Task 1 adds the webfont while the
-  SVG script still runs; Task 2 removes the script.
+- Tasks 1 to 3 landed as one code commit, `perf(frontend): load Font
+  Awesome icons from CSS and webfonts`. After Task 1 alone the
+  build no longer emits the bundle, so the template asks for a missing
+  script until Task 2 removes it; one commit keeps every commit free of that
+  failing request. The three tasks were reviewed as one diff.
 
 ## Task 1 — Build the icons from the CSS and webfont
 
@@ -49,16 +52,16 @@ the main entry imports the SCSS.
 The build output is configuration, so no unit test covers it. The checks
 below stand in for one.
 
-- [ ] Run `NODE_ENV=production yarn build`. Confirm `public/dist` holds
+- [x] Run `NODE_ENV=production yarn build`. Confirm `public/dist` holds
   `fa-solid-900.woff2` (113,108 bytes) and `fa-regular-400.woff2` (18,892
   bytes), no `fa-brands-400.woff2`, and no `fontAwesome.bundle.js`.
-- [ ] Run `grep -o 'url([^d][^)]*)' public/dist/style.css`. Expect the two
+- [x] Run `grep -o 'url([^d][^)]*)' public/dist/style.css`. Expect the two
   `/s/dist/fa-*.woff2` URLs and the four Noto URLs, now under `/s/dist/`.
-- [ ] Confirm `style.css` grew by about 1 KB, not more.
-- [ ] Load `/releases` with the bundle still in the template. The icons
-  still render as `<svg>` (178 on `/releases`).
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Confirm `style.css` grew by about 1 KB, not more.
+- [x] Load `/releases` with the bundle still in the template. The icons
+  render as `<i>` from the webfont, and the theme icon follows a click.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked: in the one code commit, with Tasks 1 to 3.
 
 ## Task 2 — Remove the parser-blocking script
 
@@ -84,13 +87,13 @@ each `<script src>` and `<link>` in `<head>`:
   `<link rel="preload" as="font">` for `/s/dist/fa-solid-900.woff2` with
   `crossorigin`. Fails today.
 
-- [ ] Write the two failing tests.
-- [ ] Run `uv run pytest argus/backend/tests/main_api/test_page_head.py` and
+- [x] Write the two failing tests.
+- [x] Run `uv run pytest argus/backend/tests/main_api/test_page_head.py` and
   confirm both fail for the reason above.
-- [ ] Change `templates/base.html.j2`.
-- [ ] Run the tests and confirm they pass.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Change `templates/base.html.j2`.
+- [x] Run the tests and confirm they pass.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked: in the one code commit, with Tasks 1 to 3.
 
 ## Task 3 — Hide the template icons from assistive technology
 
@@ -108,12 +111,12 @@ This task follows the `(review)` decision of the spec on the template icons.
   through `api_client` and `/error/?type=404` through `anon_client`, every
   `<i>` whose class holds `fas` or `far` carries `aria-hidden="true"`.
 
-- [ ] Write the failing test.
-- [ ] Run it and confirm it fails on the nav bar icons.
-- [ ] Add the attribute.
-- [ ] Run the test and confirm it passes.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit, with the boxes of this task checked.
+- [x] Write the failing test.
+- [x] Run it and confirm it fails on the nav bar icons.
+- [x] Add the attribute.
+- [x] Run the test and confirm it passes.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit, with the boxes of this task checked: in the one code commit, with Tasks 1 to 3.
 
 ## Task 4 — Live check and the after numbers
 
@@ -128,25 +131,25 @@ profile. Round 1 used `measure.mjs` and `probe-behaviour.mjs` in the session
 scratch directory `ARGUS-275/`; reuse them unchanged so the numbers compare.
 Confirm first that `/s/dist/style.css` from :5015 matches the worktree build.
 
-- [ ] Measure `/releases` and `/dashboard/scylla-master`, plain and
+- [x] Measure `/releases` and `/dashboard/scylla-master`, plain and
   throttled, 9 runs plus one warm-up, median, exactly as the spec's
   `Measurement` section states. Record first paint, FCP, DOMContentLoaded,
   script time, CLS, and the `responseEnd` of `fa-solid-900.woff2`.
-- [ ] Record the size table: `fontAwesome.bundle.js` before (1,503,956 raw,
+- [x] Record the size table: `fontAwesome.bundle.js` before (1,503,956 raw,
   515,950 gzip -9) against the two woff2 files and the `style.css` delta.
-- [ ] On `/workspace`, `/releases`, `/views`, `/dashboard/scylla-master`, one
+- [x] On `/workspace`, `/releases`, `/views`, `/dashboard/scylla-master`, one
   `/test_run/<id>` of an SCT run, and `/error/?type=404` logged out: every
   `<i class*="fa">` has a width above 0, a non-empty `::before` content, and
   `document.fonts.check('900 1em "Font Awesome 7 Free"')` is true. Take a
   screenshot of each page and look at the nav bar and the icons.
-- [ ] Click the theme toggle three times. The icon changes sun, moon,
+- [x] Click the theme toggle three times. The icon changes sun, moon,
   circle-half-stroke with the label.
-- [ ] Change the class of an `<i class="fas fa-chevron-right">` to
+- [x] Change the class of an `<i class="fas fa-chevron-right">` to
   `fa-chevron-down`. The glyph changes.
-- [ ] Read the accessibility tree. The nav link names match round 1
+- [x] Read the accessibility tree. The nav link names match round 1
   (`" Workspace"`, `" Releases"`, `" Views"`, ...).
-- [ ] Record every font request and its status. No request for a `.ttf`
+- [x] Record every font request and its status. No request for a `.ttf`
   Noto file appears, as in round 1.
-- [ ] Check the `fa-spin` `svelte-fa` spinner in the summary widget still
+- [x] Check the `fa-spin` `svelte-fa` spinner in the summary widget still
   turns, when a view with that widget is available.
-- [ ] Stop the server and Chrome by their own task ids.
+- [x] Stop the server and Chrome by their own task ids.
