@@ -370,12 +370,12 @@ bound with `bind:this`; the quick-select buttons into a record keyed
 with `focus({ preventScroll: true })` on the first bound quick-select button
 in render order, or Hide, when it opens, and on the bar when it closes.
 
-- [ ] Write `NumberStats.test.ts`: the bar starts with `aria-expanded="false"`;
+- [x] Write `NumberStats.test.ts`: the bar starts with `aria-expanded="false"`;
       a click sets it to `"true"` and focuses the first quick-select button;
       Hide sets it back to `"false"` and focuses the bar; with no counts the
       focus goes to Hide. Run it and confirm the focus cases fail.
-- [ ] Make the change. `yarn build` prints no `a11y_*` line.
-- [ ] Live check: the investigation bar matches its screenshots pixel for
+- [x] Make the change. `yarn build` prints no `a11y_*` line.
+- [x] Live check: the investigation bar matches its screenshots pixel for
       pixel; Enter on the bar moves the focus into the panel, and Enter on
       Hide collapses it and brings the focus back to the bar.
-- [ ] Run `yarn test`, pre-commit and `yarn build`, then commit.
+- [x] Run `yarn test`, pre-commit and `yarn build`, then commit.
