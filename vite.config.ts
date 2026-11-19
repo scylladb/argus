@@ -1,9 +1,7 @@
 import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 
-const suppressedSvelteCodes = [
-    "a11y_no_static_element_interactions",
-];
+const suppressedSvelteCodes: string[] = [];
 
 export default defineConfig({
     plugins: [

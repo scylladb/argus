@@ -37,4 +37,19 @@ describe("ReleaseManagerGroup", () => {
 
         expect(onselect).not.toHaveBeenCalled();
     });
+
+    it("opens the editor as a focused dialog that Escape closes", async () => {
+        render(ReleaseManagerGroup, { group: { ...GROUP }, groups: [GROUP] });
+        const edit = screen.getByTitle("Edit");
+        edit.focus();
+
+        await fireEvent.click(edit);
+        const dialog = screen.getByRole("dialog", { name: "Edit group" });
+        expect(document.activeElement).toBe(dialog);
+
+        await fireEvent.keyDown(dialog, { key: "Escape" });
+
+        expect(dialog.closest(".popup-group-editor")?.classList.contains("d-none")).toBe(true);
+        expect(document.activeElement).toBe(edit);
+    });
 });

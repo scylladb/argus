@@ -134,8 +134,12 @@
 
 <div class="d-flex my-2">
     {#each Object.entries(statusInfo) as [status, displayInfo]}
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <div class="ms-1 rounded px-2 py-1 {displayInfo.class} text-white cursor-pointer" onclick={() => toggleStatus(status)}>
+        <button
+            type="button"
+            class="ms-1 rounded px-2 py-1 border-0 {displayInfo.class} text-white"
+            aria-pressed={displayInfo.show}
+            onclick={() => toggleStatus(status)}
+        >
             {#if displayInfo.show}
                 <Fa icon={faCheck}/>
             {:else}
@@ -143,7 +147,7 @@
             {/if}
             {titleCase(status)}
             ({displayInfo.testCount})
-        </div>
+        </button>
     {/each}
 </div>
 <div class="mb-2">
@@ -201,9 +205,5 @@
 
     .case-message {
         white-space: pre-wrap
-    }
-
-    .cursor-pointer {
-        cursor: pointer;
     }
 </style>
