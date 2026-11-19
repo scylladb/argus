@@ -218,7 +218,13 @@
 <ul class="nav nav-tabs mb-3">
     {#each allTabs as t, i}
         <li class="nav-item">
-            <a class="nav-link {activeTab === i ? 'active' : ''}" onclick={() => handleTabClick(i)}>{t}</a>
+            <button
+                type="button"
+                class="nav-link"
+                class:active={activeTab === i}
+                aria-current={activeTab === i ? "true" : undefined}
+                onclick={() => handleTabClick(i)}
+            >{t}</button>
         </li>
     {/each}
 </ul>
