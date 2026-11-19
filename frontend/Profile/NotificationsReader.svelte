@@ -54,31 +54,34 @@
             <div class="col-4 bg-light-three p-0 border-end border-light">
                 <ul class="list-group list-group-flush">
                     {#each notifications as n (n.id)}
-                        <li
-                            class="list-group-item"
-                            role=button
-                            class:active={n.id == selectedNotification?.id}
-                            onclick={() => {
-                                n.state = NotificationsState.READ
-                                selectedNotification = null;
-                                setTimeout(() => {
-                                    selectedNotification = n;
-                                }, 100);
-                            }}
-                        >
-                            <div class="d-flex align-items-top">
-                                <NotificationSender user={users[n.sender]} />
-                                <div class="ms-auto text-muted fs-6">
-                                    { humanizeDuration((new Date()).getTime() - n.date.getTime(), {
-                                        round: true,
-                                        units: ["y", "mo", "w", "d", "h", "m"],
-                                        largest: 1,
-                                    }) } ago
+                        <li>
+                            <button
+                                type="button"
+                                class="list-group-item list-group-item-action border-0 border-bottom"
+                                class:active={n.id == selectedNotification?.id}
+                                aria-current={n.id == selectedNotification?.id ? "true" : undefined}
+                                onclick={() => {
+                                    n.state = NotificationsState.READ
+                                    selectedNotification = null;
+                                    setTimeout(() => {
+                                        selectedNotification = n;
+                                    }, 100);
+                                }}
+                            >
+                                <div class="d-flex align-items-top">
+                                    <NotificationSender user={users[n.sender]} />
+                                    <div class="ms-auto text-muted fs-6">
+                                        { humanizeDuration((new Date()).getTime() - n.date.getTime(), {
+                                            round: true,
+                                            units: ["y", "mo", "w", "d", "h", "m"],
+                                            largest: 1,
+                                        }) } ago
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="notification-title" class:fw-bold={n.state == NotificationsState.UNREAD}>
-                                {n.title}
-                            </div>
+                                <div class="notification-title" class:fw-bold={n.state == NotificationsState.UNREAD}>
+                                    {n.title}
+                                </div>
+                            </button>
                         </li>
                     {:else}
                         <li class="list-group-item text-muted text-center">
