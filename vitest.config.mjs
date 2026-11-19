@@ -9,5 +9,6 @@ export default defineConfig({
     test: {
         include: ["frontend/**/*.test.{js,ts}"],
         environment: "jsdom",
+        setupFiles: ["frontend/vitest.setup.ts"],
     },
 });
