@@ -49,10 +49,10 @@ web-backend = [
   "python-jenkins >= 1.7.0",
   "python-slugify ~= 6.1.1",
   "pygithub >= 2.6.1",
-  "boto3 ~= 1.38.9",
+  "boto3 ~=1.44.3",
   "jira>=3.10.5",
   "zstandard >= 0.22.0",
-  "coodie~=1.7.3",
+  "coodie~=1.9.3",
   "fastapi>=0.141.1",
   "gunicorn>=26.0.0",
   "uvicorn>=0.40.0",
@@ -74,22 +74,22 @@ web-backend = [
   "openai>=3.46.0",
   "mcp>=2.3.0 ; python_full_version >= '3.13'",
 ]
-docker-image = ["supervisor ~= 4.2.4"]
+docker-image = ["supervisor ~=4.3.0"]
 dev = [
-  "pytest ==9.0.3",
-  "coverage == 7.8.2",
-  "docker == 7.1.0",
-  "ipython ~= 8.36.0",
+  "pytest ==9.2.0",
+  "coverage ==7.17.3",
+  "docker ==7.2.0",
+  "ipython ~=8.39.0",
   "pre-commit >= 4.2.0",
   "ruff ~=0.17.5",
   "autopep8 >= 2.3.2",
   "requests-mock ~= 1.12.1",
   "codecov ~= 2.1.12",
-  "pytest-cov ~= 6.1.1",
+  "pytest-cov ~=6.3.0",
   "nox ~=2026.10.20",
-  "pytest-xdist ~= 3.7.0",
+  "pytest-xdist ~=3.8.0",
   "pytest-subtests ~=0.15.0",
-  "boto3-stubs ~= 1.38.9",
+  "boto3-stubs ~=1.44.3",
   "pytest-asyncio >= 1.0",
 ]
 
