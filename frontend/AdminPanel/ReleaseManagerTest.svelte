@@ -1,6 +1,7 @@
 <script lang="ts">
     import { self } from 'svelte/legacy';
 
+    import { overlayFocus } from "../Common/overlayFocus";
     import { createEventDispatcher } from "svelte";
     import Fa from "svelte-fa";
     import {
@@ -83,6 +84,14 @@
 <div class="position-fixed popup-test-editor" class:d-none={!editing}>
     <div
         class="row justify-content-center align-items-center h-100"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Edit test"
+        tabindex="-1"
+        use:overlayFocus={editing}
+        onkeydown={(e) => {
+            if (e.key === "Escape") editing = false;
+        }}
         onmousedown={self(() => {
             editing = false;
         })}
