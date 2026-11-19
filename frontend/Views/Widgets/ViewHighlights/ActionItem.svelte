@@ -6,9 +6,7 @@
     import {getPicture} from "../../../Common/UserUtils";
     import AssigneeSelector from "../../../Common/AssigneeSelector.svelte";
     import CommentEditor from "../../../Discussion/CommentEditor.svelte";
-    import { marked } from "marked";
-    import {MarkdownUserMention} from "../../../Discussion/MarkedMentionExtension";
-    import {markdownRendererOptions} from "../../../markdownOptions";
+    import { renderMarkdown } from "../../../Common/markdown";
 
     interface Props {
         action: any;
@@ -46,9 +44,6 @@
         release_id: '',
         test_run_id: '',
         posted_at: new Date(),
-    });
-    marked.use({
-        extensions: [MarkdownUserMention]
     });
     const toggleArchive = () => dispatch('toggleArchive', {action});
     const toggleComments = () => {
@@ -89,7 +84,7 @@
                 <input id="checkbox-{action.id}" class="form-check-input me-2 mt-0" type="checkbox" disabled={isArchived}
                        bind:checked={action.isCompleted} onchange={toggleComplete}>
                 <label class="form-check-label no-bottom-margin"
-                       for="checkbox-{action.id}">{@html marked.parse(action.content, markdownRendererOptions)}
+                       for="checkbox-{action.id}">{@html renderMarkdown(action.content, { mentions: true })}
                 </label>
             </div>
             <div class="d-flex align-items-center">

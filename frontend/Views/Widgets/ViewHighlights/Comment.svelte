@@ -4,8 +4,7 @@
     import {createEventDispatcher} from 'svelte';
     import {getPicture} from "../../../Common/UserUtils";
     import CommentEditor from "../../../Discussion/CommentEditor.svelte";
-    import { marked } from "marked";
-    import { markdownRendererOptions } from "../../../markdownOptions";
+    import { renderMarkdown } from "../../../Common/markdown";
 
     interface Props {
         comment: any;
@@ -70,7 +69,7 @@
         </div>
         <div class="d-flex justify-content-between align-items-start mt-1">
             <div class="mb-0 flex-grow-1 markdown-body">
-                {@html marked.parse(comment.content, markdownRendererOptions)}
+                {@html renderMarkdown(comment.content, { mentions: true })}
             </div>
             {#if comment.creator_id === currentUserId && !isArchived}
             <div class="d-flex align-items-start ms-2">

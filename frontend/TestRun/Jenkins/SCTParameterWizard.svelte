@@ -8,6 +8,7 @@
     import { faExclamationCircle, faMinus, faPlus, faQuestionCircle } from "@fortawesome/free-solid-svg-icons";
     import DummyCheckParam from "./DummyCheckParam.svelte";
     import { sendMessage } from "../../Stores/AlertStore";
+    import { sanitizeHtml } from "../../Common/safeHtml";
 
 
     /**
@@ -710,7 +711,7 @@
                                 {/if}
                             </div>
                             <param.type definition={param} bind:params={params} wrapper={onChangeWrapper}/>
-                            <div id="paramHelp{sanitizeSelector(param.internalName ?? "")}" class="form-text">{@html param.description ?? rawParams.find(v => v.name == param.internalName)?.description ?? ""}</div>
+                            <div id="paramHelp{sanitizeSelector(param.internalName ?? "")}" class="form-text">{@html sanitizeHtml(param.description ?? rawParams.find(v => v.name == param.internalName)?.description)}</div>
                             {#if param.validating}
                                 <div class="form-text">
                                     <span class="spinner-border spinner-border-sm"></span> Validating...

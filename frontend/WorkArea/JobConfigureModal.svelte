@@ -5,6 +5,7 @@
     import { JENKINS_ADVANCED_SETTINGS } from "../Common/JenkinsSettingsHelp";
     import { faCheck, faTimes } from "@fortawesome/free-solid-svg-icons";
     import Fa from "svelte-fa";
+    import { sanitizeHtml } from "../Common/safeHtml";
 
     let { buildId, testName } = $props();
     let settings = $state();
@@ -172,7 +173,7 @@
                 {:else if settings}
                     {#if validationMessage}
                         <div class="alert alert-danger my-2">
-                            {@html validationMessage}
+                            {@html sanitizeHtml(validationMessage)}
                         </div>
                     {/if}
                     <div class="mb-1">

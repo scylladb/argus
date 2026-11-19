@@ -1,9 +1,8 @@
 <script lang="ts">
     import Fa from "svelte-fa";
     import { faCopy } from "@fortawesome/free-solid-svg-icons";
-    import { parse } from "marked";
     import { onMount } from "svelte";
-    import { markdownRendererOptions } from "../../markdownOptions";
+    import { renderMarkdown } from "../../Common/markdown";
     let { test_run = {} } = $props();
     let renderedElement = $state();
     let templateElement = $state();
@@ -15,7 +14,7 @@
     };
 
     onMount(() => {
-        renderedElement.innerHTML = parse(templateElement.innerHTML, markdownRendererOptions);
+        renderedElement.innerHTML = renderMarkdown(templateElement.innerHTML);
         issueTemplateText = templateElement.innerHTML;
     });
 </script>

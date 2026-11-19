@@ -6,6 +6,7 @@
     import humanizeDuration from "humanize-duration";
     import { timestampToISODate } from "../../../Common/DateUtils";
     import { createEventDispatcher } from "svelte";
+    import { sanitizeHtml } from "../../../Common/safeHtml";
 
     interface Props {
         test: PytestResult;
@@ -105,7 +106,7 @@
                                         {#if value.startsWith("http")}
                                             <a href="{value}">{value}</a>
                                         {:else if value.search(/^<a.*>/) != -1}
-                                            {@html value}
+                                            {@html sanitizeHtml(value)}
                                         {:else}
                                             {value}
                                         {/if}

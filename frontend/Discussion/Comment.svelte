@@ -1,5 +1,4 @@
 <script lang="ts">
-    import * as marked from "marked";
     import Fa from "svelte-fa";
     import { faEdit, faArrowAltCircleLeft, faTrashAlt } from "@fortawesome/free-regular-svg-icons";
     import humanizeDuration from "humanize-duration";
@@ -7,8 +6,7 @@
     import UserProfile from "./UserProfile.svelte";
     import { timestampToISODate } from "../Common/DateUtils";
     import { createEventDispatcher, onDestroy, onMount } from "svelte";
-    import { markdownRendererOptions } from "../markdownOptions";
-    import { MarkdownUserMention } from "./MarkedMentionExtension";
+    import { renderMarkdown } from "../Common/markdown";
     import { applicationCurrentUser } from "../argus";
     interface Props {
         users?: any;
@@ -33,10 +31,6 @@
         hideReplyButton = false,
         hideUserActions = false
     }: Props = $props();
-    marked.use({
-        extensions: [MarkdownUserMention]
-    });
-
     const dispatch = createEventDispatcher();
     let editing = $state(false);
     let deleting = $state(false);
@@ -142,7 +136,7 @@
         {:else}
             <div class="p-2 rounded-bottom bg-light comment-body">
                 <div class="border rounded p-2 markdown-body">
-                    {@html marked.parse(commentBody.message, markdownRendererOptions)}
+                    {@html renderMarkdown(commentBody.message, { mentions: true })}
                 </div>
             </div>
         {/if}
