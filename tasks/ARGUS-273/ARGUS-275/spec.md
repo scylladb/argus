@@ -205,5 +205,5 @@ bundle, the most of any main page.
   path would resolve to `/fa-solid-900.woff2`. (spec)
 - Only the solid font is preloaded. The regular font draws two nav icons and
   is 19 KB. (spec)
-- The Jinja template icons get `aria-hidden="true"`; the Svelte icons stay with
-  ARGUS-276. (open)
+- The Jinja template icons get `aria-hidden="true"`, which covers a browser
+  without the alt-text syntax; the Svelte icons stay with ARGUS-276. (review)

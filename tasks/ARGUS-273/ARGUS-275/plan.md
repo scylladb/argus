@@ -94,8 +94,7 @@ each `<script src>` and `<link>` in `<head>`:
 
 ## Task 3 — Hide the template icons from assistive technology
 
-This task follows the `(open)` decision of the spec. Drop it, and its line in
-the spec, when the review answers no.
+This task follows the `(review)` decision of the spec on the template icons.
 
 **Files:**
 - Modify: `templates/partials/nav_bar.html.j2` (16 `<i>` icons)
