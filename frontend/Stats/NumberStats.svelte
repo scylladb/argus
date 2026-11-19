@@ -33,16 +33,31 @@
     let shortBlock = $state();
     let extendedBlock = $state();
     let extended = $state(false);
+    let toggleButton: HTMLButtonElement | undefined = $state();
+    let hideButton: HTMLButtonElement | undefined = $state();
+    const quickSelectButtons: Record<string, HTMLButtonElement | null> = {};
+    const allowedStatuses = $derived(Object.values(TestStatus).filter(v => !hiddenStatuses.includes(v)));
 
     const dispatch = createEventDispatcher();
     const normalize = function(val, max, min) {
         return (val - min) / (max - min);
     };
 
+    const firstExtendedControl = function () {
+        for (const investigationStatus of Object.values(TestInvestigationStatus)) {
+            for (const status of allowedStatuses) {
+                const button = quickSelectButtons[`${investigationStatus}:${status}`];
+                if (button) return button;
+            }
+        }
+        return hideButton;
+    };
+
     const toggleExtendedInvestigations = function () {
         extended = !extended;
         new Collapse(shortBlock, { toggle: true });
         new Collapse(extendedBlock, {toggle: true });
+        (extended ? firstExtendedControl() : toggleButton)?.focus({ preventScroll: true });
     };
 
     const calcPercentageForStatus = function(status, stats) {
@@ -113,7 +128,6 @@
         {/each}
     </div>
     {#if stats.total != -1 && displayInvestigations}
-        {@const allowedStatuses = Object.values(TestStatus).filter(v => !hiddenStatuses.includes(v))}
         <div
             class="mt-2 collapse show"
             bind:this={shortBlock}
@@ -122,6 +136,7 @@
                 type="button"
                 class="align-self-start d-inline-flex shadow-sm overflow-hidden border rounded p-0 bg-transparent text-reset"
                 aria-expanded={extended}
+                bind:this={toggleButton}
                 onclick={toggleExtendedInvestigations}
             >
                 {#each Object.values(TestInvestigationStatus) as investigationStatus, idx}
@@ -153,6 +168,7 @@
                                             <div class="me-4">
                                                 <button
                                                     class="btn btn-sm btn-light mb-1"
+                                                    bind:this={quickSelectButtons[`${investigationStatus}:${status}`]}
                                                     onclick={() => {
                                                         dispatch("quickSelect", { tests: getTestsForStatus(stats, investigationStatus, status), widgetId: widgetId });
                                                     }}
@@ -169,7 +185,7 @@
                         </div>
                     {/each}
                 </div>
-                <button class="btn btn-dark mt-2" onclick={toggleExtendedInvestigations}>Hide</button>
+                <button class="btn btn-dark mt-2" bind:this={hideButton} onclick={toggleExtendedInvestigations}>Hide</button>
             </div>
         </div>
     {/if}
