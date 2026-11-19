@@ -44,10 +44,10 @@
     });
 </script>
 
-<div class="d-flex align-items-center w-100">
+<div class="d-flex align-items-center w-100 pe-3">
     <button
         type="button"
-        class="btn btn-link p-0 border-0 rounded-0 flex-fill align-self-stretch text-start text-reset text-decoration-none"
+        class="btn btn-link group-select py-2 ps-3 pe-0 border-0 rounded-0 flex-fill align-self-stretch text-start text-reset text-decoration-none"
         aria-current={selected ? "true" : undefined}
         onclick={onselect}
     >
@@ -60,7 +60,7 @@
             <input class="form-check-input" type="checkbox" role="switch" onclick={handleVisibilityToggle} bind:checked={group.enabled}>
         </div>
     </div>
-    <div class="ms-2">
+    <div class="ms-2 py-2">
         <button
             class="btn btn-light"
             title="Edit"
@@ -71,7 +71,7 @@
             <Fa icon={faEdit} />
         </button>
     </div>
-    <div class="ms-2">
+    <div class="ms-2 py-2">
         <button
             class="btn btn-light"
             title="Delete"
@@ -220,6 +220,10 @@
 </div>
 
 <style>
+    .group-select {
+        --bs-btn-focus-box-shadow: inset 0 0 0 0.25rem rgba(var(--bs-btn-focus-shadow-rgb), 0.5);
+    }
+
     .popup-group-editor {
         background-color: rgba(0, 0, 0, 0.5);
         top: 0;

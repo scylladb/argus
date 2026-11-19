@@ -348,14 +348,14 @@ PY
 
 No Vitest test: jsdom has no layout, so the click area is a live check.
 
-- [ ] Make the changes. `yarn build` prints no `a11y_*` line.
-- [ ] Live check at 1920 and 1280 px against screenshots of `057b462d`:
+- [x] Make the changes. `yarn build` prints no `a11y_*` line.
+- [x] Live check at 1920 and 1280 px against screenshots of `057b462d`:
       the group rows match pixel for pixel; a mouse click on the left, top
       and bottom edge of a group row selects it, and the switch, Edit and
       Delete do not. No dev view holds a graphs widget, so its header markup
       is checked as a replica on a view page: the button covers the header,
       which keeps its size.
-- [ ] Run `yarn test`, pre-commit and `yarn build`, then commit.
+- [x] Run `yarn test`, pre-commit and `yarn build`, then commit.
 
 ## Task 10 — Focus of the investigation bar
 

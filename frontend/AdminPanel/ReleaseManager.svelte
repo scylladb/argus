@@ -497,7 +497,7 @@
                     <ul class="list-group manager-list">
                         {#each releaseGroups.sort((a, b) => a.name > b.name ? 1 : -1) as group (group.id)}
                             <li
-                                class="list-group-item d-flex"
+                                class="list-group-item d-flex p-0"
                                 class:selected={currentGroup?.id == group.id}
                             >
                                 <ReleaseManagerGroup
