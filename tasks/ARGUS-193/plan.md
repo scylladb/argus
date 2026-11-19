@@ -45,16 +45,16 @@ stays in every plan built from a spec.
   and `checked` when `preferences.event_summaries` is true. The label is "Show AI summaries
   of SCT events in place of the full event text". A Save button submits the form.
 
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - `GET /api/v1/user/preferences` returns `{"event_summaries": false}` for a new user.
   - Posting `event_summaries=on` returns 302, and the API then returns `true`.
   - Posting the form with no field turns the setting back off.
   - The setting stays on after `/profile/update/username` changes the username.
   - `GET /profile/` renders the switch `checked` when the setting is on.
-- [ ] Run `uv run pytest argus/backend/tests/main_api/test_profile.py` and confirm the
+- [x] Run `uv run pytest argus/backend/tests/main_api/test_profile.py` and confirm the
       failures.
-- [ ] Write the service methods, the routes and the template section.
-- [ ] Run the tests again and confirm they pass.
+- [x] Write the service methods, the routes and the template section.
+- [x] Run the tests again and confirm they pass.
 
 ## Task 2 — Summary view on the event card
 
@@ -82,7 +82,7 @@ stays in every plan built from a spec.
   under `:global([data-bs-theme="dark"])`.
 - The copy button, `parsedMessage` and `shouldFilter` keep reading `event.message`.
 
-- [ ] Write the failing tests, rendering `SctEvent` with a minimal event, run and props.
+- [x] Write the failing tests, rendering `SctEvent` with a minimal event, run and props.
       Mock `../../Stores/AlertStore` and stub `SctSimilarEvents` if it fetches on mount.
   - With `showSummaries` false and a summary present, the card shows the message, with no
     badge and no summary button.
@@ -93,16 +93,17 @@ stays in every plan built from a spec.
     and no button.
   - In summary view, the copy button calls `navigator.clipboard.writeText` with
     `event.message`.
-- [ ] Run `yarn test frontend/TestRun/SCT` and confirm the failures.
-- [ ] Write the `SctEvents` and `SctEvent` changes.
-- [ ] Run the tests again and confirm they pass.
+- [x] Run `yarn test frontend/TestRun/SCT` and confirm the failures.
+- [x] Write the `SctEvents` and `SctEvent` changes.
+- [x] Run the tests again and confirm they pass.
 
 ## Task 3 — Verify
 
-- [ ] Run `uv run pre-commit run --all-files`, `uv run pytest`, `yarn test` and `yarn build`.
-- [ ] Live check on the running dev server (find it with `ss`):
-  - The profile switch persists after a reload.
-  - A run with summarized ERROR events shows the summary view with the setting on, and the
+- [x] Run `uv run pre-commit run --all-files`, `uv run pytest`, `yarn test` and `yarn build`.
+- [x] Live check on the running dev server (find it with `ss`):
+  - [x] The profile switch persists after a reload.
+  - [x] A run with summarized ERROR events shows the summary view with the setting on, and the
     page as before with it off.
-  - Check the copy button, and the light and dark themes.
+  - [x] Check the light and dark themes.
+  - [ ] Check the copy button. Headless Chrome has no clipboard; the Vitest test covers it.
 - [ ] Leave the code uncommitted for review. The commit carries the checked boxes.

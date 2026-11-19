@@ -95,6 +95,14 @@ Profile
                 </div>
                 <button type="submit" class="btn btn-primary">Change</button>
             </form>
+            <h4>Preferences</h4>
+            <form class="form mb-3" action="{{ url_for('main.update_preferences') }}" method="post">
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" id="formEventSummaries" name="event_summaries" type="checkbox" role="switch" {% if preferences.event_summaries %}checked{% endif %}>
+                    <label class="form-check-label" for="formEventSummaries">Show AI summaries of SCT events in place of the full event text</label>
+                </div>
+                <button type="submit" class="btn btn-primary">Save</button>
+            </form>
             <h4>API Tokens</h4>
             <div class="mb-2">
                 <p>Generate an API token (valid for one year)</p>

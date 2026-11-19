@@ -221,11 +221,13 @@ async def profile(asgi_request: Request, user: User = Depends(ui_current_user)):
     first_run = asgi_request.session.pop("first_run_info", None)
     token_generated = asgi_request.session.pop("token_generated", None)
     api_token_count = len(await UserService.get_api_tokens(user))
+    preferences = await UserService().get_preferences(user)
 
     return templates.TemplateResponse(asgi_request, "profile.html.j2", {
         "first_run": first_run,
         "token_generated": token_generated,
         "api_token_count": api_token_count,
+        "preferences": preferences,
     })
 
 
@@ -323,6 +325,14 @@ async def update_full_name(asgi_request: Request, new_name: str | None = Form(No
         service = UserService()
         await service.update_name(user, new_name)
         flash(asgi_request, "Successfully changed name!", category="success")
+    return _profile_redirect(asgi_request)
+
+
+@router.post("/profile/update/preferences", name="main.update_preferences")
+async def update_preferences(asgi_request: Request, event_summaries: str | None = Form(None),
+                             user: User = Depends(ui_current_user)):
+    await UserService().set_preference(user, "event_summaries", event_summaries is not None)
+    flash(asgi_request, "Preferences saved", category="success")
     return _profile_redirect(asgi_request)
 
 
