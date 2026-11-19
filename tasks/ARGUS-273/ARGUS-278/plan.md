@@ -8,7 +8,7 @@ in the same commit.
 ## Rules
 
 - Follow `docs/standards/frontend/components.md` and
-  `docs/standards/testing/test-writing.md`. The module is TypeScript in
+  `docs/standards/testing/test-writing.md`. The helpers are TypeScript in
   `frontend/Common/`, the home of a shared helper.
 - Keep DOMPurify with its default config. The Sanitizer API is not Baseline
   Widely available.
@@ -24,20 +24,31 @@ in the same commit.
   header `fix(frontend): ...`, at most 72 characters, a short body, and the
   last line `Fixes ARGUS-278`.
 
-## Task 1 — The shared module
+## Task 1 — The shared helpers
 
 **Files:**
 - Create: `frontend/Common/safeHtml.ts`
+- Create: `frontend/Common/markdown.ts`
 - Test: `frontend/Common/safeHtml.test.ts`
+- Test: `frontend/Common/markdown.test.ts`
 
 **Internals:**
 
 ```ts
+// frontend/Common/safeHtml.ts
 export const sanitizeHtml = (html: string | null | undefined): string
+// frontend/Common/markdown.ts
 export const renderMarkdown = (text: string, { mentions = false }: { mentions?: boolean } = {}): string
 ```
 
-`sanitizeHtml` returns `DOMPurify.sanitize(html ?? "")`. Two module-level
+Two modules, because `MarkdownUserMention` loads `argus.js`, which reads the
+page global `gArgusCurrentUser`; `sanitizeHtml` callers and their tests must
+not load it.
+
+`sanitizeHtml` sanitizes `html ?? ""` with a dedicated instance,
+`DOMPurify(window)`, and `ADD_ATTR: ["target"]`; an `afterSanitizeAttributes`
+hook on that instance sets `rel="noopener noreferrer"` on every element with
+a `target`. The global `DOMPurify` of `Chat/markdown.ts` keeps no hook. Two module-level
 instances, `new Marked({ gfm: true, breaks: true, async: false })` and the
 same with `extensions: [MarkdownUserMention]` from
 `frontend/Discussion/MarkedMentionExtension.js`. `renderMarkdown` picks one by
@@ -45,12 +56,12 @@ same with `extensions: [MarkdownUserMention]` from
 `highlight` and no `langPrefix`: marked 16 ignores both, so the output of the
 sites does not change.
 
-The test mocks `../argus` with
+`markdown.test.ts` mocks `../argus` with
 `vi.mock("../argus", () => ({ applicationCurrentUser: { username: "admin" } }))`,
 as `frontend/WorkArea/TestRuns.test.ts` does, because `argus.js` reads the
 page global `gArgusCurrentUser`. Cases, by behavior:
 
-`renderMarkdown`:
+`markdown.test.ts`, for `renderMarkdown`:
 - `drops a javascript: link`: `[x](javascript:alert(1))` gives an `<a>` with
   no `href`, and no `javascript:` in the output.
 - `drops a javascript: link written with an entity`:
@@ -65,7 +76,7 @@ page global `gArgusCurrentUser`. Cases, by behavior:
   `<span class="user-mention ...">@admin</span>` with `mentions: true`, and
   plain text without.
 
-`sanitizeHtml`:
+`safeHtml.test.ts`, for `sanitizeHtml`:
 - `strips script from server HTML`: `<a href="javascript:alert(1)">x</a>`,
   `<img src="x" onerror="alert(1)">` and `<script>alert(1)</script>` lose the
   `href`, the `onerror` and the script.
@@ -75,15 +86,21 @@ page global `gArgusCurrentUser`. Cases, by behavior:
   and the 404 validation message keep their tags and `href`.
 - `strips script from the validation message`: the 404 message built with the
   branch `"><img src=x onerror=alert(1)>` keeps the link and loses `onerror`.
+- `keeps target on a link and forces rel`: `target="_blank"` stays, and `rel`
+  becomes `noopener noreferrer`, also over `rel="opener"`.
+- `keeps a target without href harmless`: `<a target="_blank" onclick=...>`
+  keeps no `href` and no `onclick`, and gets the forced `rel`.
+- `keeps the markup and the run link of a results graph tooltip`: the span
+  keeps its `style`, and the "Open" link its `href`, `class`, `target` and icon.
 - `returns an empty string for a missing value`: `undefined` and `null` give
   `""`.
 
-- [ ] Write the test file, and a first `safeHtml.ts` whose two functions return
-      their input unsanitized, the code the sites run today.
-- [ ] Run `yarn test frontend/Common/safeHtml.test.ts` and confirm the script
-      cases fail and the others pass.
-- [ ] Sanitize with DOMPurify.
-- [ ] Run the test file again and confirm it passes.
+- [x] Write the tests, and first helpers that return their input unsanitized,
+      the code the sites run today.
+- [x] Run `yarn test frontend/Common` and confirm the script cases fail and
+      the others pass.
+- [x] Sanitize with DOMPurify.
+- [x] Run the tests again and confirm they pass.
 
 ## Task 2 — Move every markdown site onto `renderMarkdown`
 
@@ -98,7 +115,7 @@ page global `gArgusCurrentUser`. Cases, by behavior:
 - Modify: `frontend/TestRun/Sirenada/SirenadaIssueTemplate.svelte:4,6,18`
 - Delete: `frontend/markdownOptions.js`
 
-At each site, import `renderMarkdown` from `Common/safeHtml` and drop the
+At each site, import `renderMarkdown` from `Common/markdown` and drop the
 imports of `marked`, `markdownRendererOptions`, `MarkdownUserMention` and
 `DOMPurify` that the file no longer uses. Remove the three
 `marked.use({ extensions: [MarkdownUserMention] })` blocks.
@@ -115,9 +132,9 @@ imports of `marked`, `markdownRendererOptions`, `MarkdownUserMention` and
 | `TestRun/Sirenada/SirenadaIssueTemplate.svelte` | `renderedElement.innerHTML = renderMarkdown(templateElement.innerHTML)` |
 
 Then `grep -rn "markdownOptions\|from \"marked\"" frontend` lists only
-`Common/safeHtml.ts` and `Chat/markdown.ts`.
+`Common/markdown.ts` and `Chat/markdown.ts`.
 
-- [ ] Change the eight sites and delete `frontend/markdownOptions.js`.
+- [x] Change the eight sites and delete `frontend/markdownOptions.js`.
 
 ## Task 3 — Sanitize the non-markdown sites
 
@@ -130,9 +147,11 @@ Then `grep -rn "markdownOptions\|from \"marked\"" frontend` lists only
 - Modify: `frontend/TestRun/Jenkins/SCTParameterWizard.svelte:10,713`
 - Modify: `frontend/TestRun/Jenkins/CloneTargetSelector.svelte:8,234`
 - Modify: `frontend/WorkArea/JobConfigureModal.svelte:7,175`
+- Modify: `frontend/TestRun/ResultsGraph.svelte:10,249`
 
 At each site, import `sanitizeHtml` from `Common/safeHtml` after the last
-import, and wrap the expression of the `{@html}` tag:
+import, and wrap the expression of the `{@html}` tag, or of the `innerHTML`
+assignment in `ResultsGraph.svelte`:
 
 | Site | New tag |
 |---|---|
@@ -142,26 +161,31 @@ import, and wrap the expression of the `{@html}` tag:
 | `ParameterEditor.svelte` | `{@html sanitizeHtml(param.description)}` |
 | `SCTParameterWizard.svelte` | `{@html sanitizeHtml(param.description ?? rawParams.find(v => v.name == param.internalName)?.description)}` |
 | `CloneTargetSelector.svelte`, `JobConfigureModal.svelte` | `{@html sanitizeHtml(validationMessage)}` |
+| `ResultsGraph.svelte` | `tooltipEl.innerHTML = sanitizeHtml(innerHtml)` |
 
 Then every `{@html` in `frontend/` passes through `renderMarkdown`,
 `sanitizeHtml`, the chat's `renderMarkdown` or `hljs.highlight`.
 
-- [ ] Change the eight sites.
+- [x] Change the nine sites.
 
 ## Task 4 — Verify
 
-- [ ] Run `uv run pre-commit run --all-files`, `yarn test` and `yarn build`.
+- [x] Run `uv run pre-commit run --all-files`, `yarn test` and `yarn build`.
       Compare the build warnings with a build of the base commit.
-- [ ] Run `yarn build:dev`, start the worktree server on :5018, and repeat the
+- [x] Run `yarn build:dev`, start the worktree server on :5018, and repeat the
       reproduction of `rca.md` in headless Chrome. One probe view, one
       highlight, one action item, one highlight comment and one run comment,
       each with the `javascript:` link, the `&#58;` link, the quoted
       `<img onerror>`, an `https` link, bold text and an `@admin` mention.
       Confirm no dialog opens on load or on a click, and the benign markdown,
       the mention and the link render. Take a screenshot of each page.
-- [ ] Check that the team message of the day, an issue template preview and
+- [ ] Hover a results graph tooltip and follow its "Open" link. Not done: the
+      dev database has result metadata for three tests and graph data for
+      none, so no graph renders; the tooltip case of `safeHtml.test.ts`
+      covers its markup.
+- [x] Check that the team message of the day, an issue template preview and
       the activity tab of a run still render. Reach no site through a call
       that changes a run status or sends a notification.
-- [ ] Delete every item the API can delete, and list the rows left with the
+- [x] Delete every item the API can delete, and list the rows left with the
       CQL that removes them.
-- [ ] Leave the change uncommitted for review.
+- [x] Leave the change uncommitted for review.

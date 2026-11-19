@@ -152,21 +152,34 @@ gives the fix for each.
 
 One more sink is outside the `{@html}` grep. `TestRun/ResultsGraph.svelte:249`
 builds a chart tooltip as a string from `raw.ori` and `raw.changes` of the
-submitted results and assigns it to `innerHTML`. It is not in the agreed list,
-so this fix leaves it, and section `Deferred work` records it.
+submitted results and assigns it to `innerHTML`. Section `Approaches` gives
+its fix with the others.
 
 ## Approaches
 
-**A. One shared module that parses and sanitizes.** *Selected.*
-`frontend/Common/safeHtml.ts` exports two functions, each returning a string
-that `{@html}` may render:
+**A. Two shared helpers that sanitize.** *Selected.*
+Two modules in `frontend/Common/`, each exporting a function that returns a
+string `{@html}` may render:
 
 ```ts
+// frontend/Common/safeHtml.ts
 export const sanitizeHtml = (html: string | null | undefined): string
+// frontend/Common/markdown.ts
 export const renderMarkdown = (text: string, options?: { mentions?: boolean }): string
 ```
 
-`sanitizeHtml` returns `DOMPurify.sanitize(html ?? "")`. `renderMarkdown`
+They are two modules, not one, because `MarkdownUserMention` imports
+`argus.js`, which reads the page global `gArgusCurrentUser` when it loads. In
+one module, every `sanitizeHtml` caller would load it too, and a test that
+renders `ParameterEditor` without that global
+(`frontend/TestRun/Jenkins/JenkinsParamsFetch.test.ts`) fails on import.
+
+`sanitizeHtml` sanitizes `html ?? ""` with a DOMPurify instance of its own,
+`DOMPurify(window)`, in the default config plus `ADD_ATTR: ["target"]`. An
+`afterSanitizeAttributes` hook on that instance sets `rel="noopener noreferrer"`
+on every element that has a `target`. The hook lives on the dedicated
+instance, so the global `DOMPurify` that `Chat/markdown.ts` uses is unchanged.
+`renderMarkdown`
 parses with a module-level `new Marked({ gfm: true, breaks: true, async: false })`,
 or with a second instance that also carries `MarkdownUserMention` when
 `mentions` is true, and returns `sanitizeHtml` of the result. Both use
@@ -176,14 +189,14 @@ today on a page where a comment mounted first, and `TeamDetail` and the two
 issue templates without. The three `marked.use(...)` calls go, so the global
 instance no longer changes on mount. `markdownOptions.js` loses its last
 user and goes. `Chat/markdown.ts` keeps its own stricter helper.
-Cost: one file of about 20 lines, one line at each site, sixteen files. Risk: a
+Cost: two files of about 15 lines, one line at each site, seventeen files. Risk: a
 markdown feature that DOMPurify drops, covered by the benign case of the
 test; `<input>` of a task list, tables, code and `https` links survive the
 default config, checked in the same probe.
 
 Each non-markdown site takes one of two fixes: render text without `{@html}`,
 or keep `{@html}` and pass the string through `sanitizeHtml`. Text keeps the
-same look only where the string holds no markup, and none of the eight does:
+same look only where the string holds no markup, and none of the nine does:
 
 | Site | Fix | Reason |
 |---|---|---|
@@ -192,11 +205,12 @@ same look only where the string holds no markup, and none of the eight does:
 | `PytestResultRow.svelte:108`, `PytestItem.svelte:88` | `sanitizeHtml` | The branch exists to render the reporter's `<a>` as a link; rebuilding the anchor in Svelte would mean parsing the HTML and checking the URL, which is the sanitizer's job |
 | `ParameterEditor.svelte:98`, `SCTParameterWizard.svelte:713` | `sanitizeHtml` | Jenkins descriptions are HTML by design, with links and line breaks |
 | `CloneTargetSelector.svelte:234`, `JobConfigureModal.svelte:175` | `sanitizeHtml` | The 404 message links to the target repository with `<a href>` |
+| `ResultsGraph.svelte:249` (`innerHTML`) | `sanitizeHtml` | The tooltip is markup built in the script: a coloured `<span style>`, the title and change lines, and an "Open" link with `target="_blank"` to the run. Only the assignment and the import change; ARGUS-274 moves the tooltip host in the same file |
 
 The default config was a question at review and stays: it keeps `style`
-attributes and `<form>`, which run no script. It also drops `target` from a
-link, so a Jenkins description link that opened a new tab opens in the same
-tab.
+attributes and `<form>`, which run no script. The one addition is `target`, so
+a Jenkins description link or the tooltip's "Open" link still opens a new tab;
+the forced `rel` keeps the new tab from reaching `window.opener`.
 
 **B. Drop unsafe link URLs inside `marked`.** A `walkTokens` hook or a link
 renderer would allow `http`, `https`, `mailto` and relative URLs. It does not
@@ -219,10 +233,10 @@ sanitized result; DOMPurify's string output is its supported mode for this.
 
 ## Regression test
 
-`frontend/Common/safeHtml.test.ts`, Vitest in jsdom, `../argus` mocked as in
-`frontend/WorkArea/TestRuns.test.ts`.
+Vitest in jsdom.
 
-`renderMarkdown`:
+`frontend/Common/markdown.test.ts`, `../argus` mocked as in
+`frontend/WorkArea/TestRuns.test.ts`:
 
 - `drops a javascript: link`: `[x](javascript:alert(1))` renders an `<a>`
   with no `href`, and the output holds no `javascript:`.
@@ -235,7 +249,7 @@ sanitized result; DOMPurify's string output is its supported mode for this.
 - `renders a mention only when asked`: ` @admin` gives a `user-mention` span
   with `mentions: true` and plain text without.
 
-`sanitizeHtml`:
+`frontend/Common/safeHtml.test.ts`:
 
 - `strips script from server HTML`: `<a href="javascript:alert(1)">x</a>`,
   `<img src="x" onerror="alert(1)">` and `<script>alert(1)</script>` lose the
@@ -246,6 +260,13 @@ sanitized result; DOMPurify's string output is its supported mode for this.
   link, and the 404 validation message keep their tags and `href`.
 - `strips script from the validation message`: the 404 message built with the
   branch `"><img src=x onerror=alert(1)>` keeps the link and loses `onerror`.
+- `keeps target on a link and forces rel`: `target="_blank"` stays, and `rel`
+  becomes `noopener noreferrer`, also over a `rel="opener"` the input set.
+- `keeps a target without href harmless`: `<a target="_blank" onclick=...>`
+  keeps no `href` and no `onclick`, and gets the forced `rel`.
+- `keeps the markup and the run link of a results graph tooltip`: the coloured
+  span keeps its `style`, the change line its text, and the "Open" link its
+  `href`, `class`, `target` and icon.
 - `returns an empty string for a missing value`: `undefined` and `null` give
   `""`.
 
@@ -260,7 +281,8 @@ input unsanitized, the code the sites run today.
 | `MarkdownUserMention` reads `applicationCurrentUser` from `argus.js`, which reads a page global | The test mocks `../argus`; the pages define the global |
 | A site starts or stops rendering mentions | The editor preview gets `mentions: true`, as it renders today once a comment has mounted. The team page registers no extension today and gets none. The issue template previews lose the mention span they get today when the run has a comment; their text is run data, and the span is styling only |
 | ARGUS-276 edits the same components for a11y warnings, and ARGUS-274 rewrites `ModalWindow`, a parent of `JobConfigureModal` | The change touches only the import lines, the `marked.use` block and the rendering line of each file, and not `ModalWindow` |
-| A Jenkins description or a validation link loses `target="_blank"` | The default config drops `target`; the link opens in the same tab. Accepted with the default config |
+| A `javascript:` link inside an action item's `<label>` loses its `href`, so a click on it toggles the action item's checkbox | Accepted. Seen in the live check; such links do not exist in real data, and the label wraps the whole item, so a click on plain text toggles it too |
+| A link keeps `target="_blank"` from the input | `rel="noopener noreferrer"` is forced on every element with a `target` |
 | The non-markdown sites cannot all be reached live without side effects | The live check covers the markdown sites and the activity tab; the sanitize cases of the test cover the strings of the other sites |
 
 ## Deferred work
@@ -270,5 +292,3 @@ input unsanitized, the code the sites run today.
   `argus/backend/service/views_widgets/highlights.py` store `payload.content`
   where they already compute `content_stripped`. A follow-up subtask of
   ARGUS-273; its draft text is outside this repository.
-- `TestRun/ResultsGraph.svelte:249` assigns a tooltip built from submitted
-  result data to `innerHTML`. It is outside the sites this fix covers.
