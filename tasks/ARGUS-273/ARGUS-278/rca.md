@@ -139,39 +139,64 @@ The grep of `frontend/` finds 22 `{@html}` sites. The ones not above:
 |---|---|---|
 | `Chat/ChatMessage.svelte:82,94,155`, `Chat/ChatActionCard.svelte:103,220,253` | `renderMarkdown` of `Chat/markdown.ts` | Sanitized, with a stricter config |
 | `Teams/TeamDetail.svelte:192` | team message of the day | Sanitized |
-| `TestRun/ActivityTab.svelte:70` | activity event text, formatted on the server from user names, GitHub and Jira issue titles, and the free-text reason of `POST /ignore_jobs` (`testrun.py:559-561`), none escaped | Unsafe, by code reading. Not reproduced live: `ignore_jobs` rewrites the investigation status of every failed run of a test |
-| `Profile/Notification.svelte:86` | notification content, rendered from `templates/notifications/*.html.j2`, which `rendering.py:33-38` does not autoescape; holds the view display name | Unsafe, by code reading |
+| `TestRun/ActivityTab.svelte:70` | activity event text, formatted on the server by `str.format` from user names, GitHub and Jira issue titles, and the free-text reason of `POST /ignore_jobs` (`testrun.py:559-561`), none escaped. The performance regression event of `plugins/sct/service.py:317-319` carries an `<a href>` to the compared runs | Unsafe, by code reading. Not reproduced live: `ignore_jobs` rewrites the investigation status of every failed run of a test |
+| `Profile/Notification.svelte:86` | notification content, rendered from `templates/notifications/*.html.j2`, which `rendering.py:33-38` does not autoescape. The templates hold `<span class='fw-bold'>` and `<a href>`, and interpolate the view display name | Unsafe, by code reading |
 | `Views/Widgets/PytestWidget/PytestResultRow.svelte:108`, `TestRun/Pytest/PytestItem.svelte:88` | a pytest user field that starts with `<a`, submitted by the reporter | Unsafe by design, from an authenticated client |
-| `TestRun/Jenkins/ParameterEditor.svelte:98`, `TestRun/Jenkins/SCTParameterWizard.svelte:713` | Jenkins job parameter descriptions | Jenkins admins write them |
-| `TestRun/Jenkins/CloneTargetSelector.svelte:234`, `WorkArea/JobConfigureModal.svelte:175` | server validation message | Server text |
+| `TestRun/Jenkins/ParameterEditor.svelte:98`, `TestRun/Jenkins/SCTParameterWizard.svelte:713` | Jenkins job parameter descriptions, HTML that Jenkins renders as HTML | Jenkins admins write them |
+| `TestRun/Jenkins/CloneTargetSelector.svelte:234`, `WorkArea/JobConfigureModal.svelte:175` | the message of `POST /jenkins/clone/settings/validate`. On a 404 from GitHub, `_verify_sct_settings` (`jenkins_service.py:265-266`) returns an `<a href>` built from the branch the user typed | Unsafe, reflected to the user who typed it |
 | `TestRun/Sirenada/SirenadaTestBreakdown.svelte:196,204` | `hljs.highlight(...).value` | Safe: highlight.js escapes its input |
 
-None of them renders markdown. The intent puts them out of scope, and this
-list is the input for a follow-up issue.
+None of them renders markdown, and each of the unsafe ones needs real HTML: a
+link or a bold span that the server or the client wrote. Section `Approaches`
+gives the fix for each.
+
+One more sink is outside the `{@html}` grep. `TestRun/ResultsGraph.svelte:249`
+builds a chart tooltip as a string from `raw.ori` and `raw.changes` of the
+submitted results and assigns it to `innerHTML`. It is not in the agreed list,
+so this fix leaves it, and section `Deferred work` records it.
 
 ## Approaches
 
-**A. One shared helper that parses and sanitizes.** *Selected.*
-`frontend/Common/markdown.ts` exports
-`renderMarkdown(text: string, options?: { mentions?: boolean }): string`.
-It parses with a module-level `new Marked({ gfm: true, breaks: true, async: false })`,
+**A. One shared module that parses and sanitizes.** *Selected.*
+`frontend/Common/safeHtml.ts` exports two functions, each returning a string
+that `{@html}` may render:
+
+```ts
+export const sanitizeHtml = (html: string | null | undefined): string
+export const renderMarkdown = (text: string, options?: { mentions?: boolean }): string
+```
+
+`sanitizeHtml` returns `DOMPurify.sanitize(html ?? "")`. `renderMarkdown`
+parses with a module-level `new Marked({ gfm: true, breaks: true, async: false })`,
 or with a second instance that also carries `MarkdownUserMention` when
-`mentions` is true, and returns `DOMPurify.sanitize(html)` with DOMPurify's
-default config, the config `TeamDetail` uses today. Every markdown site calls
+`mentions` is true, and returns `sanitizeHtml` of the result. Both use
+DOMPurify's default config, the config `TeamDetail` uses today. Every markdown site calls
 it: the five `{@html}` sites with `mentions: true`, which is what they render
 today on a page where a comment mounted first, and `TeamDetail` and the two
 issue templates without. The three `marked.use(...)` calls go, so the global
 instance no longer changes on mount. `markdownOptions.js` loses its last
 user and goes. `Chat/markdown.ts` keeps its own stricter helper.
-Cost: one file of about 15 lines, one line at each of eight sites. Risk: a
+Cost: one file of about 20 lines, one line at each site, sixteen files. Risk: a
 markdown feature that DOMPurify drops, covered by the benign case of the
 test; `<input>` of a task list, tables, code and `https` links survive the
 default config, checked in the same probe.
 
-The default config keeps `style` attributes and `<form>`. Only a highlight
-comment can carry raw HTML today, so this matters there alone, and it runs no
-script. Forbidding them is an open question for the review, not part of this
-fix.
+Each non-markdown site takes one of two fixes: render text without `{@html}`,
+or keep `{@html}` and pass the string through `sanitizeHtml`. Text keeps the
+same look only where the string holds no markup, and none of the eight does:
+
+| Site | Fix | Reason |
+|---|---|---|
+| `ActivityTab.svelte:70` | `sanitizeHtml` | The performance regression event links to the compared runs with `<a href>`; text would show the tag |
+| `Notification.svelte:86` | `sanitizeHtml` | Every template holds `<span class='fw-bold'>` and an `<a href>`; the client gets only the rendered string, not the parameters to rebuild it in Svelte |
+| `PytestResultRow.svelte:108`, `PytestItem.svelte:88` | `sanitizeHtml` | The branch exists to render the reporter's `<a>` as a link; rebuilding the anchor in Svelte would mean parsing the HTML and checking the URL, which is the sanitizer's job |
+| `ParameterEditor.svelte:98`, `SCTParameterWizard.svelte:713` | `sanitizeHtml` | Jenkins descriptions are HTML by design, with links and line breaks |
+| `CloneTargetSelector.svelte:234`, `JobConfigureModal.svelte:175` | `sanitizeHtml` | The 404 message links to the target repository with `<a href>` |
+
+The default config was a question at review and stays: it keeps `style`
+attributes and `<form>`, which run no script. It also drops `target` from a
+link, so a Jenkins description link that opened a new tab opens in the same
+tab.
 
 **B. Drop unsafe link URLs inside `marked`.** A `walkTokens` hook or a link
 renderer would allow `http`, `https`, `mailto` and relative URLs. It does not
@@ -194,8 +219,10 @@ sanitized result; DOMPurify's string output is its supported mode for this.
 
 ## Regression test
 
-`frontend/Common/markdown.test.ts`, Vitest in jsdom, `../argus` mocked as in
-`frontend/WorkArea/TestRuns.test.ts`:
+`frontend/Common/safeHtml.test.ts`, Vitest in jsdom, `../argus` mocked as in
+`frontend/WorkArea/TestRuns.test.ts`.
+
+`renderMarkdown`:
 
 - `drops a javascript: link`: `[x](javascript:alert(1))` renders an `<a>`
   with no `href`, and the output holds no `javascript:`.
@@ -208,8 +235,22 @@ sanitized result; DOMPurify's string output is its supported mode for this.
 - `renders a mention only when asked`: ` @admin` gives a `user-mention` span
   with `mentions: true` and plain text without.
 
-The first three fail against a helper that returns `marked.parse` unsanitized,
-the code the five sites run today.
+`sanitizeHtml`:
+
+- `strips script from server HTML`: `<a href="javascript:alert(1)">x</a>`,
+  `<img src="x" onerror="alert(1)">` and `<script>alert(1)</script>` lose the
+  `href`, the `onerror` and the script.
+- `keeps the links and markup the server sends`: the performance regression
+  event, a rendered mention notification with its `<span class="fw-bold">`, a
+  pytest `<a href="https://...">` field, a Jenkins description with `<br>` and a
+  link, and the 404 validation message keep their tags and `href`.
+- `strips script from the validation message`: the 404 message built with the
+  branch `"><img src=x onerror=alert(1)>` keeps the link and loses `onerror`.
+- `returns an empty string for a missing value`: `undefined` and `null` give
+  `""`.
+
+The script cases of both functions fail against a module that returns its
+input unsanitized, the code the sites run today.
 
 ## Risks
 
@@ -218,5 +259,16 @@ the code the five sites run today.
 | A stored comment uses markup that DOMPurify removes | The run comments, highlights and action items hold no raw HTML, since the backend escaped it. Highlight comments lose only script, event handlers and the elements DOMPurify forbids |
 | `MarkdownUserMention` reads `applicationCurrentUser` from `argus.js`, which reads a page global | The test mocks `../argus`; the pages define the global |
 | A site starts or stops rendering mentions | The editor preview gets `mentions: true`, as it renders today once a comment has mounted. The team page registers no extension today and gets none. The issue template previews lose the mention span they get today when the run has a comment; their text is run data, and the span is styling only |
-| ARGUS-276 edits the same components for a11y warnings | The change touches only the import lines, the `marked.use` block and the `{@html}` line of each file |
-| The other `{@html}` sites stay unsafe | Listed above for a follow-up issue |
+| ARGUS-276 edits the same components for a11y warnings, and ARGUS-274 rewrites `ModalWindow`, a parent of `JobConfigureModal` | The change touches only the import lines, the `marked.use` block and the rendering line of each file, and not `ModalWindow` |
+| A Jenkins description or a validation link loses `target="_blank"` | The default config drops `target`; the link opens in the same tab. Accepted with the default config |
+| The non-markdown sites cannot all be reached live without side effects | The live check covers the markdown sites and the activity tab; the sanitize cases of the test cover the strings of the other sites |
+
+## Deferred work
+
+- Escape the highlight comments on the backend, as the highlights and action
+  items are escaped. `create_comment` and `update_comment` in
+  `argus/backend/service/views_widgets/highlights.py` store `payload.content`
+  where they already compute `content_stripped`. A follow-up subtask of
+  ARGUS-273; its draft text is outside this repository.
+- `TestRun/ResultsGraph.svelte:249` assigns a tooltip built from submitted
+  result data to `innerHTML`. It is outside the sites this fix covers.

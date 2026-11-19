@@ -72,17 +72,17 @@ live <img src=x> elements: ["<img src=\"x\" onerror=\"alert('hc-img-onload')\">"
   without script.
 - Ordinary markdown renders as today: bold, code, tables, task lists, links to
   `http` and `https` addresses, and the `@user` mentions.
-- One shared helper does the parse and the sanitize, and a test covers it.
+- The other `{@html}` sites that take server or client text, the run
+  activity events, the notification content, the pytest user fields, the
+  Jenkins parameter descriptions and the Jenkins validation messages, render
+  their links and markup without script.
+- One shared module does the parse and the sanitize, and a test covers it.
 
 ## Out of scope
 
 - The Sanitizer API. It is not Baseline Widely available, so DOMPurify stays.
 - The chat answers. `frontend/Chat/markdown.ts` already sanitizes them with a
   stricter config.
-- The `{@html}` sites that render no markdown: the run activity events, the
-  notification content, the pytest user fields, the Jenkins parameter
-  descriptions and the Jenkins validation messages. `rca.md` lists them for a
-  follow-up issue.
 - Escaping the highlight comments on the backend. The client sanitizer closes
-  the hole for every reader.
+  the hole for every reader; `rca.md` records the escape as deferred work.
 - Rewriting the comments already stored.
