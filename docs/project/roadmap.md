@@ -13,11 +13,6 @@ spec and plan live in `tasks/<KEY>/`, and the Jira board holds the status.
 - ESLint, Prettier and svelte-check are installed. No hook and no workflow runs
   them.
 
-### Python version floor
-`pyproject.toml` declares `requires-python = ">=3.10"` and Ruff sets
-`target-version = "py310"`, while all workflows pin 3.14. Raise the floor to
-match what CI tests.
-
 ### Tests need Docker
 114 tests carry `@pytest.mark.docker_required`, and `conftest.py` defines no
 skip logic for the marker. A machine without Docker cannot run the backend
