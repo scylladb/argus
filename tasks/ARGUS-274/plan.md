@@ -15,7 +15,8 @@ stays in every plan built from a spec.
 - No `z-index` in ModalWindow. Never set `overflow` or `position` on `html`
   or `body`.
 - No caller file changes, except the Escape case of
-  `frontend/Common/ConfirmDeleteModal.test.ts`.
+  `frontend/Common/ConfirmDeleteModal.test.ts` and `dismissible={false}` on
+  the form modals (Task 7).
 - Do not edit the files of the sibling tasks: `frontend/font-awesome.js`,
   `frontend/font-awesome.scss`, `templates/base.html.j2`, the markdown
   rendering in `frontend/Discussion/` and `frontend/Views/Widgets/ViewHighlights/`,
@@ -289,3 +290,135 @@ L8, L10 and L11:
   popover, full width at the bottom of the viewport, above the backdrop.
 - [x] Record a check that the dev data cannot reach as skipped, with the
   reason, in the pull request body.
+
+## Task 6 — Toasts usable above a modal and the error console
+
+Review round 2. A live probe on the Task 3 build confirmed both findings. With
+a modal open, the toast stack is drawn above the backdrop but inert: the hit
+test at its close button returns the dialog. On a phone the click closes the
+modal and keeps the toast, and on a desktop it lands in the box and does
+nothing. With the error console open, the stack covers it: on a phone the bar
+covers "Clear all" and takes the click, and on a desktop the 512 px column
+covers the console's left edge.
+
+**Files:**
+- Create: `frontend/Stores/ModalStore.ts`
+- Modify: `frontend/Common/ModalWindow.svelte` (the `$effect`)
+- Modify: `frontend/Alerts/topLayer.ts` (whole file)
+- Modify: `frontend/Alerts/AlertWidget.svelte` (script, both stacks, the
+  console markup, style)
+- Test: `frontend/Alerts/topLayer.test.ts`, `frontend/Alerts/AlertWidget.test.ts`,
+  `frontend/Common/ModalWindow.test.ts`
+
+**Internals:**
+- `ModalStore.ts`: `openModals = writable<HTMLDialogElement[]>([])`,
+  `addModal(dialog)` appends, `removeModal(dialog)` filters it out.
+- ModalWindow's `$effect` keeps the dialog in a local `shown`, calls
+  `shown.showModal()` and then `addModal(shown)`. The teardown calls
+  `removeModal(shown)` before the focus rule.
+- `topLayer(node, { key, host, shown })`:
+  - `home` is `node.parentElement` at mount. It sets `popover="manual"` when
+    `showPopover` exists, and tracks `open` itself, because jsdom has no
+    `:popover-open`.
+  - `place`: the target is `host ?? home`. When the node's parent is not the
+    target it appends the node there and sets `open = false`, because the
+    browser hides a popover that leaves the document. Without Popover it stops
+    here. With `shown === false` it hides an open node. Otherwise it shows the
+    node when a raise is due or it is not open, hiding it first when open.
+  - Mount places with a raise. `update` raises when the key changed.
+    `destroy` hides an open node and removes it when it is not at home.
+- AlertWidget:
+  - `layer = $derived({ key: messages.at(-1)?.id, host: $openModals.at(-1), shown: !showOldMessages })`,
+    passed as `use:topLayer={layer}` on both `#alertWidget` elements. Each
+    `#alertWidget` gets a plain wrapper `div`, so the moved node is never a
+    block boundary.
+  - The console is `<dialog bind:this={errorConsole} class="alert-bucket-modal"
+    aria-labelledby={consoleTitleId} onclose={() => (showOldMessages = false)}>`,
+    with `consoleTitleId = $props.id()` on its `h5`. An `$effect` calls
+    `errorConsole?.showModal()`. The close button and "Clear all" call
+    `errorConsole?.close()`, so the browser returns the focus.
+  - Style: `dialog.alert-bucket-modal` takes ModalWindow's full-viewport
+    transparent layout without a `z-index`, and its `::backdrop` the old
+    `rgba(0, 0, 0, 0.55)`. `:global(#alertWidget[popover]:not(:popover-open))`
+    sets `display: none`, because the phone bar's `display: flex` overrides
+    the user agent rule.
+
+- [x] Probe Chrome on a static page: a popover appended into the modal is
+  hit-testable, one outside stays inert when raised again, `showModal()` on
+  a second dialog outside the modal makes it the topmost, and a popover
+  removed with its dialog shows again once appended home.
+- [x] Rewrite `topLayer.test.ts`: `sets_no_popover_without_popover_support`,
+  `moves_into_the_host_without_popover_support`,
+  `shows_the_node_as_a_manual_popover_on_mount`,
+  `raises_the_node_again_when_the_key_changes`,
+  `keeps_the_node_in_place_when_the_key_repeats`,
+  `moves_into_the_host_modal_and_shows_the_node_there`,
+  `returns_home_when_the_host_closes`,
+  `hides_the_node_while_it_is_not_shown_and_shows_it_again_after`,
+  `hides_the_node_on_destroy`, `removes_the_node_from_its_host_on_destroy`.
+- [x] Add to `AlertWidget.test.ts`:
+  `opens_the_error_console_as_a_modal_dialog_and_closes_it_with_Clear_all`,
+  `closes_the_error_console_when_its_dialog_closes`,
+  `moves_the_toast_stack_into_the_open_modal_and_back_when_it_closes`.
+- [x] Add to `ModalWindow.test.ts`:
+  `lists_the_dialog_as_open_while_it_is_mounted`.
+- [x] Write the store, the action, and the ModalWindow and AlertWidget changes.
+- [x] Run the verify sequence.
+- [x] Commit `fix(alerts): keep toasts usable above modals and the console`.
+
+## Task 7 — `dismissible` on ModalWindow
+
+**Files:**
+- Modify: `frontend/Common/ModalWindow.svelte` (`Props`, the defaults,
+  `closeOnOutsideClick`)
+- Modify: `frontend/ReleasePlanner/ReleasePlanner.svelte` (four modals),
+  `frontend/ReleasePlanner/ReleasePlanCreator.svelte` (Grid View),
+  `frontend/Views/Views.svelte`, `frontend/AdminPanel/ChatIdentityEditor.svelte`,
+  `frontend/AdminPanel/ProxyTunnelCreateForm.svelte`
+- Test: `frontend/Common/ModalWindow.test.ts`
+
+**Internals:**
+- `dismissible?: boolean` in `Props`, default `true`.
+  `closeOnOutsideClick` closes only when `dismissible` and the three outside
+  flags hold. Escape and the close button do not read it.
+- The callers in the spec's Contracts pass `dismissible={false}`. The other
+  20 uses keep the default: the delete and toggle confirmations, the
+  `ReleasePlanEditor` schedule delete confirmation, the plan redirect notice,
+  the views error prompt, the viewers (issues copy, results graph, SCT issues
+  and similar events), the pickers (chat model, entity replacer) and the
+  single-field prompts (SCT issue URL, user email and password).
+
+- [x] Add to `ModalWindow.test.ts`:
+  `stays_open_on_a_click_outside_the_box_when_not_dismissible` (the dialog and
+  the frame) and `closes_from_the_close_button_and_a_dialog_close_when_not_dismissible`.
+- [x] Add the prop and the eight `dismissible={false}` attributes.
+- [x] Run the verify sequence.
+- [x] Commit `improvement(frontend): add a dismissible prop to ModalWindow`.
+
+## Task 8 — Live check, review round 2
+
+**Files:** none committed. Scripts and screenshots go to the scratch
+directory `ARGUS-274-review2/`. Setup as in Task 5. Before the change,
+`probe.mjs` and `console.mjs` record both findings on the Task 3 build.
+
+- [x] T1 at 1280 px and at 400 px: fail the Sidebar delete with a 500
+  through `Fetch.fulfillRequest`. The stack is an open popover inside the
+  dialog, and the hit test at its close button returns the button. A click
+  there removes the toast, and the modal stays open with its input. After
+  Escape the stack is back home.
+- [x] T2 at 1280 px and at 400 px: three or four failures, close the modal,
+  dismiss one toast, open the console. The console matches `:modal`, the
+  stack is hidden, and the hit tests at the left, the middle and the right
+  of "Clear all" and of its close button return them. A click on "Clear all"
+  closes the console, and the stack shows again.
+- [x] T3 at 400 px: open the console from the phone bar while the delete
+  modal is open. The console is the topmost modal and "Clear all" wins the
+  hit test. Escape closes only the console; the modal keeps its input.
+- [x] T4 `/release/<name>/planner`, New Plan, which passes
+  `dismissible={false}`: type a name, click outside the box. It stays open
+  with the name. Escape closes it and the focus returns to New Plan; the
+  close button closes it.
+- [x] T5 `/admin/users`, Change Email, a default modal: a click outside the
+  box closes it, and the focus returns to the trigger.
+- [x] Rerun L1 to L11 of Task 5 on the new build.
+- [x] Record the build with an empty `suppressedSvelteCodes`, as in Task 4.
