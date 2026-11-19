@@ -9,7 +9,8 @@ ModalWindow renders a `<dialog>` and calls `showModal()` when it mounts. The
 browser then provides the top layer, the inert page, the focus containment
 and Escape. The dialog is a transparent scroller that fills the viewport and
 holds today's white box. `::backdrop` dims the page behind it. Escape closes
-the dialog natively, and its `close` event becomes `modalClose`. Callers
+the dialog natively, and a click outside the box closes it through the same
+`close()`. The `close` event becomes `modalClose`. Callers
 unmount the modal on `modalClose`. Svelte removes the dialog from the DOM
 before teardown, so ModalWindow saves the opener at open and refocuses it at
 teardown. Two body-level layers must show above an open modal, so they move
@@ -26,8 +27,11 @@ results graph tooltip mounts inside the dialog.
   detached dialog, and the browser's own focus return never happens.
 - The frontend targets Baseline Widely available. `<dialog>`, `showModal()`,
   `::backdrop` and `:modal` are in that target. Popover (Newly available
-  2025-01-27), `closedby` and `overscroll-behavior` on a scroll container
-  that does not overflow are not, so each is progressive enhancement.
+  2025-01-27) and `overscroll-behavior` on a scroll container that does not
+  overflow are not, so each is progressive enhancement. `closedby` has
+  limited availability, with no Safari, so light dismiss cannot rest on it.
+- Svelte maps `<dialog>` to the non-interactive role `dialog`. A `click` or
+  `pointerdown` attribute on it raises two of the six suppressed codes.
 - jsdom 29 ships an empty `HTMLDialogElement`: no `showModal`, no `close`, no
   top layer, no inert page and no `cancel` on Escape. Its default stylesheet
   hides `dialog:not([open])`. Six suites render a component that holds a
@@ -42,6 +46,7 @@ results graph tooltip mounts inside the dialog.
 |---|---|
 | Caller (17 files) | Mounts ModalWindow in `{#if open}` and sets `open = false` on `modalClose` |
 | ModalWindow | Renders the `<dialog>`, opens it modal, maps `close` to `modalClose`, restores the focus |
+| `lightDismiss` action | Closes the dialog on a click whose press and release both land outside the box |
 | Browser | Top layer, inert page, focus containment, Escape to `cancel` then `close` |
 | AlertWidget toast stack | Becomes `popover="manual"`, raised on each new message above any open modal |
 | ResultsGraph tooltip | Mounts in the dialog that holds the chart, else in `document.body` as today |
@@ -60,6 +65,11 @@ sequenceDiagram
     alt Escape or back gesture
         U->>B: Escape
         B->>M: cancel, then close (focus back on the opener)
+        M->>C: modalClose
+    else click outside the box
+        U->>M: pointerdown and click outside
+        M->>B: dialog.close()
+        B->>M: close (focus back on the opener)
         M->>C: modalClose
     else close button
         U->>M: click Close
@@ -100,6 +110,26 @@ dialog.modal-window::backdrop {
 }
 ```
 
+The light-dismiss rule. "Outside" means that the event target is the dialog
+itself or the transparent frame around the box. A target inside the box is
+inside, and so is an element that the chart appends to the dialog, such as
+the graph tooltip:
+
+```mermaid
+flowchart TD
+    P[pointerdown] --> R[remember: target outside?]
+    C[click] --> Q1{pointerdown was outside?}
+    Q1 -- no --> N[Stay open]
+    Q1 -- yes --> Q2{click target outside?}
+    Q2 -- no --> N
+    Q2 -- yes --> X[dialog.close]
+```
+
+The rule needs both events. A drag from the box to the outside, such as a
+text selection in an input, fires `pointerdown` on the box and `click` on the
+dialog. The action attaches its listeners in script, so the template carries
+no handler on the dialog. Escape is the keyboard path to the same close.
+
 A nested modal is a `<dialog>` inside the outer dialog's body. `showModal()`
 stacks it above the outer one, and Escape closes only the inner one.
 
@@ -119,6 +149,8 @@ in headless Chrome 157:
 | `popover="manual"` shown after the modal | Drawn above the backdrop, but inert |
 | Dialog in a `display: none` ancestor | Open and modal, 0 px wide, page inert |
 | Backdrop click, no `closedby` | The dialog stays open |
+| Press, then drag, on the dialog's own scrollbar | No `pointerdown` and no `click` reach the page |
+| Drag from the box to the outside | `pointerdown` on the box, `click` on the dialog |
 
 Failure behavior:
 
@@ -133,8 +165,8 @@ Failure behavior:
 The a11y check on today's ModalWindow: a dev build with an empty
 `suppressedSvelteCodes` printed 38 warnings with the six codes in other
 components. None came from `Common/ModalWindow.svelte`. The new component
-must keep that count at zero: no handler on a non-interactive element, and
-the dialog's only listener is `close`.
+must keep that count at zero. The only handler in the dialog's markup is
+`close`, and the action adds `pointerdown` and `click` in script.
 
 ## Contracts
 
@@ -176,7 +208,8 @@ When `modalClose` fires, once per close:
 | Close button | `modalClose` | `modalClose` |
 | Escape | `modalClose` from every open ModalWindow | `modalClose` from the topmost one, on its `close` event |
 | Back gesture on mobile | nothing | as Escape |
-| Click outside the white box | nothing | nothing |
+| Click outside the white box | nothing | `modalClose`, on its `close` event |
+| Drag from inside the box to outside | nothing | nothing |
 
 ## Risks
 
@@ -186,7 +219,9 @@ When `modalClose` fires, once per close:
 | A keyed `{#each}` moves an open dialog, and the dialog drops out of the top layer | No caller sits in a keyed `{#each}` today |
 | A dialog opens inside a `display: none` ancestor, so an invisible modal makes the page inert | No caller opens from a hidden ancestor. Escape still closes it |
 | The mobile Sidebar offcanvas runs Bootstrap's focus trap under the modal | Under the dialog the offcanvas is inert. A live check at 400 px confirms typing in the delete confirmation |
-| The focus lands on the close button, so Enter right after open closes the modal | The browser default, kept: see Decisions |
+| The focus lands on the close button, so Enter right after open closes the modal | Accepted: see Decisions |
+| A stray click outside the box drops a half-filled form | Accepted: see Decisions. A drag that starts in the box never closes it |
+| Another browser dispatches pointer events for a press on the dialog's scrollbar, and the press closes the modal | Chrome dispatches none. The live check covers Chrome only |
 | `ResultsGraph.svelte` also carries ARGUS-276 a11y warnings | This task touches only the tooltip handler. Whichever lands second rebases |
 | The ConfirmDeleteModal suite fires Escape as a window `keydown` | Its Escape case moves to the dialog's `close` event; the caller code does not change |
 
@@ -202,8 +237,13 @@ When `modalClose` fires, once per close:
   box keeps its top placement, a tall body (the graph modal is 800 px) scrolls
   as one page, and svelte-select lists, absolutely positioned, are not clipped
   at the box edge. (spec)
-- No light dismiss: today's overlay ignores outside clicks, and several modals
-  hold half-filled forms. (spec)
+- A click outside the box closes the modal, as light dismiss. Several modals
+  hold forms, and a stray click drops them; that cost is accepted. (review)
+- Light dismiss is a pointer handler in an action and does not use
+  `closedby`. `closedby` is not Baseline Widely available, and the
+  full-viewport dialog leaves no backdrop for it to hit. (review)
+- Light dismiss calls `dialog.close()`, so it shares the `close` path of
+  Escape, including the browser's focus return. (review)
 - ModalWindow never cancels `cancel`, and `close` is its one Escape signal,
   because Chrome makes a repeated `cancel` non-cancelable. (spec)
 - The close button keeps dispatching `modalClose` itself, as today. (spec)
@@ -211,8 +251,9 @@ When `modalClose` fires, once per close:
   available. (spec)
 - The callers' markup stays as it is, so the user manager's admin-toggle
   modal, which has no title, stays unnamed. (spec)
-- The work proceeds without a parent spec for ARGUS-273, as obvious work. (open)
+- The work proceeds without a parent spec for ARGUS-273, as obvious work. (review)
 - The AlertWidget toast popover and the ResultsGraph tooltip host join this
-  task, because without them a modal hides its own errors and graph links. (open)
+  task, because without them a modal hides its own errors and graph links. (review)
 - The initial focus stays the browser default, the close button, with no
-  `autofocus` added by ModalWindow. (open)
+  `autofocus` added by ModalWindow. Enter right after open closes the modal,
+  and that is accepted. (review)
