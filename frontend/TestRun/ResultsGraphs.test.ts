@@ -58,6 +58,30 @@ describe("ResultsGraphs routes", () => {
         expect(screen.getByLabelText("Name")).toBeTruthy();
     });
 
+    it("opens the New View form as a focused dialog that Escape closes", async () => {
+        render(ResultsGraphs, { props: { test_id: TEST_ID } });
+
+        await fireEvent.click(await screen.findByRole("button", { name: "+ View" }));
+        const dialog = screen.getByRole("dialog", { name: "New View" });
+        expect(document.activeElement).toBe(dialog);
+
+        await fireEvent.keyDown(dialog, { key: "Escape" });
+
+        expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("closes the New View dialog on a backdrop click only", async () => {
+        render(ResultsGraphs, { props: { test_id: TEST_ID } });
+
+        await fireEvent.click(await screen.findByRole("button", { name: "+ View" }));
+        await fireEvent.click(screen.getByLabelText("Name"));
+        expect(screen.getByRole("dialog", { name: "New View" })).toBeTruthy();
+
+        await fireEvent.click(screen.getByRole("dialog", { name: "New View" }));
+
+        expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
     it("updates a graph view through the results router", async () => {
         render(ResultsGraphs, { props: { test_id: TEST_ID } });
 
