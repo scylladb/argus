@@ -59,7 +59,7 @@
     };
 </script>
 
-<ModalWindow on:modalClose={oncancel}>
+<ModalWindow dismissible={false} on:modalClose={oncancel}>
     {#snippet title()}<div>Add Proxy Tunnel</div>{/snippet}
     {#snippet body()}
         <div>

@@ -139,7 +139,7 @@
 </script>
 
 {#if creatingView}
-<ModalWindow on:modalClose={() => creatingView = false}>
+<ModalWindow dismissible={false} on:modalClose={() => creatingView = false}>
     {#snippet title()}
             <div>Creating new View</div>
         {/snippet}

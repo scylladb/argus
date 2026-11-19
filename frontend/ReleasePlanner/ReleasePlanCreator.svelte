@@ -491,7 +491,7 @@
 
 
 {#if gridViewOpen}
-    <ModalWindow widthClass="w-75" on:modalClose={() => (gridViewOpen = false)}>
+    <ModalWindow widthClass="w-75" dismissible={false} on:modalClose={() => (gridViewOpen = false)}>
         {#snippet title()}
                 <div >Grid View</div>
             {/snippet}
