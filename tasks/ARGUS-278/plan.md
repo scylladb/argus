@@ -1,6 +1,6 @@
 # ARGUS-278 — implementation plan
 
-**Spec:** `tasks/ARGUS-273/ARGUS-278/rca.md`
+**Spec:** `tasks/ARGUS-278/rca.md`
 
 A decision during the build that changes what the rca states updates the rca
 in the same commit.
