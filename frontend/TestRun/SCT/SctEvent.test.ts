@@ -72,6 +72,28 @@ describe("SctEvent summary view", () => {
         expect(eventBody()).toContain("summarized text");
     });
 
+    it("expands a long original message when switching from the summary", async () => {
+        const longTail = "x".repeat(700) + " end of the long event";
+        render(SctEvent, {
+            props: {
+                event: { ...makeEvent(SUMMARY), message: MESSAGE + longTail },
+                run: { id: "run-1", test_id: "test-1" } as SCTTestRun,
+                issues: [],
+                focusDuplicate: vi.fn(),
+                filterState: {},
+                options: {},
+                issueAttach: vi.fn(),
+                refreshIssues: vi.fn(),
+                filterString: "",
+                duplicateIdShowTable: {},
+                showSummaries: true,
+            },
+        });
+
+        await fireEvent.click(screen.getByRole("button", { name: "Show original" }));
+        expect(eventBody()).toContain("end of the long event");
+    });
+
     it("renders unchanged when summaries are on but the event has no summary", () => {
         renderEvent(true, null);
         expect(eventBody()).toContain("original event text");
