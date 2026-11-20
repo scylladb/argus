@@ -1,8 +1,8 @@
-# ARGUS-193 — Opt-in AI summaries in the SCT events view
+# ARGUS-193 — Opt-out AI summaries in the SCT events view
 
 ## Overview
 
-The profile page gets a Preferences section with one switch: AI event summaries, off by
+The profile page gets a Preferences section with one switch: AI event summaries, on by
 default. The switch is saved per user in the existing `runtime_store` table. The SCT Events tab
 reads the user's preferences once through a new API endpoint. With the switch on, an event
 card that has a summary shows that summary with an "AI summary" badge and a "Show original"
@@ -57,8 +57,8 @@ flowchart TD
 
 | Condition | Behavior |
 |---|---|
-| No `runtime_store` row for a preference | Return the default (`false`) |
-| The preferences request fails | Log to the console, keep summaries off, no error toast |
+| No `runtime_store` row for a preference | Return the default (`true`) |
+| The preferences request fails | Log to the console, keep the default (summaries on), no error toast |
 | A form or API write names an unknown preference | Reject with `UserServiceException` |
 | The user clicks copy in the summary view | Copy `event.message` |
 
@@ -95,11 +95,11 @@ Preferences API:
 
 ```
 GET /api/v1/user/preferences              (session or API token)
--> {"status": "ok", "response": {"event_summaries": false}}
+-> {"status": "ok", "response": {"event_summaries": true}}
 ```
 
 The response always carries every known preference. A consumer reads a key and treats a
-missing key as off.
+missing key as its default: `event_summaries` defaults to on.
 
 Frontend type (`SCTEvent`):
 
@@ -111,7 +111,7 @@ summary?: string | null;
 
 ```python
 class UserService:
-    PREFERENCE_DEFAULTS: dict[str, bool] = {"event_summaries": False}
+    PREFERENCE_DEFAULTS: dict[str, bool] = {"event_summaries": True}
 
     async def get_preferences(self, user: User) -> dict[str, bool]: ...
     async def set_preference(self, user: User, key: str, value: bool) -> None: ...
@@ -122,13 +122,13 @@ class UserService:
 | Risk | Response |
 |---|---|
 | A reader takes a summary for raw output | A badge marks every summary, and the original is one click away |
-| A summary drops a fact the triager needs | Off by default. The original stays available on the card, and copy always copies the original |
+| A summary drops a fact the triager needs | The original is one click away on every card and opens in full, copy always copies the original, and a user can turn summaries off |
 
 ## Decisions
 
 - Preferences are stored server-side in `runtime_store`, so they follow the user across
   browsers. This replaces the localStorage default from the Jira description. (spec)
 - The key carries the user id, not the username, so a rename keeps the preferences. (spec)
-- Summaries are opt-in and off by default. With the setting off, the card does not offer a
-  summary at all. (spec)
+- Summaries are on by default, and a user opts out on the profile page. A user who saved the
+  setting off keeps it off. With the setting off, the card does not offer a summary at all. (review)
 - The show-original choice lasts for the page view and is not saved. (spec)

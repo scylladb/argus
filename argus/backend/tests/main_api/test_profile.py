@@ -312,31 +312,33 @@ def _event_summaries(client) -> bool:
     return res.json()["response"]["event_summaries"]
 
 
-def test_preferences_default_off(profile_client):
-    assert _event_summaries(profile_client) is False
+def _switch_tag(client) -> str:
+    page = client.get("/profile/").text
+    return page[page.index('id="formEventSummaries"'):].split(">", 1)[0]
 
 
-def test_update_preferences_turns_event_summaries_on_and_off(profile_client):
-    res = profile_client.post("/profile/update/preferences", data={"event_summaries": "on"},
-                              follow_redirects=False)
-    assert res.status_code == 302
-    assert "/profile" in res.headers["Location"]
+def test_preferences_default_on(profile_client):
     assert _event_summaries(profile_client) is True
 
-    profile_client.post("/profile/update/preferences", data={}, follow_redirects=False)
+
+def test_update_preferences_turns_event_summaries_off_and_on(profile_client):
+    res = profile_client.post("/profile/update/preferences", data={}, follow_redirects=False)
+    assert res.status_code == 302
+    assert "/profile" in res.headers["Location"]
     assert _event_summaries(profile_client) is False
+
+    profile_client.post("/profile/update/preferences", data={"event_summaries": "on"}, follow_redirects=False)
+    assert _event_summaries(profile_client) is True
 
 
 def test_preferences_survive_username_change(profile_client):
-    profile_client.post("/profile/update/preferences", data={"event_summaries": "on"}, follow_redirects=False)
+    profile_client.post("/profile/update/preferences", data={}, follow_redirects=False)
     profile_client.post("/profile/update/username", data={"new_username": f"renamed_{uuid.uuid4().hex[:8]}"},
                         follow_redirects=False)
-    assert _event_summaries(profile_client) is True
+    assert _event_summaries(profile_client) is False
 
 
 def test_profile_page_renders_event_summaries_switch_state(profile_client):
-    assert 'name="event_summaries"' in profile_client.get("/profile/").text
-    profile_client.post("/profile/update/preferences", data={"event_summaries": "on"}, follow_redirects=False)
-    page = profile_client.get("/profile/").text
-    switch = page[page.index('id="formEventSummaries"'):].split(">", 1)[0]
-    assert "checked" in switch
+    assert "checked" in _switch_tag(profile_client)
+    profile_client.post("/profile/update/preferences", data={}, follow_redirects=False)
+    assert "checked" not in _switch_tag(profile_client)
