@@ -51,10 +51,19 @@ afterEach(() => {
 });
 
 describe("SctEvent summary view", () => {
-    it("shows the original message when summaries are off", () => {
+    it("starts on the original message when summaries are off, and offers the summary", async () => {
         renderEvent(false);
         expect(eventBody()).toContain("original event text");
         expect(screen.queryByText("AI summary")).toBeNull();
+
+        await fireEvent.click(screen.getByRole("button", { name: "Show summary" }));
+        expect(eventBody()).toContain("summarized text");
+        expect(screen.getByText("AI summary")).toBeTruthy();
+    });
+
+    it("renders unchanged when summaries are off and the event has no summary", () => {
+        renderEvent(false, null);
+        expect(eventBody()).toContain("original event text");
         expect(screen.queryByRole("button", { name: "Show summary" })).toBeNull();
     });
 

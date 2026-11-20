@@ -1,4 +1,4 @@
-# ARGUS-193 — Opt-in AI summaries in the SCT events view
+# ARGUS-193 — Opt-out AI summaries in the SCT events view
 
 ## Problem
 
@@ -35,18 +35,20 @@ Jira ARGUS-193:
 > issue covers the web UI part explicitly deferred as a follow-up in that PR.
 
 The Jira description asks for a per-browser localStorage default and a toggle on every
-summarized event. This task replaces that with a server-side opt-in per user, described
-below.
+summarized event. This task replaces that with a server-side setting per user, on by
+default, described below.
 
 ## What good looks like
 
-- The profile page has a setting for AI event summaries. It is off by default. It is saved
-  per user on the server, so it follows the user across browsers. A username change keeps it.
+- The profile page has a setting for AI event summaries. It is on by default, and a user can
+  turn it off. It is saved per user on the server, so it follows the user across browsers. A
+  username change keeps it.
 - With the setting on, an event card that has a summary shows the summary in place of the
   event text. The card marks the summary as an AI summary, so nobody takes it for raw output.
   A button on the card shows the original event.
-- With the setting off, or for an event without a summary, the card looks exactly as it does
-  today.
+- With the setting off, an event card that has a summary shows the original event, with a
+  button that shows the summary.
+- An event without a summary looks exactly as it does today.
 - The copy button always copies the original event message, never the summary.
 
 ## Out of scope

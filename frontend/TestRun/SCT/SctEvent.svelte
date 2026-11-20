@@ -35,9 +35,9 @@
     let newIssueUrl = $state("");
     let submitting = $state(false);
     let highlighting = $state(false);
-    let showOriginal = $state(false);
-    let hasSummary = $derived(showSummaries && !!event.summary);
-    let summaryView = $derived(hasSummary && !showOriginal);
+    let summaryChoice: boolean | null = $state(null);
+    let hasSummary = $derived(!!event.summary);
+    let summaryView = $derived(hasSummary && (summaryChoice ?? showSummaries));
 
 
     const sliceMessage = function (message: string): string {
@@ -372,9 +372,9 @@
                 <div class="d-flex align-items-center m-1">
                     {#if summaryView}
                         <span class="badge ai-summary-badge me-2">AI summary</span>
-                        <button class="btn btn-sm btn-light" onclick={() => { showOriginal = true; fullMessage = true; }}>Show original</button>
+                        <button class="btn btn-sm btn-light" onclick={() => { summaryChoice = false; fullMessage = true; }}>Show original</button>
                     {:else}
-                        <button class="btn btn-sm btn-light" onclick={() => showOriginal = false}>Show summary</button>
+                        <button class="btn btn-sm btn-light" onclick={() => summaryChoice = true}>Show summary</button>
                     {/if}
                 </div>
             {/if}
