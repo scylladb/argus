@@ -72,7 +72,7 @@ def hash_api_token(token: str) -> str:
 
 class UserService:
     EMAIL_RE = re.compile(r"^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", re.IGNORECASE)
-    PREFERENCE_DEFAULTS: dict[str, bool] = {"event_summaries": False}
+    PREFERENCE_DEFAULTS: dict[str, bool] = {"event_summaries": True}
 
     def __init__(self) -> None:
         self.cluster = ScyllaCluster.get()

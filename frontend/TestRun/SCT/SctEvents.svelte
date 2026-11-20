@@ -117,7 +117,7 @@
     });
 
     let eventMap: {[key: string]: SctEvent} = {};
-    let showSummaries = $state(false);
+    let showSummaries = $state(true);
 
     let eventFilterString = $state("");
     let nemesisFilterString = $state("");
@@ -289,7 +289,7 @@
             if (json.status !== "ok") {
                 throw json;
             }
-            showSummaries = json.response.event_summaries === true;
+            showSummaries = json.response.event_summaries !== false;
         } catch (error) {
             console.log("Failed to fetch user preferences", error);
         }

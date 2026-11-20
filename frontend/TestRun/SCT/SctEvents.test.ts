@@ -30,12 +30,13 @@ const EVENTS_BY_SEVERITY: Record<string, SCTEvent[]> = {
     WARNING: [EARLIER_WARNING],
 };
 
-function mockFetch() {
+function mockFetch(eventSummaries: boolean | null = true) {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
         const url = String(input);
         let response: unknown = [];
         if (url.startsWith("/api/v1/user/preferences")) {
-            response = { event_summaries: true };
+            if (eventSummaries === null) return { json: async () => ({ status: "error", response: {} }) } as Response;
+            response = { event_summaries: eventSummaries };
         } else if (url.includes("/count")) {
             response = 1;
         } else {
@@ -59,16 +60,35 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
+function renderEvents() {
+    render(SctEvents, {
+        props: {
+            testRun: { id: RUN_ID, test_id: "test-1", status: "passed", end_time: "" } as unknown as SCTTestRun,
+            nemeses: [],
+            issueAttach: vi.fn(),
+        },
+    });
+}
+
 describe("SctEvents", () => {
+    it("shows the original event when the user turned summaries off", async () => {
+        mockFetch(false);
+        renderEvents();
+
+        await waitFor(() => expect(cardBody("error-1")).toContain("error original text"));
+        expect(card("error-1")!.querySelector(".ai-summary-badge")).toBeNull();
+    });
+
+    it("falls back to showing summaries when the preferences request fails", async () => {
+        mockFetch(null);
+        renderEvents();
+
+        await waitFor(() => expect(cardBody("error-1")).toContain("error summary text"));
+    });
+
     it("keeps a card's view on its event when an earlier event is inserted", async () => {
         mockFetch();
-        render(SctEvents, {
-            props: {
-                testRun: { id: RUN_ID, test_id: "test-1", status: "passed", end_time: "" } as unknown as SCTTestRun,
-                nemeses: [],
-                issueAttach: vi.fn(),
-            },
-        });
+        renderEvents();
 
         await waitFor(() => expect(cardBody("error-1")).toContain("error summary text"));
         const showOriginal = Array.from(card("error-1")!.querySelectorAll("button"))
