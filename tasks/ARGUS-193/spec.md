@@ -4,10 +4,11 @@
 
 The profile page gets a Preferences section with one switch: AI event summaries, on by
 default. The switch is saved per user in the existing `runtime_store` table. The SCT Events tab
-reads the user's preferences once through a new API endpoint. With the switch on, an event
-card that has a summary shows that summary with an "AI summary" badge and a "Show original"
-button. With the switch off, or for an event without a summary, the card renders as it does
-today. The events API already returns `summary`, so the events read does not change.
+reads the user's preferences once through a new API endpoint. An event card that has a summary
+opens on the summary, with an "AI summary" badge and a "Show original" button, when the switch is
+on, and on the original event with a "Show summary" button when it is off. An event without a
+summary renders as it does today. The events API already returns `summary`, so the events read
+does not change.
 
 ## Constraints
 
@@ -47,12 +48,13 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    A{showSummaries on?} -->|no| O[Original view, as today]
-    A -->|yes| B{event.summary non-empty?}
-    B -->|no| O
-    B -->|yes| C{user clicked Show original?}
-    C -->|no| S[Summary view: badge + summary + Show original]
-    C -->|yes| O2[Original view + Show summary button]
+    B{event.summary non-empty?} -->|no| O[Original view, as today]
+    B -->|yes| C{user clicked a toggle?}
+    C -->|Show original| O2[Original view, expanded + Show summary button]
+    C -->|Show summary| S[Summary view: badge + summary + Show original]
+    C -->|no| A{showSummaries on?}
+    A -->|yes| S
+    A -->|no| O3[Original view + Show summary button]
 ```
 
 | Condition | Behavior |
@@ -130,5 +132,6 @@ class UserService:
   browsers. This replaces the localStorage default from the Jira description. (spec)
 - The key carries the user id, not the username, so a rename keeps the preferences. (spec)
 - Summaries are on by default, and a user opts out on the profile page. A user who saved the
-  setting off keeps it off. With the setting off, the card does not offer a summary at all. (review)
-- The show-original choice lasts for the page view and is not saved. (spec)
+  setting off keeps it off. The setting picks the view a card opens on; with it off, a card that
+  has a summary still offers it through "Show summary". (review)
+- A click on "Show original" or "Show summary" lasts for the page view and is not saved. (spec)
