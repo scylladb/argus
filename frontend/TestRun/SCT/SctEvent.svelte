@@ -372,7 +372,7 @@
                 <div class="d-flex align-items-center m-1">
                     {#if summaryView}
                         <span class="badge ai-summary-badge me-2">AI summary</span>
-                        <button class="btn btn-sm btn-light" onclick={() => showOriginal = true}>Show original</button>
+                        <button class="btn btn-sm btn-light" onclick={() => { showOriginal = true; fullMessage = true; }}>Show original</button>
                     {:else}
                         <button class="btn btn-sm btn-light" onclick={() => showOriginal = false}>Show summary</button>
                     {/if}
