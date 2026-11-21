@@ -525,6 +525,11 @@
   resolved "https://registry.yarnpkg.com/@sveltejs/load-config/-/load-config-0.2.3.tgz#5f54c7153d287a1b5f2e0a69fb7f10e91ba95d81"
   integrity sha512-VT3qmUb8pRV2QrZjd8iAmtg8lf4W0TIjZbvXtz5MKei/q96teWZgGJyyidJzOjzZzvdq616eSRVeMYIQChUTAQ==
 
+"@sveltejs/sv-utils@0.3.3":
+  version "0.3.3"
+  resolved "https://registry.yarnpkg.com/@sveltejs/sv-utils/-/sv-utils-0.3.3.tgz#65188ca09069b3bcaf0f161a9b99170ed04d7452"
+  integrity sha512-K6Voe+/4Ry6o3QTFdG4cNkdgW9kvbkJuRyyIyUbSVkuJUVz4jCdvYNuDCBNYC1mpxBFi7nuulpOeuqRjldZXRA==
+
 "@sveltejs/vite-plugin-svelte@7.3.1":
   version "7.3.1"
   resolved "https://registry.yarnpkg.com/@sveltejs/vite-plugin-svelte/-/vite-plugin-svelte-7.3.1.tgz#93f642883e09ef234325fb043a50821723f7fffc"
@@ -2144,10 +2149,12 @@ supports-color@^8.1.1:
   dependencies:
     has-flag "^4.0.0"
 
-sv@^0.9.0:
-  version "0.9.0"
-  resolved "https://registry.yarnpkg.com/sv/-/sv-0.9.0.tgz#854afcc01fbb393b9744234961956be5b514b73e"
-  integrity sha512-O2nG8p0y+YXLTgj9Tg+REcXxpx3hhoeHBLjP8cFnmq5sLF8T/2ORm8SKhFQyRYwUEOugKW+cbu4t3P8F7sBV4A==
+sv@^0.17.0:
+  version "0.17.1"
+  resolved "https://registry.yarnpkg.com/sv/-/sv-0.17.1.tgz#284dbac4c1d03d8c6347b708dfc838997f6a5c2b"
+  integrity sha512-h8kB4mIpxiZKPd8CxxpMjBjGXGYlI5KKAwIFccXxWYJEUO9dVomvVSZGnbWQV1+dN+KJ2kzvsVjpJ+aTrYQ0xg==
+  dependencies:
+    "@sveltejs/sv-utils" "0.3.3"
 
 svelte-check@^4.3.1:
   version "4.7.8"
