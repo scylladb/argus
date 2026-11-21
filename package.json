@@ -49,7 +49,7 @@
     "@tsconfig/svelte": "5.0.9",
     "@types/bootstrap": "^5.2.6",
     "@types/humanize-duration": "^3.27.1",
-    "@types/node": "24.19.2",
+    "@types/node": "26.6.6",
     "@types/query-string": "6.3.0",
     "@typescript-eslint/eslint-plugin": "8.73.0",
     "@typescript-eslint/parser": "8.73.0",
