@@ -102,7 +102,7 @@ jobs:
                   go test -race -json -v ./... 2>&1 | tee /tmp/gotest.log | gotestfmt
 
     # -------------------------------------------------------------------------
-    # 3. GoReleaser – build binaries and publish the GitHub Release
+    # 3. GoReleaser builds the archives, gh publishes the GitHub Release
     # -------------------------------------------------------------------------
     release:
         name: Release
@@ -137,7 +137,7 @@ jobs:
                   # Used as VERSION in GoReleaser templates for archive names and ldflags.
                   echo "value=${GITHUB_REF_NAME#cli/v}" >> "$GITHUB_OUTPUT"
 
-            - name: Run GoReleaser
+            - name: Build with GoReleaser
               uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
               with:
                   distribution: goreleaser
@@ -147,13 +147,30 @@ jobs:
                   args: >-
                       release
                       --config cli/.goreleaser.yml
-                      --release-notes "${{ runner.temp }}/cli-changelog.md"
                       --clean
-                      --skip=validate
+                      --skip=publish,validate
               env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                  # Full cli/vX.Y.Z tag → GoReleaser publishes the GitHub Release under this tag.
-                  GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
+                  # Bare vX.Y.Z tag → GoReleaser only builds; the next step publishes the
+                  # release under the cli/vX.Y.Z tag.
+                  GORELEASER_CURRENT_TAG: v${{ steps.version.outputs.value }}
                   # Bare version (e.g. 1.2.3) → referenced as {{ .Env.VERSION }} in
                   # .goreleaser.yml for archive names, ldflags, and checksum filenames.
                   VERSION: ${{ steps.version.outputs.value }}
+
+            - name: Publish the GitHub Release
+              shell: bash
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  VERSION: ${{ steps.version.outputs.value }}
+              run: |
+                  set -euo pipefail
+                  prerelease=()
+                  [[ "$VERSION" == *-* ]] && prerelease=(--prerelease)
+                  gh release create "$GITHUB_REF_NAME" \
+                      --verify-tag \
+                      --title "$GITHUB_REF_NAME" \
+                      --notes-file "${{ runner.temp }}/cli-changelog.md" \
+                      --latest=false \
+                      "${prerelease[@]}" \
+                      dist/*.tar.gz \
+                      "dist/argus_${VERSION}_checksums.txt"

@@ -76,8 +76,8 @@ archive outside the repository.
 
 ## Argus CLI (Go)
 
-The `argus` CLI lives in `cli/` and is built with Go. Releases are published via
-GoReleaser on `cli/v*` tags.
+The `argus` CLI lives in `cli/` and is built with Go. Releases are built by
+GoReleaser and published by `gh release` on `cli/v*` tags.
 
 ### For LLM Agents
 
