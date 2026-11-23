@@ -25,7 +25,7 @@ pipelines that use long-running resources.
 ### Go 1.25.4
 
 - **Usage**: the `argus` command line tool under `cli/`.
-- **Release**: GoReleaser publishes per-platform binaries on `cli/v*` tags.
+- **Release**: GoReleaser builds per-platform binaries on `cli/v*` tags, and `gh release` publishes them.
 
 ## Frameworks
 
@@ -114,7 +114,7 @@ Five GitHub Actions workflows. Every action is pinned to a commit SHA.
 | `lint.yml` | `uv run pre-commit run --all-files` |
 | `test.yml` | `uv run pytest`, nox for `pytest-argus-reporter`, and `yarn test` |
 | `cli-test.yml` | `go test -race -json -v ./...` |
-| `cli-release.yml` | GoReleaser on `cli/*` tags |
+| `cli-release.yml` | GoReleaser build and `gh release` on `cli/*` tags |
 | `release.yml` | PyPI trusted publishing |
 
 ### Hosting
