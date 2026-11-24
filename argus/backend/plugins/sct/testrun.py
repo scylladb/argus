@@ -16,6 +16,7 @@ from argus.backend.models.web import ArgusRelease, ArgusTest, ReleaseDistinctVer
 from argus.backend.plugins.core import ROLLUP_COLUMNS, PluginModelBase
 from argus.backend.plugins.sct.resource_setup import (
     RESOURCE_DERIVED_DB_NODE_BACKENDS,
+    SCT_CONFIG_NAME,
     XCLOUD_BACKEND,
     ResourceSetup,
     is_db_resource,
@@ -510,17 +511,20 @@ class SCTTestRun(PluginModelBase):
     @classmethod
     async def get_run_response(cls, run_id: UUID) -> dict | None:
         try:
-            run, junit_reports, nemesis_data, allocated_resources = await asyncio.gather(
+            run, junit_reports, nemesis_data, allocated_resources, minicloud_param = await asyncio.gather(
                 cls.get(id=run_id),
                 SCTJunitReports.find(test_id=run_id).all(),
                 SCTNemesis.find(run_id=run_id).all(),
                 SCTResource.find(run_id=run_id).all(),
+                RunConfigParamByRun.find(run_id=run_id, name=f"{SCT_CONFIG_NAME}.minicloud_endpoint_url").first(),
             )
         except DocumentNotFound:
             return None
         response = run.model_dump()
         if run.cloud_setup and run.cloud_setup.backend == XCLOUD_BACKEND and response.get("cloud_setup"):
             response["cloud_setup"].update(await run.get_xcloud_details())
+        # flatten_config stores "" as "null" and None as "None"
+        response["minicloud"] = bool(minicloud_param) and minicloud_param.value not in ("", "null", "None")
         response["junit_reports"] = junit_reports
         response["nemesis_data"] = await SCTNemesis.with_descriptions(nemesis_data)
         response["allocated_resources"] = allocated_resources

@@ -148,6 +148,9 @@
                 <li>
                     <span class="fw-bold">Backend:</span>
                     {test_run.cloud_setup?.backend ?? "Unknown"}
+                    {#if test_run.minicloud}
+                        <span class="badge text-bg-warning" title="Provisioned on minicloud, the local cloud emulator, not on the real cloud">minicloud</span>
+                    {/if}
                 </li>
                 {#if test_run.cloud_setup?.cluster_type}
                     <li>
