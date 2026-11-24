@@ -76,6 +76,7 @@
         allocated_resources: CloudResource[],
         region_name: string[],
         nemesis_data: NemesisInfo[],
+        minicloud: boolean,
         cloud_setup: {
             backend: string,
             db_node: CloudNodesInfo,
@@ -266,6 +267,9 @@
                 <a class="link-dark" href="/tests/{testInfo.test.plugin_name}/{testRun.id}">
                     {testRun.build_id}#{buildNumber}
                 </a>
+                {#if testRun.minicloud}
+                    <span class="badge text-bg-warning ms-1" title="Provisioned on minicloud, the local cloud emulator, not on the real cloud">minicloud</span>
+                {/if}
             {/if}
         </div>
         <div class="ms-auto text-end flex-shrink-0">

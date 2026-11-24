@@ -327,6 +327,21 @@ async def test_non_xcloud_run_response_has_no_xcloud_descriptors(api_client, sct
     assert "network_type" not in response["cloud_setup"]
 
 
+async def test_run_response_marks_minicloud_runs(api_client, fake_test):
+    minicloud_run_id = _submit_sct_run(api_client, fake_test)
+    _submit_sct_config(api_client, minicloud_run_id,
+                       {"cluster_backend": "aws", "minicloud_endpoint_url": "http://localhost:5000"})
+    empty_run_id = _submit_sct_run(api_client, fake_test)
+    _submit_sct_config(api_client, empty_run_id, {"cluster_backend": "aws", "minicloud_endpoint_url": ""})
+    none_run_id = _submit_sct_run(api_client, fake_test)
+    _submit_sct_config(api_client, none_run_id, {"cluster_backend": "aws", "minicloud_endpoint_url": None})
+
+    assert (await SCTTestRun.get_run_response(UUID(minicloud_run_id)))["minicloud"] is True
+    assert (await SCTTestRun.get_run_response(UUID(empty_run_id)))["minicloud"] is False
+    assert (await SCTTestRun.get_run_response(UUID(none_run_id)))["minicloud"] is False
+    assert (await SCTTestRun.get_run_response(UUID(_submit_sct_run(api_client, fake_test))))["minicloud"] is False
+
+
 async def test_resource_update_shards(api_client, sct_run_id):
     # Ensure resource exists
     _create_resource(api_client, sct_run_id, resource_name="node-2")
