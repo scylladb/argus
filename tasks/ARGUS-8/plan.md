@@ -30,8 +30,6 @@ stays in every plan built from a spec.
 - No Co-Authored-By line.
 - `git add` takes explicit paths only.
 - Commit through `uv run git commit`.
-- Leave the code uncommitted until Komachi reviews it. The commit box of each
-  task stays open until then.
 
 ## Task 1 — Fix the release kernel report on the current column
 
