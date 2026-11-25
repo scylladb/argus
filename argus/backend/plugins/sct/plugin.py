@@ -5,6 +5,7 @@ from argus.backend.plugins.sct.testrun import (
     SCTJunitReports,
     SCTNemesis,
     SCTNemesisDescription,
+    SCTPackage,
     SCTResource,
     SCTTestRun,
     SCTUnprocessedEvent,
@@ -17,7 +18,6 @@ from argus.backend.plugins.sct.udt import (
     CloudNodesInfo,
     CloudSetupDetails,
     NodeDescription,
-    PackageVersion,
     PerformanceHDRHistogram
 )
 
@@ -35,12 +35,12 @@ class PluginInfo(PluginInfoBase):
         SCTUnprocessedEvent,
         StressCommand,
         SCTResource,
+        SCTPackage,
     ]
     all_types = [
         NodeDescription,
         CloudSetupDetails,
         CloudNodesInfo,
         CloudInstanceDetails,
-        PackageVersion,
         PerformanceHDRHistogram,
     ]

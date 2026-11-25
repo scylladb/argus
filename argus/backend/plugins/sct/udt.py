@@ -6,22 +6,6 @@ from pydantic import Field
 from coodie.usertype import UserType
 
 
-class PackageVersion(UserType):
-    name: Optional[str] = None
-    version: Optional[str] = None
-    date: Optional[str] = None
-    revision_id: Optional[str] = None
-    build_id: Optional[str] = None
-
-    class Settings:
-        __type_name__ = "packageversion_v2"
-
-    def __eq__(self, other):
-        if isinstance(other, PackageVersion):
-            return all(getattr(self, a) == getattr(other, a) for a in ["name", "version", "date", "revision_id", "build_id"])
-        return super().__eq__(other)
-
-
 class CloudInstanceDetails(UserType):
     provider: Optional[str] = None
     instance_type: Optional[str] = None

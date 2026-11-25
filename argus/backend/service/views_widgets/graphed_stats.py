@@ -4,7 +4,7 @@ import logging
 from uuid import UUID
 import json
 import re
-from argus.backend.plugins.sct.testrun import SCTNemesis, SCTTestRun
+from argus.backend.plugins.sct.testrun import SCTNemesis, SCTPackage, SCTTestRun
 from argus.backend.models.github_issue import GithubIssue, IssueLink
 from argus.backend.models.jira import JiraIssue
 from argus.backend.util.common import chunk, gather_limited
@@ -21,12 +21,14 @@ class GraphedStatsService:
             "end_time",
             "id",
             "investigation_status",
-            "packages",
             "status",
         ).all()
 
-        nemesis_chunks = await asyncio.gather(
-            *(SCTNemesis.find(run_id__in=batch).all() for batch in chunk({r.id for r in rows})))
+        run_ids = {r.id for r in rows}
+        nemesis_chunks, packages = await asyncio.gather(
+            asyncio.gather(*(SCTNemesis.find(run_id__in=batch).all() for batch in chunk(run_ids))),
+            SCTPackage.for_runs(run_ids),
+        )
         nemesis_rows = [row for rows_chunk in nemesis_chunks for row in rows_chunk]
 
         nemesis_data = defaultdict(list)
@@ -50,7 +52,7 @@ class GraphedStatsService:
             if filter_patterns and any(pattern.search(run.build_id) for pattern in filter_patterns):
                 continue
             try:
-                version = [package.version for package in run.packages if package.name == "scylla-server"][0]
+                version = [package.version for package in packages.get(run.id, []) if package.name == "scylla-server"][0]
             except (IndexError, TypeError):
                 version = "unknown"
 
@@ -98,15 +100,16 @@ class GraphedStatsService:
             try:
                 return await SCTTestRun.find(id=run_id).only(
                     "id", "status", "build_id", "start_time", "assignee", "investigation_status", "build_number",
-                    "packages", "build_job_url").first()
+                    "build_job_url").first()
             except Exception as e:
                 LOGGER.error(f"Failed to fetch test run {run_id}: {str(e)}")
                 return None
 
-        link_chunks, fetched_runs = await asyncio.gather(
+        link_chunks, fetched_runs, packages = await asyncio.gather(
             asyncio.gather(*(IssueLink.find(run_id__in=batch).only("run_id", "issue_id").all()
                              for batch in chunk(run_ids))),
             gather_limited(fetch_test_run(run_id) for run_id in run_ids),
+            SCTPackage.for_runs(run_ids),
         )
         test_runs = dict(zip(run_ids, fetched_runs))
 
@@ -154,7 +157,7 @@ class GraphedStatsService:
                 # Get Scylla version from packages
                 for pkg_name in ["scylla-server-upgraded", "scylla-server-upgrade-target", "scylla-server", "scylla-server-target"]:
                     sut_version = next(
-                        (f"{pkg.version}-{pkg.date}" for pkg in test_run.packages if pkg.name == pkg_name), None)
+                        (f"{pkg.version}-{pkg.date}" for pkg in packages.get(run_id, []) if pkg.name == pkg_name), None)
                     if sut_version:
                         break
                 else:

@@ -17,7 +17,7 @@ from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGeneric
 from argus.backend.error_handlers import DataValidationError
 from argus.backend.models.web import ArgusRelease, ArgusTest
 from argus.backend.util.common import chunk, gather_limited, select_rows
-from argus.backend.plugins.sct.udt import PackageVersion
+from argus.backend.plugins.sct.testrun import SCTPackage, SCTTestRun
 from argus.backend.service.testrun import TestRunService
 
 LOGGER = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ class Cell:
 @dataclass
 class RunsDetails:
     ignored: list[RunId]
-    packages: dict[RunId, list[PackageVersion]]
+    packages: dict[RunId, list[SCTPackage]]
 
 
 default_options = {
@@ -355,7 +355,7 @@ def calculate_graph_ticks(graphs: List[Dict]) -> dict[str, str]:
     return {"min": min_x[:10], "max": max_x[:10]}
 
 
-def _identify_most_changed_package(packages_list: list[PackageVersion]) -> str:
+def _identify_most_changed_package(packages_list: list[SCTPackage]) -> str:
     version_date_changes: dict[str, set[tuple[str, str]]] = defaultdict(set)
 
     # avoid counting unrelevant packages when detecting automatically
@@ -367,7 +367,7 @@ def _identify_most_changed_package(packages_list: list[PackageVersion]) -> str:
     return max(version_date_changes, key=lambda k: len(version_date_changes[k]))
 
 
-def _split_results_by_release(packages: dict[str, list[PackageVersion]], main_package: str) -> ReleasesMap:
+def _split_results_by_release(packages: dict[str, list[SCTPackage]], main_package: str) -> ReleasesMap:
     releases_map = defaultdict(list)
     for run_id, package_versions in packages.items():
         for package in package_versions:
@@ -407,7 +407,7 @@ class ResultsService:
     def __init__(self):
         self._runs_details: dict[UUID, asyncio.Future[RunsDetails]] = {}
 
-    def _remove_duplicate_packages(self, packages: List[PackageVersion]) -> List[PackageVersion]:
+    def _remove_duplicate_packages(self, packages: List[SCTPackage]) -> List[SCTPackage]:
         """removes scylla packages that are considered as duplicates:
         scylla-server-upgraded, scylla-server-upgrade-target, sylla-server, scylla-server-target
         (first found is kept)"""
@@ -428,10 +428,12 @@ class ResultsService:
     async def _load_runs_details(self, test_id: UUID) -> RunsDetails:
         plugin_name = (await select_rows(ArgusTest.find(id=test_id), "plugin_name"))[0]["plugin_name"]
         plugin = TestRunService().get_plugin(plugin_name)
-        rows = await select_rows(plugin.model.find(test_id=test_id), "id", "investigation_status", "packages")
+        rows = await select_rows(plugin.model.find(test_id=test_id), "id", "investigation_status")
         ignored_runs = [row["id"] for row in rows if row["investigation_status"].lower() == "ignored"]
-        packages = {row["id"]: self._remove_duplicate_packages(
-            row["packages"]) for row in rows if row["packages"] and row["id"] not in ignored_runs}
+        packages = {}
+        if plugin.model is SCTTestRun:
+            stored = await SCTPackage.for_runs(row["id"] for row in rows if row["id"] not in ignored_runs)
+            packages = {run_id: self._remove_duplicate_packages(run_packages) for run_id, run_packages in stored.items()}
         return RunsDetails(ignored=ignored_runs, packages=packages)
 
     async def _get_tables_metadata(self, test_id: UUID) -> list[ArgusGenericResultMetadata]:
@@ -623,13 +625,16 @@ class ResultsService:
         test_ids = await self._exclude_disabled_tests(test_ids)
         rows_per_test = await gather_limited(
             select_rows(plugin.model.find(test_id=test_id), "id", "status", "investigation_status",
-                        "test_name", "build_id", "packages", "test_method", "started_by")
+                        "test_name", "build_id", "test_method", "started_by")
             for test_id in test_ids)
+        packages_by_run = await SCTPackage.for_runs(
+            row["id"] for rows in rows_per_test for row in rows
+            if row["investigation_status"].lower() != "ignored" and row["test_method"])
         for test_id, rows in zip(test_ids, rows_per_test):
             for row in rows:
                 if row["investigation_status"].lower() == "ignored":
                     continue
-                packages = row['packages']
+                packages = packages_by_run.get(row["id"], [])
                 test_method = row['test_method']
                 if not test_method:
                     continue

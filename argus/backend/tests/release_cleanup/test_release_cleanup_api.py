@@ -179,6 +179,18 @@ def _pytest_results(api_client, run_id) -> list:
     return resp.json()["response"]
 
 
+def _submit_package(api_client, run_id):
+    resp = api_client.post(f"{API_PREFIX}/client/sct/{run_id}/packages/submit",
+                           json={"packages": [{"name": "scylla-server", "version": "6.0.0"}]})
+    assert resp.json()["status"] == "ok", resp.text
+
+
+def _packages(api_client, run_id) -> list:
+    resp = api_client.get(f"{API_PREFIX}/client/sct/{run_id}/packages/get")
+    assert resp.json()["status"] == "ok", resp.text
+    return resp.json()["response"]
+
+
 def _sct_event_count(api_client, run_id) -> int:
     resp = api_client.get(f"{API_PREFIX}/client/sct/{run_id}/events/NORMAL/count")
     assert resp.json()["status"] == "ok", resp.text
@@ -221,6 +233,7 @@ def test_delete_run_removes_the_run_and_its_rows(api_client, cleanup_release, cl
     _post_comment(api_client, cleanup_test, run_id)
     _post_sct_event(api_client, run_id)
     assert _sct_event_count(api_client, run_id) == 1
+    _submit_package(api_client, run_id)
 
     resp = api_client.delete(f"{API_PREFIX}/test/{cleanup_test.id}/run/{run_id}")
 
@@ -231,6 +244,7 @@ def test_delete_run_removes_the_run_and_its_rows(api_client, cleanup_release, cl
     assert api_client.get(f"{API_PREFIX}/run/{run_id}/comments").json()["response"] == []
     assert api_client.get(f"{API_PREFIX}/run/{run_id}/activity").json()["response"]["raw_events"] == []
     assert _sct_event_count(api_client, run_id) == 0
+    assert _packages(api_client, run_id) == []
     assert _entity_exists(api_client, "test", cleanup_test.id)
 
 

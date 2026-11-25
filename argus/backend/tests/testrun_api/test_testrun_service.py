@@ -30,7 +30,7 @@ META_FIELDS = frozenset(
     ]
 )
 
-FULL_ONLY_FIELD = "packages"
+FULL_ONLY_FIELD = "screenshots"
 
 
 # ---------------------------------------------------------------------------
@@ -64,27 +64,16 @@ def _submit_run(api_client: TestClient, fake_test: ArgusTest, *, run_id: str | N
     return run_id
 
 
-def _submit_package(api_client: TestClient, run_id: str) -> None:
-    """Submit one package entry to an existing SCT run.
+def _submit_screenshot(api_client: TestClient, run_id: str) -> None:
+    """Submit one screenshot link to an existing SCT run.
 
-    This ensures the `packages` list column has real data, making it possible
+    This ensures the `screenshots` list column has real data, making it possible
     to distinguish between the column being fetched (non-empty) vs not fetched
-    (empty list returned by CQLEngine for unfetched list columns).
+    (empty list returned for unfetched list columns).
     """
-    payload = {
-        "packages": [
-            {
-                "name": "scylla-server",
-                "version": "99.0.0",
-                "commit_id": "deadbeef",
-                "origin": "scylla",
-            }
-        ],
-        "schema_version": "v8",
-    }
     resp = api_client.post(
-        f"{API_PREFIX}/client/sct/{run_id}/packages/submit",
-        json=payload,
+        f"{API_PREFIX}/client/sct/{run_id}/screenshots/submit",
+        json={"screenshot_links": ["https://grafana/snap/1"], "schema_version": "v8"},
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["status"] == "ok"
@@ -109,10 +98,10 @@ def run_id(api_client: TestClient, fake_test: ArgusTest) -> str:
 
 
 @pytest.fixture
-def run_id_with_package(api_client: TestClient, fake_test: ArgusTest) -> str:
-    """Submit a run with one package entry so `packages` is non-empty when fully fetched."""
+def run_id_with_screenshot(api_client: TestClient, fake_test: ArgusTest) -> str:
+    """Submit a run with one screenshot so `screenshots` is non-empty when fully fetched."""
     rid = _submit_run(api_client, fake_test)
-    _submit_package(api_client, rid)
+    _submit_screenshot(api_client, rid)
     return rid
 
 
@@ -299,19 +288,19 @@ def test_get_runs_before_and_after_exclusive_returns_empty(api_client: TestClien
 # ---------------------------------------------------------------------------
 
 @pytest.mark.docker_required
-def test_get_runs_without_full_extra_fields_are_empty(api_client: TestClient, run_id_with_package: str, fake_test: ArgusTest) -> None:
+def test_get_runs_without_full_extra_fields_are_empty(api_client: TestClient, run_id_with_screenshot: str, fake_test: ArgusTest) -> None:
     """Without `full`, CQLEngine returns an empty list for unfetched list columns.
 
-    We submit a package so the column has real data on disk.  The meta-only
-    response must still return an empty list for `packages` because the column
+    We submit a screenshot so the column has real data on disk.  The meta-only
+    response must still return an empty list for `screenshots` because the column
     is excluded via `.only(limited_fields)`.  This distinguishes the two modes.
     """
     resp = _get_runs(api_client, fake_test.id)
 
     assert resp.status_code == 200
     runs = resp.json()["response"]
-    target_run = next((r for r in runs if r["id"] == run_id_with_package), None)
-    assert target_run is not None, f"Run {run_id_with_package} not found in response"
+    target_run = next((r for r in runs if r["id"] == run_id_with_screenshot), None)
+    assert target_run is not None, f"Run {run_id_with_screenshot} not found in response"
     assert target_run[FULL_ONLY_FIELD] == [], (
         f"'{FULL_ONLY_FIELD}' should be an empty list (unfetched) in limited-mode response, "
         f"got {target_run[FULL_ONLY_FIELD]!r}"
@@ -319,10 +308,10 @@ def test_get_runs_without_full_extra_fields_are_empty(api_client: TestClient, ru
 
 
 @pytest.mark.docker_required
-def test_get_runs_with_full_returns_extra_fields(api_client: TestClient, run_id_with_package: str, fake_test: ArgusTest) -> None:
-    """With full=1, full-model-only fields such as 'packages' must be populated.
+def test_get_runs_with_full_returns_extra_fields(api_client: TestClient, run_id_with_screenshot: str, fake_test: ArgusTest) -> None:
+    """With full=1, full-model-only fields such as 'screenshots' must be populated.
 
-    We submit a package before fetching so the column has real data.  The full
+    We submit a screenshot before fetching so the column has real data.  The full
     response must return a non-empty list, distinguishing it from meta-only mode
     which returns an empty list for unfetched list columns.
     """
@@ -330,10 +319,10 @@ def test_get_runs_with_full_returns_extra_fields(api_client: TestClient, run_id_
 
     assert resp.status_code == 200
     runs = resp.json()["response"]
-    target_run = next((r for r in runs if r["id"] == run_id_with_package), None)
-    assert target_run is not None, f"Run {run_id_with_package} not found in response"
+    target_run = next((r for r in runs if r["id"] == run_id_with_screenshot), None)
+    assert target_run is not None, f"Run {run_id_with_screenshot} not found in response"
     assert len(target_run[FULL_ONLY_FIELD]) > 0, (
-        f"'{FULL_ONLY_FIELD}' must be a non-empty list when full=1 and a package was submitted"
+        f"'{FULL_ONLY_FIELD}' must be a non-empty list when full=1 and a screenshot was submitted"
     )
 
 

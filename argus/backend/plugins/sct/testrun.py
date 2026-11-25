@@ -3,7 +3,7 @@ from enum import Enum
 import logging
 from datetime import UTC, datetime, timezone
 from dataclasses import dataclass, field
-from typing import Annotated, ClassVar, Optional
+from typing import Annotated, ClassVar, Iterable, Optional
 from uuid import UUID, uuid4
 
 from pydantic import Field
@@ -27,10 +27,9 @@ from argus.backend.plugins.sct.udt import (
     CloudNodesInfo,
     CloudSetupDetails,
     NodeDescription,
-    PackageVersion,
     PerformanceHDRHistogram
 )
-from argus.backend.util.common import chunk, get_build_number, select_rows
+from argus.backend.util.common import chunk, gather_limited, get_build_number, select_rows
 from argus.common.enums import ResourceState
 
 LOGGER = logging.getLogger(__name__)
@@ -177,6 +176,27 @@ class SCTResource(Document):
         name = "sct_resource"
 
 
+class SCTPackage(Document):
+    run_id: Annotated[UUID, PrimaryKey()]
+    name: Annotated[str, ClusteringKey()]
+    version: Optional[str] = None
+    date: Optional[str] = None
+    revision_id: Optional[str] = None
+    build_id: Optional[str] = None
+
+    class Settings:
+        name = "sct_package"
+
+    @classmethod
+    async def for_runs(cls, run_ids: Iterable[UUID]) -> dict[UUID, list["SCTPackage"]]:
+        batches = await gather_limited(cls.find(run_id__in=batch).all() for batch in chunk(run_ids))
+        packages = {}
+        for rows in batches:
+            for row in rows:
+                packages.setdefault(row.run_id, []).append(row)
+        return packages
+
+
 class SCTTestRun(PluginModelBase):
     _plugin_name: ClassVar[str] = "scylla-cluster-tests"
     _resolves_assignee_from_jenkins: ClassVar[bool] = True
@@ -188,7 +208,7 @@ class SCTTestRun(PluginModelBase):
     async def delete_run_data(cls, run_id: UUID) -> None:
         for severity in SCTEventSeverity:
             await SCTEvent.find(run_id=run_id, severity=severity.value).delete()
-        for table in (SCTUnprocessedEvent, SCTNemesis, SCTResource, StressCommand):
+        for table in (SCTUnprocessedEvent, SCTNemesis, SCTResource, SCTPackage, StressCommand):
             await table.find(run_id=run_id).delete()
         await SCTJunitReports.find(test_id=run_id).delete()
 
@@ -200,7 +220,6 @@ class SCTTestRun(PluginModelBase):
     origin_url: Optional[str] = None
     started_by: Optional[str] = None
     config_files: list[str] = Field(default_factory=list)
-    packages: list[PackageVersion] = Field(default_factory=list)
     version_source: Optional[str] = None
     yaml_test_duration: Optional[int] = None
 
@@ -293,7 +312,15 @@ class SCTTestRun(PluginModelBase):
     @classmethod
     async def get_version_data_for_release(cls, release_name: str) -> list[dict]:
         release = await ArgusRelease.get(name=release_name)
-        return await select_rows(cls.find(release_id=release.id), "scylla_version", "packages", "status")
+        rows = await select_rows(cls.find(release_id=release.id), "id", "scylla_version", "status")
+        return await cls.with_packages(rows)
+
+    @staticmethod
+    async def with_packages(rows: list[dict]) -> list[dict]:
+        packages = await SCTPackage.for_runs(row["id"] for row in rows)
+        for row in rows:
+            row["packages"] = packages.get(row["id"], [])
+        return rows
 
     @staticmethod
     def get_image(cloud_setup) -> str | None:
@@ -322,7 +349,7 @@ class SCTTestRun(PluginModelBase):
 
     @classmethod
     async def get_perf_results_for_test_name(cls, build_id: str, start_time: datetime, test_name: str) -> list[dict]:
-        columns = ("build_id", "packages", "scylla_version", "test_name", "perf_op_rate_average", "perf_op_rate_total",
+        columns = ("build_id", "scylla_version", "test_name", "perf_op_rate_average", "perf_op_rate_total",
                    "perf_avg_latency_99th", "perf_avg_latency_mean", "perf_total_errors", "id", "start_time",
                    "build_job_url", "build_number")
         query = cls.find(build_id=build_id, start_time__lt=start_time, test_name=test_name).allow_filtering()
@@ -412,6 +439,9 @@ class SCTTestRun(PluginModelBase):
     async def get_nemeses(self) -> list[SCTNemesis]:
         return await SCTNemesis.find(run_id=self.id).all()
 
+    async def get_packages(self) -> list[SCTPackage]:
+        return await SCTPackage.find(run_id=self.id).all()
+
     async def get_config_params(self) -> dict[str, str]:
         params = await RunConfigParamByRun.find(run_id=self.id).all()
         return {param.name: param.value for param in params}
@@ -491,13 +521,14 @@ class SCTTestRun(PluginModelBase):
         """converts scylla-server date to timestamp and adds revision in sub-seconds precision to differentiate
         scylla versions from the same day. It's not perfect, but we don't know exact version time."""
 
+        packages = await self.get_packages()
         for sut_name in [f"{sut_package_name}-upgraded",
                          f"{sut_package_name}-upgrade-target",
                          sut_package_name,
                          f"{sut_package_name}-target"
                          ]:
             scylla_package = next(
-                (pkg for pkg in self.packages if pkg.name == sut_name), None)
+                (pkg for pkg in packages if pkg.name == sut_name), None)
             if scylla_package:
                 break
 
@@ -511,11 +542,12 @@ class SCTTestRun(PluginModelBase):
     @classmethod
     async def get_run_response(cls, run_id: UUID) -> dict | None:
         try:
-            run, junit_reports, nemesis_data, allocated_resources, minicloud_param = await asyncio.gather(
+            run, junit_reports, nemesis_data, allocated_resources, packages, minicloud_param = await asyncio.gather(
                 cls.get(id=run_id),
                 SCTJunitReports.find(test_id=run_id).all(),
                 SCTNemesis.find(run_id=run_id).all(),
                 SCTResource.find(run_id=run_id).all(),
+                SCTPackage.find(run_id=run_id).all(),
                 RunConfigParamByRun.find(run_id=run_id, name=f"{SCT_CONFIG_NAME}.minicloud_endpoint_url").first(),
             )
         except DocumentNotFound:
@@ -528,6 +560,7 @@ class SCTTestRun(PluginModelBase):
         response["junit_reports"] = junit_reports
         response["nemesis_data"] = await SCTNemesis.with_descriptions(nemesis_data)
         response["allocated_resources"] = allocated_resources
+        response["packages"] = packages
         return response
 
     @staticmethod
