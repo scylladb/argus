@@ -313,10 +313,10 @@ class SCTTestRun(PluginModelBase):
     async def get_version_data_for_release(cls, release_name: str) -> list[dict]:
         release = await ArgusRelease.get(name=release_name)
         rows = await select_rows(cls.find(release_id=release.id), "id", "scylla_version", "status")
-        return await cls._with_packages(rows)
+        return await cls.with_packages(rows)
 
     @staticmethod
-    async def _with_packages(rows: list[dict]) -> list[dict]:
+    async def with_packages(rows: list[dict]) -> list[dict]:
         packages = await SCTPackage.for_runs(row["id"] for row in rows)
         for row in rows:
             row["packages"] = packages.get(row["id"], [])
@@ -353,7 +353,7 @@ class SCTTestRun(PluginModelBase):
                    "perf_avg_latency_99th", "perf_avg_latency_mean", "perf_total_errors", "id", "start_time",
                    "build_job_url", "build_number")
         query = cls.find(build_id=build_id, start_time__lt=start_time, test_name=test_name).allow_filtering()
-        return await cls._with_packages(await select_rows(query, *columns))
+        return await select_rows(query, *columns)
 
     @classmethod
     async def init_sct_run(cls, req: SCTTestRunSubmissionRequest):

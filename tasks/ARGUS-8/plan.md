@@ -121,7 +121,9 @@ at the commit.
   `response["packages"]`.
 - `delete_run_data` adds `SCTPackage` to its loop.
 - `get_version_data_for_release` and `get_perf_results_for_test_name` select
-  `id` without `packages`. Each row gets `row["packages"]` from `for_runs`.
+  `id` without `packages`. `with_packages(rows)` sets `row["packages"]` from
+  `for_runs`. The release data and the perf history route call it. The
+  performance submission, which never reads the packages, does not.
 
 `SCTService.submit_packages(run_id, packages)`:
 1. `SCTTestRun.get(id=run_id)`; `DocumentNotFound` raises `SCTServiceException`.

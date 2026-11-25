@@ -340,7 +340,7 @@ class SCTService:
             run: SCTTestRun = await SCTTestRun.get(id=run_id)
             rows = await run.get_perf_results_for_test_name(
                 build_id=run.build_id, start_time=run.start_time, test_name=run.test_name)
-            return rows
+            return await SCTTestRun.with_packages(rows)
         except DocumentNotFound as exception:
             LOGGER.error("Run %s not found for SCTTestRun", run_id)
             raise SCTServiceException("Run not found", run_id) from exception
