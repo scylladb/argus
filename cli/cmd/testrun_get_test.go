@@ -3,9 +3,11 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -56,12 +58,9 @@ func runGetRun(t *testing.T, full bool) string {
 	ctx = contextWithAPIClient(ctx, stubRunAPI(t))
 	ctx = contextWithOutputter(ctx, output.New(&buf, false))
 	getRunCmd.SetContext(ctx)
+	resetGetRunFlags(t)
 	require.NoError(t, getRunCmd.Flags().Set("run-id", stubRunID))
 	require.NoError(t, getRunCmd.Flags().Set("full", strconv.FormatBool(full)))
-	t.Cleanup(func() {
-		_ = getRunCmd.Flags().Set("run-id", "")
-		_ = getRunCmd.Flags().Set("full", "false")
-	})
 
 	require.NoError(t, getRunCmd.RunE(getRunCmd, nil))
 	return buf.String()
@@ -87,4 +86,115 @@ func TestRunCmd_HasNoDetailsSubcommand(t *testing.T) {
 	for _, c := range runCmd.Commands() {
 		assert.NotEqual(t, "details", c.Name())
 	}
+}
+
+const (
+	stubBuildID     = "scylla-master/longevity/longevity-10gb-3h-test"
+	stubSecondRunID = "8a1c0d2e-3f4b-4a5c-8d6e-7f8091a2b3c4"
+)
+
+// stubBuildAPI serves the build lookup of stubBuildID #412 with the given runs,
+// each an SCT run shaped like stubSCTRun.
+func stubBuildAPI(t *testing.T, runIDs ...string) (*api.Client, string) {
+	t.Helper()
+	runs := make([]string, 0, len(runIDs))
+	for _, id := range runIDs {
+		runs = append(runs, `{"run_id": "`+id+`", "plugin_name": "scylla-cluster-tests"}`)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload := ""
+		switch {
+		case r.URL.Path == "/api/v1/test/"+stubBuildID+"/412":
+			payload = `{"runs": [` + strings.Join(runs, ",") + `], "url": "https://argus.example.com/test/` + stubBuildID + `/412"}`
+		case strings.HasPrefix(r.URL.Path, "/api/v1/run/scylla-cluster-tests/"):
+			payload = strings.ReplaceAll(stubSCTRun, stubRunID, strings.TrimPrefix(r.URL.Path, "/api/v1/run/scylla-cluster-tests/"))
+		default:
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status": "ok", "response": ` + payload + `}`))
+	}))
+	t.Cleanup(srv.Close)
+	client, err := api.New(srv.URL, api.WithHTTPClient(srv.Client()))
+	require.NoError(t, err)
+	return client, srv.URL
+}
+
+// resetGetRunFlags restores the flags of the shared getRunCmd after a test.
+func resetGetRunFlags(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() {
+		for name, value := range map[string]string{"run-id": "", "build-id": "", "build-number": "0", "full": "false"} {
+			_ = getRunCmd.Flags().Set(name, value)
+			getRunCmd.Flags().Lookup(name).Changed = false
+		}
+	})
+}
+
+// runGetRunByBuild executes `run get` for stubBuildID #412 and returns its JSON output.
+func runGetRunByBuild(t *testing.T, client *api.Client) string {
+	t.Helper()
+	var buf bytes.Buffer
+	ctx := contextWithLogger(context.Background(), zerolog.Nop())
+	ctx = contextWithAPIClient(ctx, client)
+	ctx = contextWithOutputter(ctx, output.New(&buf, false))
+	getRunCmd.SetContext(ctx)
+	resetGetRunFlags(t)
+	require.NoError(t, getRunCmd.Flags().Set("build-id", stubBuildID))
+	require.NoError(t, getRunCmd.Flags().Set("build-number", "412"))
+
+	require.NoError(t, getRunCmd.RunE(getRunCmd, nil))
+	return buf.String()
+}
+
+func TestGetRunCmd_SummaryLinksTheRunByItsBuild(t *testing.T) {
+	out := runGetRun(t, false)
+
+	assert.Contains(t, out, `"argus_url": "http://127.0.0.1:`)
+	assert.Contains(t, out, `/test/`+stubBuildID+`/412"`)
+}
+
+func TestGetRunCmd_ByBuildShowsTheRunOfTheBuild(t *testing.T) {
+	client, base := stubBuildAPI(t, stubRunID)
+
+	var runs []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(runGetRunByBuild(t, client)), &runs))
+
+	require.Len(t, runs, 1)
+	assert.Equal(t, stubRunID, runs[0]["id"])
+	assert.Equal(t, base+"/test/"+stubBuildID+"/412", runs[0]["argus_url"])
+}
+
+func TestGetRunCmd_ByBuildShowsEveryParallelRun(t *testing.T) {
+	client, _ := stubBuildAPI(t, stubRunID, stubSecondRunID)
+
+	var runs []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(runGetRunByBuild(t, client)), &runs))
+
+	require.Len(t, runs, 2)
+	assert.Equal(t, stubRunID, runs[0]["id"])
+	assert.Equal(t, stubSecondRunID, runs[1]["id"])
+}
+
+func TestGetRunCmd_RejectsRunIDWithBuildID(t *testing.T) {
+	resetGetRunFlags(t)
+	require.NoError(t, getRunCmd.Flags().Set("run-id", stubRunID))
+	require.NoError(t, getRunCmd.Flags().Set("build-id", stubBuildID))
+	require.NoError(t, getRunCmd.Flags().Set("build-number", "412"))
+
+	assert.Error(t, getRunCmd.ValidateFlagGroups())
+}
+
+func TestGetRunCmd_BuildIDNeedsBuildNumber(t *testing.T) {
+	resetGetRunFlags(t)
+	require.NoError(t, getRunCmd.Flags().Set("build-id", stubBuildID))
+
+	assert.Error(t, getRunCmd.ValidateFlagGroups())
+}
+
+func TestGetRunCmd_NeedsRunIDOrBuildID(t *testing.T) {
+	resetGetRunFlags(t)
+
+	assert.Error(t, getRunCmd.ValidateFlagGroups())
 }

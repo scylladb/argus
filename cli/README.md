@@ -318,7 +318,7 @@ Argus:
 
 ```
 Replay summary: total=83 processed=83 succeeded=83 failed=0 skipped=0 backfilled_logs=0
-Run 91c226dc-a057-4ad4-a0b8-bf8bc73031b9 (local-runs/jdoe/longevity-100gb-4h#1): https://argus.scylladb.com/tests/scylla-cluster-tests/91c226dc-a057-4ad4-a0b8-bf8bc73031b9
+Run 91c226dc-a057-4ad4-a0b8-bf8bc73031b9 (local-runs/jdoe/longevity-100gb-4h#1): https://argus.scylladb.com/test/local-runs/jdoe/longevity-100gb-4h/1
 ```
 
 The build follows the run ID in parentheses. A run that keeps its recorded

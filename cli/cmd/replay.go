@@ -402,7 +402,8 @@ type replayReport struct {
 }
 
 // runLinks pairs each run with its Argus link. A dry run and a run whose
-// submit_run failed get no link, because the run may not exist.
+// submit_run failed get no link, because the run may not exist. A run without
+// a build number gets no link either.
 func runLinks(base string, runs []models.ReplayRun, dryRun bool) []replayRunLink {
 	links := make([]replayRunLink, 0, len(runs))
 	for _, r := range runs {
@@ -413,8 +414,8 @@ func runLinks(base string, runs []models.ReplayRun, dryRun bool) []replayRunLink
 			BuildNumber: r.BuildNumber,
 			Failed:      r.Failed,
 		}
-		if !dryRun && !r.Failed {
-			link.URL = api.RunPageURL(base, r.Type, r.ID)
+		if !dryRun && !r.Failed && r.BuildNumber != nil {
+			link.URL = api.RunURL(base, r.BuildID, *r.BuildNumber)
 		}
 		links = append(links, link)
 	}

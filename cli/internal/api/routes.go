@@ -22,6 +22,7 @@ const (
 
 	// Test run routes
 	TestRunsList        = "/api/v1/test/%s/runs"            // GET  – list runs for a test (test_id)
+	TestRunsByBuild     = "/api/v1/test/%s/%d"              // GET  – runs of a build (build_id, build_number)
 	TestRunGetType      = "/api/v1/run/%s/type"             // GET  – run type (run_id)
 	TestRunGet          = "/api/v1/run/%s/%s"               // GET  – single run (run_type, run_id)
 	TestRunActivity     = "/api/v1/run/%s/activity"         // GET  – activity log (run_id)
