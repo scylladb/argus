@@ -69,6 +69,16 @@ async def test_submit_packages(api_client, sct_run_id):
     assert _run_packages(api_client, sct_run_id) == [("scylla-server", "6.0.0")]
 
 
+async def test_get_packages_returns_the_run_packages(api_client, sct_run_id):
+    _submit_packages(api_client, sct_run_id, [{"name": "scylla-server", "version": "6.0.0", "date": "20260101"}])
+
+    resp = api_client.get(f"{API_PREFIX}/{sct_run_id}/packages/get")
+
+    assert resp.json()["status"] == "ok", resp.text
+    assert resp.json()["response"] == [{"run_id": sct_run_id, "name": "scylla-server", "version": "6.0.0",
+                                        "date": "20260101", "revision_id": None, "build_id": None}]
+
+
 async def test_submit_packages_keeps_one_row_per_name(api_client, sct_run_id):
     kernel = {"name": "kernel", "version": "5.15.0"}
     _submit_packages(api_client, sct_run_id, [kernel, {"name": "scylla-server", "version": "6.0.0"}])

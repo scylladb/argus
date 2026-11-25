@@ -16,6 +16,7 @@ class ArgusSCTClient(ArgusClient):
 
     class Routes(ArgusClient.Routes):
         SUBMIT_PACKAGES = "/sct/$id/packages/submit"
+        GET_PACKAGES = "/sct/$id/packages/get"
         SUBMIT_SCREENSHOTS = "/sct/$id/screenshots/submit"
         GET_RESOURCES = "/sct/$id/resource/all"
         GET_RESOURCE = "/sct/$id/resource/$name/get"
@@ -156,6 +157,17 @@ class ArgusSCTClient(ArgusClient):
             }
         )
         self.check_response(response)
+
+    def get_packages(self) -> list[dict[str, Any]]:
+        """
+            Get the packages submitted for the run.
+        """
+        response = self.get(
+            endpoint=self.Routes.GET_PACKAGES,
+            location_params={"id": str(self.run_id)},
+        )
+        self.check_response(response)
+        return response.json()["response"]
 
     def add_stress_command(self, command: str, ts: float, log_name: str, loader_name: str) -> None:
         """

@@ -170,6 +170,9 @@ in `create_context`, which is async; `default_options()` is not, and loses its
 - Modify: `argus/client/sct/client.py:17-31, 146-160`.
 - Test: `argus/backend/tests/sct_api/test_sct_api.py`.
 - Test: `argus/backend/tests/integration/test_sct_lifecycle.py`.
+- Test: `argus/backend/tests/release_cleanup/test_release_cleanup_api.py`. A
+  deleted run leaves no packages. The route is the read that does not go
+  through the run row, so this test lands here.
 
 **Internals:**
 - Route `GET /{run_id}/packages/get`, named
@@ -179,12 +182,13 @@ in `create_context`, which is async; `default_options()` is not, and loses its
 - `ArgusSCTClient.Routes.GET_PACKAGES = "/sct/$id/packages/get"`.
 - `ArgusSCTClient.get_packages() -> list[dict]` follows `get_resources()`.
 
-- [ ] Write the failing tests: the route returns the submitted packages, and
-  `sct_client.get_packages()` returns them in the lifecycle test.
-- [ ] Run them and confirm the failures.
-- [ ] Write the smallest change that passes them.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit `feature(plugins/sct): return the packages of a run to clients`.
+- [x] Write the failing tests: the route returns the submitted packages,
+  `sct_client.get_packages()` returns them in the lifecycle test, and a
+  deleted run has none.
+- [x] Run them and confirm the failures.
+- [x] Write the smallest change that passes them.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit `feature(plugins/sct): return the packages of a run to clients`.
 
 ## Task 4 — Copy the existing packages
 

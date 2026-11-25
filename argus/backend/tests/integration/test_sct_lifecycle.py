@@ -79,3 +79,4 @@ def test_sct_full_lifecycle(sct_client, fake_test, api_client):
     assert {entry[0] for entry in test_run["logs"]} == {"monitor.log", "loader.log"}
     run_response = api_client.get(f"/api/v1/run/scylla-cluster-tests/{run_id}").json()["response"]
     assert [p["name"] for p in run_response["packages"]] == ["scylla-server"]
+    assert [p["name"] for p in sct_client.get_packages()] == ["scylla-server"]

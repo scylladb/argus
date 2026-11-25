@@ -99,6 +99,15 @@ async def sct_submit_packages(run_id: UUID, payload: PackagesSubmitRequest,
     })
 
 
+@router.get("/{run_id}/packages/get", name="api.client_api.sct_api.sct_get_packages")
+async def sct_get_packages(run_id: UUID, user: User = Depends(api_current_user)):
+    result = await SCTService.get_packages(run_id=run_id)
+    return APIResponse({
+        "status": "ok",
+        "response": result
+    })
+
+
 @router.post("/{run_id}/screenshots/submit", name="api.client_api.sct_api.sct_submit_screenshots")
 async def sct_submit_screenshots(run_id: UUID, payload: ScreenshotsSubmitRequest,
                            user: User = Depends(api_current_user)):

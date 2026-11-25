@@ -131,6 +131,10 @@ class SCTService:
         return "added"
 
     @staticmethod
+    async def get_packages(run_id: UUID) -> list[SCTPackage]:
+        return await SCTPackage.find(run_id=run_id).all()
+
+    @staticmethod
     def process_target_version(run: SCTTestRun, package: SCTPackage):
         if run.version_source and "upgrade-target" in run.version_source and package.name == "scylla-server-target":
             return
