@@ -86,8 +86,8 @@ one is stale, so a run that just finished counts.
   - Saving sends the labels with the plan.
   - Splitting a group gives each of its tests the group's labels, as it
     already does with the assignee.
-- **Plan card:** lists the plan's labels with the number of tests each one
-  selects.
+- **Plan card:** lists the plan's labels with the number of tests and groups
+  that carry each one.
 - **Grid view:** shows the labels of the planned tests and groups.
 - **Release dashboard and view dashboard:**
   - A plan-label filter lists "plan · label" for the plans of the
@@ -204,5 +204,8 @@ entity whose last label is removed goes in `options_remove`.
   fresh one, so the chat agrees with the summary. (spec)
 - The dashboard's label filter offers every plan of the dashboard's
   releases, completed plans included. (spec)
+- The plan card counts the tests and groups that carry a label, not the
+  tests a group stands for: the card has no group sizes, and a count needs
+  no extra request. (build)
 - Labels are free text, trimmed. The editor refuses an empty label and a
   second copy of a label on the same item, ignoring case. (spec)

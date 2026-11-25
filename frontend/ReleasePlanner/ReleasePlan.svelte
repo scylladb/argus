@@ -12,6 +12,7 @@
     import { faEdit } from "@fortawesome/free-regular-svg-icons";
     import { userList } from "../Stores/UserlistSubscriber";
     import { GLOBAL_STATS_KEY } from "../Common/ViewTypes";
+    import { labelCounts, parseOptions } from "./planLabels";
 
 
     let users = $state({});
@@ -25,6 +26,7 @@
     let planStats = $state({});
 
     let owner = $derived(getUser(plan.owner, users));
+    let labels = $derived(labelCounts(parseOptions(plan.options)));
     run(() => {
         users = $userList;
     });
@@ -74,6 +76,15 @@
         <div class="">
             {plan.name}
             <div class="text-muted text-sm">{plan.description}</div>
+            {#if labels.length > 0}
+                <div class="d-flex flex-wrap gap-1 my-1" aria-label="Labels">
+                    {#each labels as { label, count } (label)}
+                        <span class="badge rounded-pill text-bg-info" title="{count} tests and groups carry {label}">
+                            {label} ({count})
+                        </span>
+                    {/each}
+                </div>
+            {/if}
             {#if owner}
                 <div><img class="img-profile" src="{getPicture(owner.picture_id)}" alt=""> <span class="fw-bold">@{owner.username}</span></div>
             {/if}

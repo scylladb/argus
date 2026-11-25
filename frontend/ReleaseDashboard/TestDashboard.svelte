@@ -69,6 +69,14 @@
     import { compareVersions } from "../Common/versionSort";
     import ConfigParamFilterBar from "./ConfigParamFilterBar.svelte";
     import { configuredRows, toggleName } from "../Common/ConfigParamFilters";
+    import {
+        parseOptions,
+        planLabelAvailable,
+        planLabelMatches,
+        planLabelOptions,
+        planLabelsOfTest,
+        type LabelledPlan,
+    } from "../ReleasePlanner/planLabels";
     interface Props {
         dashboardObject: any;
         dashboardObjectType?: string;
@@ -112,6 +120,13 @@
         }
     };
 
+    let plans: LabelledPlan[] = $state([]);
+    let planLabelItems = $derived(planLabelOptions(plans).map(choice => ({
+        ...choice,
+        value: choice.key,
+        text: `${choice.planName} · ${choice.label}`,
+    })));
+
     const FILTER_STACK = $state({
         user: {
             f: function (test) {
@@ -151,7 +166,39 @@
                 return Array.from(new Set(backends));
             },
         },
+        planLabel: {
+            f: function (test) {
+                return planLabelMatches(plans, this.state, test.test.id, test.test.group_id);
+            },
+            op: (a, b) => a && b,
+            state: undefined,
+        },
     });
+
+    const fetchPlans = async function () {
+        const releaseIds = dashboardObjectType == "release" ? [dashboardObject.id] : (dashboardObject.release_ids ?? []);
+        const loaded: LabelledPlan[] = [];
+        let complete = true;
+        for (const releaseId of releaseIds) {
+            try {
+                const response = await fetch(`/api/v1/planning/release/${releaseId}/all`);
+                const json = await response.json();
+                if (json.status != "ok") throw json;
+                loaded.push(...json.response.map(plan => ({ id: plan.id, name: plan.name, options: parseOptions(plan.options) })));
+            } catch (error) {
+                complete = false;
+                console.log("Failed fetching the plans of release", releaseId, error);
+            }
+        }
+        plans = loaded;
+        if (complete && !planLabelAvailable(plans, FILTER_STACK.planLabel.state)) {
+            FILTER_STACK.planLabel.state = undefined;
+        }
+    };
+
+    const testPlanLabels = function (test) {
+        return planLabelsOfTest(plans, FILTER_STACK.planLabel.state, test.test.id, test.test.group_id);
+    };
 
 
     const generateCollapseKey = function(dashboardObject, dashboardObjectType) {
@@ -171,7 +218,7 @@
     const loadedState = JSON.parse(window.localStorage.getItem(`testDashFilterState-${dashboardObject.id}`));
     if (loadedState) {
         Object.entries(loadedState).forEach(([key, state]) => {
-            FILTER_STACK[key].state = state;
+            if (FILTER_STACK[key]) FILTER_STACK[key].state = state;
         });
     }
 
@@ -494,6 +541,7 @@
 
     onMount(() => {
         fetchStats();
+        fetchPlans();
         let refreshInterval = 300 + 15 + Math.round((Math.random() * 10));
         statRefreshInterval = setInterval(() => {
             fetchStats();
@@ -707,6 +755,27 @@
                             </div>
                         </div>
                     </div>
+                    <div class="d-flex">
+                        <div class="mb-2 d-inline-flex w-50 align-items-start flex-column rounded bg-white">
+                            <div class="p-2">Filter by plan label</div>
+                            <div class="p-2 w-100">
+                                <Select
+                                    --item-height="auto"
+                                    --item-line-height="auto"
+                                    value={planLabelItems.find(item => item.planId == FILTER_STACK.planLabel.state?.planId && item.label == FILTER_STACK.planLabel.state?.label)}
+                                    on:select={e => FILTER_STACK.planLabel.state = { planId: e.detail.planId, label: e.detail.label }}
+                                    on:clear={() => FILTER_STACK.planLabel.state = undefined}
+                                    placeholder={plans.length ? "Plan label" : "No plans"}
+                                    items={planLabelItems}
+                                    label="text"
+                                    itemId="value"
+                                    hideEmptyState={true}
+                                    clearable={true}
+                                    searchable={true}
+                                />
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -722,6 +791,7 @@
                     {dashboardObjectType}
                     {users}
                     doFilters={(test) => doFilters(test, FILTER_STACK)}
+                    planLabelsOf={testPlanLabels}
                     bind:clickedTests={clickedTests}
                     collapsed={getCollapseState(`collapse-${groupStats.group.id}`, collapseState)}
                     filtered={hideEmptyGroup(groupStats, FILTER_STACK)}
