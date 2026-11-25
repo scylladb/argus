@@ -222,8 +222,11 @@ async def resolve_run_reference(entity: ChatEntity, scope: Scope, reference: str
         raise TestReferenceError(f"{reference} names a test, not a run. Name {RUN_HINT}. The latest builds of "
                                  f"{scope.label(test)}: {await _recent_builds(test)}")
     test = resolve_test_reference(scope, test_reference)
-    run = await TestRunService().get_run_by_build_number(test.build_system_id, number)
-    if run is None:
+    runs = await TestRunService().get_runs_by_build_number(test.build_system_id, number)
+    if not runs:
         raise TestReferenceError(f"{scope.label(test)} has no build #{number} in Argus. Its latest builds: "
                                  f"{await _recent_builds(test)}")
-    return await run_in_scope(entity, run.id)
+    if len(runs) > 1:
+        raise TestReferenceError(f"{scope.label(test)} build #{number} has {len(runs)} runs: "
+                                 f"{', '.join(str(run.id) for run in runs)}. Name one by its id.")
+    return await run_in_scope(entity, runs[0].id)
