@@ -25,7 +25,6 @@
 
     interface Props {
         runId?: string;
-        buildNumber?: any;
         testInfo?: any;
         tab?: string;
         updateUrl?: boolean;
@@ -34,7 +33,6 @@
 
     let {
         runId = "",
-        buildNumber = $bindable(-1),
         testInfo = {},
         tab = "",
         updateUrl = true,
@@ -55,8 +53,8 @@
         if (tabName !== activeTab) {
             activeTab = tabName;
             visitedTabs[tabName] = true;
-            if (updateUrl && !window.location.pathname.startsWith("/workspace")) {
-                history.replaceState({}, "", runUrl(testInfo.test.build_system_id, buildNumber, tabName));
+            if (updateUrl && testRun && !window.location.pathname.startsWith("/workspace")) {
+                history.replaceState({}, "", runUrl(testRun.build_id, testRun.build_number, tabName));
             }
         }
     };
@@ -68,11 +66,6 @@
             if (!testRun) {
                 failedToLoad = true;
                 return;
-            }
-            if (buildNumber == -1) {
-                buildNumber = parseInt(
-                    testRun.build_job_url.split("/").reverse()[1]
-                );
             }
         } catch (error) {
             if (error?.status === "error") {
@@ -110,8 +103,8 @@
     <div class="d-flex px-2 py-2 mb-1 border-bottom bg-white ">
         <div class="p-1 min-width-0 text-truncate">
             {#if testRun}
-                <a class="link-dark" href={runUrl(testRun.build_id, buildNumber)}>
-                    {testRun.build_id}#{buildNumber}
+                <a class="link-dark" href={runUrl(testRun.build_id, testRun.build_number)}>
+                    {testRun.build_id}#{testRun.build_number}
                 </a>
             {/if}
         </div>

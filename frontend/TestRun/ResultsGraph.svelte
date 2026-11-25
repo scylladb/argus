@@ -237,7 +237,7 @@
 
                         const point = context.chart.data.datasets[dataPoint.datasetIndex].data[dataPoint.dataIndex];
                         innerHtml += `<div class="d-flex justify-content-end mt-2">`;
-                        innerHtml += `<a href="${runUrl(graph.build_id, point.build_number)}" class="btn btn-success btn-sm" target="_blank">Open <i class="fas fa-external-link-alt"></i></a>`;
+                        innerHtml += `<a href="${encodeURI(runUrl(graph.build_id, point.build_number))}" class="btn btn-success btn-sm" target="_blank">Open <i class="fas fa-external-link-alt"></i></a>`;
                         innerHtml += `</div>`;
 
                         // Add separator between points if not the last one

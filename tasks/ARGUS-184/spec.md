@@ -131,7 +131,7 @@ Fields added to existing responses. Each one is the run's stored value, and
 // GET /api/v1/views/widgets/graphed_stats, per test_runs entry and per nemesis_data entry
 { build_number: number | null }                    // build_id is already there
 // GET /api/v1/views/widgets/summary/versioned_runs, per test per method
-{ build_number: number | null }                    // build_id is already in test_info
+{ build_id: string; build_number: number | null }
 // POST /api/v1/client/sct/similar_runs_info, per run; "build_id" keeps its "job#N" display string
 { build_job: string; build_number: number | null }
 // results graphs (test page and graphs widget): per graph, and per point

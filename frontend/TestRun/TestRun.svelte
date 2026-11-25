@@ -49,7 +49,6 @@
             pretty_name: string,
             name: string,
             plugin_name: string,
-            build_system_id: string,
             test_metadata?: Record<string, string>,
         },
         group: {
@@ -62,6 +61,7 @@
     export interface SCTTestRun {
         id: string,
         build_id: string,
+        build_number: number | null,
         assignee: string,
         start_time: string,
         end_time: string,
@@ -160,7 +160,6 @@
 
     interface Props {
         runId?: string;
-        buildNumber?: any;
         testInfo: TestInfo;
         tab?: string;
         updateUrl?: boolean;
@@ -169,7 +168,6 @@
 
     let {
         runId = "",
-        buildNumber = $bindable(-1),
         testInfo,
         tab = "",
         updateUrl = true,
@@ -209,9 +207,6 @@
                 failedToLoad = true;
                 return;
             }
-            if (buildNumber == -1) {
-                buildNumber = parseInt(testRun.build_job_url.split("/").reverse()[1]);
-            }
             jUnitResults = json.response.junit_reports ?? [];
             jUnitFetched = true;
         } catch (error) {
@@ -237,8 +232,8 @@
         if (tabName !== activeTab) {
             activeTab = tabName;
             visitedTabs[tabName] = true;
-            if (updateUrl && !window.location.pathname.startsWith("/workspace")) {
-                history.replaceState({}, "", runUrl(testInfo.test.build_system_id, buildNumber, tabName));
+            if (updateUrl && testRun && !window.location.pathname.startsWith("/workspace")) {
+                history.replaceState({}, "", runUrl(testRun.build_id, testRun.build_number, tabName));
             }
         }
     };
@@ -265,8 +260,8 @@
     <div class="d-flex px-2 py-2 mb-1 border-bottom bg-white">
         <div class="p-1 min-width-0 text-truncate">
             {#if testRun}
-                <a class="link-dark" href={runUrl(testRun.build_id, buildNumber)}>
-                    {testRun.build_id}#{buildNumber}
+                <a class="link-dark" href={runUrl(testRun.build_id, testRun.build_number)}>
+                    {testRun.build_id}#{testRun.build_number}
                 </a>
                 {#if testRun.minicloud}
                     <span class="badge text-bg-warning ms-1" title="Provisioned on minicloud, the local cloud emulator, not on the real cloud">minicloud</span>

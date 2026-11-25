@@ -654,6 +654,7 @@ class ResultsService:
                 if method_name not in result[sut_version][str(test_id)]:
                     result[sut_version][str(test_id)][method_name] = {
                         'run_id': str(row['id']),
+                        'build_id': row['build_id'],
                         'build_number': row['build_number'],
                         'status': row['status'],
                         'started_by': row['started_by']

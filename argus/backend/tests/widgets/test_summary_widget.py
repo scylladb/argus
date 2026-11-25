@@ -54,7 +54,7 @@ def test_summary_runs_results_rejects_malformed_test_id(api_client):
     assert res["response"]["exception"] == "RequestValidationError"
 
 
-def test_summary_versioned_runs_with_seeded_view(api_client, seeded_view_with_run, sct_run):
+def test_summary_versioned_runs_with_seeded_view(api_client, seeded_view_with_run, sct_run, fake_test):
     """View pointing at a seeded SCT run returns the run's version + test info."""
     res = api_client.get(
         f"/api/v1/views/widgets/summary/versioned_runs?view_id={seeded_view_with_run.view_id}"
@@ -67,6 +67,7 @@ def test_summary_versioned_runs_with_seeded_view(api_client, seeded_view_with_ru
     assert sct_run.test_id in body["versions"][expected_version]
     assert body["versions"][expected_version][sct_run.test_id][method_name]["run_id"] == sct_run.run_id
     assert body["versions"][expected_version][sct_run.test_id][method_name]["build_number"] == 42
+    assert body["versions"][expected_version][sct_run.test_id][method_name]["build_id"] == fake_test.build_system_id
     assert sct_run.test_id in body["test_info"]
 
 

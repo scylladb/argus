@@ -341,3 +341,28 @@ Replay:
   check that the lookup on the dev server still answers.
 - [x] Run the verify sequence.
 - [x] Commit `perf(testrun): look up a build through a local index`.
+
+## Task 8 — PR review fixes
+
+**Files:**
+- Modify: the four run views (`TestRun.svelte`, `Generic/GenericTestRun.svelte`,
+  `Sirenada/SirenadaTestRun.svelte`, `DriverMatrixTestRun.svelte`)
+- Modify: `frontend/TestRun/ResultsGraph.svelte`
+- Modify: `argus/backend/service/results_service.py` (`get_tests_by_version`) and
+  `frontend/Views/Widgets/SummaryWidget/SummaryWidget.svelte`
+- Test: `argus/backend/tests/widgets/test_summary_widget.py`,
+  `argus/backend/tests/results_service/test_results_service.py`
+
+**Internals:**
+- **Run views:** the header link and the tab-switch address take `testRun.build_id`
+  and `testRun.build_number`. The `buildNumber` prop and the parsing of
+  `build_job_url` go away. The address stays as it is until the run loads.
+- **Results graph tooltip:** the link is passed through `encodeURI`, so a quote in a
+  job name cannot break out of the `href`.
+- **Summary:** each per-method entry carries its own `build_id`, and the link takes it
+  from there instead of `test_info`.
+
+- [x] Extend the summary tests with `build_id` and confirm the failure.
+- [x] Make the changes.
+- [x] Run the verify sequence.
+- [x] Commit `fix(frontend): link runs by their own build in review fixes`.
