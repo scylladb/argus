@@ -204,9 +204,7 @@ in `create_context`, which is async; `default_options()` is not, and loses its
   3. the release flip
   4. this script again
 - `legacy_rows(run_id)`: paged raw CQL `SELECT id, packages FROM {ks}.sct_test_run`,
-  with `WHERE id = %s ALLOW FILTERING` for one run. `id` is not the partition
-  key, so check the cost of that path before writing it, or select it by
-  `build_id` instead.
+  with `WHERE id = %s` for one run, served by the existing index on `id`.
 - Keep the first entry per name. Build `SCTPackage.model_construct(...)` for
   each.
 - Add the rows to a 64 KB unlogged batch, the `FinishedRowBatch` pattern of
@@ -216,24 +214,28 @@ in `create_context`, which is async; `default_options()` is not, and loses its
 - No unit test. No migration script has one. Task 5 checks it on the dev
   cluster.
 
-- [ ] Write the script.
-- [ ] Run `uv run pre-commit run --all-files`.
-- [ ] Commit `feature(scripts/migration): copy packages into sct_package`.
+- [x] Write the script.
+- [x] Run `uv run pre-commit run --all-files`.
+- [x] Commit `feature(scripts/migration): copy packages into sct_package`.
 
 ## Task 5 — Check on the dev cluster
 
 No commit. Record the results in the pull request body.
 
-- [ ] From the worktree, run `sync-models` against the dev cluster. Confirm
+- [x] From the worktree, run `sync-models` against the dev cluster. Confirm
   that `sct_package` exists and `sct_test_run.packages` stays.
-- [ ] Run the backfill. The row count equals the sum of distinct names per run
+- [x] Run the backfill. The row count equals the sum of distinct names per run
   (from the shape scan: 12,443 runs). Run it again; the count stays.
-- [ ] Start uvicorn from the worktree on a free port. Compare against the
-  running dev server on master, on the same runs:
+- [x] Compare the change against master on the same runs. The running dev
+  server serves another branch, so both sides run one authenticated
+  `TestClient` script on the dev data, one from a master checkout:
   - The run page Packages tab, the details versions and the issue template.
   - A results chart with release markers.
   - The Summary, Graphed Stats and Nemesis Stats widgets.
   - The perf history.
   - The kernel report.
   - An email report preview.
-- [ ] Import the app on Python 3.13, as the release bundle runs it.
+- [x] Import the app on Python 3.13, as the release bundle runs it.
+
+The dev data holds no SCT test with result tables and no perf run with
+packages, so the results chart and the perf history rest on the backend tests.
