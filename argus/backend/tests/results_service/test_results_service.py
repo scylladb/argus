@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGenericResultData, ColumnMetadata, ArgusGraphView
 from argus.backend.plugins.sct.testrun import SCTTestRun
-from argus.backend.plugins.sct.udt import PackageVersion
+from argus.backend.plugins.sct.service import SCTService
 from argus.backend.service.results_service import ResultsService
 
 
@@ -113,8 +113,8 @@ async def test_get_tests_by_version_groups_runs_correctly(argus_db):
     run_id2 = uuid4()
     run_id3 = uuid4()
     run_id4 = uuid4()
-    pkg_v4_0 = PackageVersion(name='scylla', version='4.0', date='2021-01-01', revision_id='', build_id='')
-    pkg_v4_1 = PackageVersion(name='scylla', version='4.1', date='2021-02-01', revision_id='', build_id='')
+    pkg_v4_0 = dict(name='scylla', version='4.0', date='2021-01-01', revision_id='', build_id='')
+    pkg_v4_1 = dict(name='scylla', version='4.1', date='2021-02-01', revision_id='', build_id='')
 
     start_time = datetime.now(UTC)
     await SCTTestRun(
@@ -124,7 +124,6 @@ async def test_get_tests_by_version_groups_runs_correctly(argus_db):
         test_id=test_id1,
         test_method='test_method1',  # Changed to 'test_method'
         investigation_status='',
-        packages=[pkg_v4_0],
         start_time = start_time + timedelta(milliseconds=1)
     ).save()
     await SCTTestRun(
@@ -134,7 +133,6 @@ async def test_get_tests_by_version_groups_runs_correctly(argus_db):
         test_id=test_id1,
         test_method='test_method2',  # Changed to 'test_method'
         investigation_status='ignored',
-        packages=[pkg_v4_0],
         start_time = start_time + timedelta(milliseconds=2)
     ).save()
     await SCTTestRun(
@@ -144,7 +142,6 @@ async def test_get_tests_by_version_groups_runs_correctly(argus_db):
         test_id=test_id2,
         test_method='test_method1',  # Changed to 'test_method'
         investigation_status='',
-        packages=[pkg_v4_0],
         start_time = start_time + timedelta(milliseconds=3)
     ).save()
     await SCTTestRun(
@@ -154,9 +151,11 @@ async def test_get_tests_by_version_groups_runs_correctly(argus_db):
         test_id=test_id2,
         test_method='test_method1',  # Changed to 'test_method'
         investigation_status='',
-        packages=[pkg_v4_1],
         start_time = start_time + timedelta(milliseconds=4)
     ).save()
+
+    for run_id, package in ((run_id1, pkg_v4_0), (run_id2, pkg_v4_0), (run_id3, pkg_v4_0), (run_id4, pkg_v4_1)):
+        await SCTService.submit_packages(run_id, [package])
 
     sut_package_name = 'scylla'
     test_ids = [test_id1, test_id2]

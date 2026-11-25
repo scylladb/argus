@@ -3,18 +3,21 @@ from collections import defaultdict
 from uuid import UUID
 
 from argus.backend.util.common import chunk
-from argus.backend.plugins.sct.testrun import SCTNemesis, SCTTestRun
+from argus.backend.plugins.sct.testrun import SCTNemesis, SCTPackage, SCTTestRun
 from argus.backend.util.nemesis_map import get_nemesis_name
 
 
 class NemesisStatsService:
     async def get_nemesis_data(self, test_id: UUID):
         rows = await SCTTestRun.find(test_id=test_id).only(
-            "id", "investigation_status", "packages").all()
+            "id", "investigation_status").all()
         nemesis_data = []
 
-        nemesis_chunks = await asyncio.gather(
-            *(SCTNemesis.find(run_id__in=batch).all() for batch in chunk({r.id for r in rows})))
+        run_ids = {r.id for r in rows}
+        nemesis_chunks, packages = await asyncio.gather(
+            asyncio.gather(*(SCTNemesis.find(run_id__in=batch).all() for batch in chunk(run_ids))),
+            SCTPackage.for_runs(run_ids),
+        )
         nemesis_rows = [row for rows_chunk in nemesis_chunks for row in rows_chunk]
 
         nemesis_runs_data = defaultdict(list)
@@ -23,7 +26,7 @@ class NemesisStatsService:
 
         for run in [row for row in rows if row.investigation_status.lower() != "ignored"]:
             try:
-                version = [package.version for package in run.packages
+                version = [package.version for package in packages.get(run.id, [])
                            if package.name == "scylla-server"][0]
             except (IndexError, TypeError):
                 continue

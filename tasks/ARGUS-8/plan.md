@@ -80,7 +80,7 @@ at the commit.
 - Modify: `argus/backend/service/views_widgets/graphed_stats.py:17-60, 95-160`.
 - Modify: `argus/backend/service/views_widgets/nemesis_stats.py:11-30`.
 - Modify: `argus/backend/service/email_service.py`, the `Main` and `Packages`
-  sections (:79-110) and `create_report`.
+  sections (:79-110).
 - Test, new cases in `argus/backend/tests/sct_api/test_sct_api.py`:
   - Submit, then read through the run response.
   - A resubmission is idempotent.
@@ -89,18 +89,18 @@ at the commit.
     the conditional-write retry.
   - A heartbeat that saves the run after a submission keeps its packages.
   - A target package sets `scylla_version` and `version_source`.
-- Test: `argus/backend/tests/release_cleanup/test_release_cleanup_api.py`. A
-  deleted run leaves no packages.
 - Test, update to the table:
   - `argus/backend/tests/results_service/test_results_service.py:116-160`:
     submit through `SCTService.submit_packages`.
-  - `test_chartjs_additional_functions.py` and `test_create_chartjs.py`: value
-    objects become `SCTPackage.model_construct(...)`.
+  - `test_chartjs_additional_functions.py`: value objects become
+    `SCTPackage.model_construct(...)`. `test_create_chartjs.py` needs no change.
   - `argus/backend/tests/widgets/test_graphed_stats_widget.py:64`.
-  - `argus/backend/tests/testrun_api/test_testrun_service.py:33`: pick another
-    full-only field.
-  - Re-run `integration/test_sct_lifecycle.py`, `email_service/test_email.py`
-    and `release_summary/test_hooks.py`. Each must pass unchanged.
+  - `argus/backend/tests/testrun_api/test_testrun_service.py:33`: the
+    full-only field becomes `screenshots`.
+  - `integration/test_sct_lifecycle.py`: the client run info no longer carries
+    `packages`, so the test reads them from the run response.
+  - Re-run `email_service/test_email.py` and `release_summary/test_hooks.py`.
+    Each must pass unchanged.
 
 **Internals:**
 
@@ -110,7 +110,8 @@ at the commit.
 - Table name: `sct_package`.
 - `classmethod for_runs(run_ids) -> dict[UUID, list[SCTPackage]]`:
   - `chunk(run_ids)` (`argus/backend/util/common.py:58`).
-  - One `find(run_id__in=batch).all()` per batch, through `asyncio.gather`.
+  - One `find(run_id__in=batch).all()` per batch, through `gather_limited`, so a
+    view over thousands of runs keeps at most 50 reads in flight.
   - Then groups the rows by `run_id`.
   - Returns `{}` for no ids.
 
@@ -130,9 +131,9 @@ at the commit.
    the same name.
 3. Save them in an `AsyncBatchQuery(logged=False)`.
 4. For each target package, call `process_target_version`.
-5. When `version_source` or `scylla_version` changed, call
+5. When the submission holds a target package, call
    `run.update(version_source=..., scylla_version=...)`, then `index_version()`
-   and `mark_release_summary_stale(run.release_id)`.
+   and `mark_release_summary_stale(run.release_id)`, as the old code did.
 6. Return `"added"`.
 
 `CONDITIONAL_WRITE_ATTEMPTS` stays, because the nemesis-stats write uses it.
@@ -149,16 +150,17 @@ at the commit.
 `nemesis_stats.get_nemesis_data` work the same way, per test.
 `graphed_stats.get_runs_details` makes one `for_runs` call over its id list.
 
-`email_service`:
-- `create_report` reads `await run.get_packages()` once.
-- It passes the result to the partials as a `packages` argument.
-- The partials render `[p.model_dump(exclude={"run_id"})]`.
+`email_service`: `Main` and `Packages` read `await self.test_run.get_packages()`
+in `create_context`, which is async; `default_options()` is not, and loses its
+`packages` key.
 
-- [ ] Write the failing tests.
-- [ ] Run them and confirm the failures.
-- [ ] Write the change.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit `feature(plugins/sct): store packages in their own table`.
+- [x] Write the failing tests.
+- [x] Run them and confirm the failures. On the old code the heartbeat test
+  loses the submitted package, and the one-row-per-name test fails on the old
+  append.
+- [x] Write the change.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit `feature(plugins/sct): store packages in their own table`.
 
 ## Task 3 — Read a run's packages through the client
 

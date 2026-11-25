@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import datetime
 import json
@@ -43,56 +44,73 @@ def _submit_sct_run(api_client, fake_test) -> str:
     return run_id
 
 
-async def test_submit_packages(api_client, sct_run_id):
-    payload = {
-        "packages": [
-            {
-                "name": "scylla-server",
-                "version": "6.0.0",
-                "commit_id": "deadbeef",
-                "origin": "scylla",
-            }
-        ],
-        "schema_version": "v8",
-    }
-    resp = api_client.post(
-        f"{API_PREFIX}/{sct_run_id}/packages/submit",
-        json=payload,
+def _run_response(api_client, run_id: str) -> dict:
+    resp = api_client.get(f"/api/v1/run/scylla-cluster-tests/{run_id}")
+    assert resp.json()["status"] == "ok", resp.text
+    return resp.json()["response"]
 
-    )
+
+def _run_packages(api_client, run_id: str) -> list[tuple[str, str]]:
+    return [(p["name"], p["version"]) for p in _run_response(api_client, run_id)["packages"]]
+
+
+def _submit_packages(api_client, run_id: str, packages: list[dict]):
+    resp = api_client.post(f"{API_PREFIX}/{run_id}/packages/submit",
+                           json={"packages": packages, "schema_version": "v8"})
     assert resp.status_code == 200
-    assert resp.json()["status"] == "ok"
-
-    # Verify model updated
-    run = await SCTTestRun.get(id=UUID(sct_run_id))
-    assert any(p.name == "scylla-server" and p.version ==
-               "6.0.0" for p in run.packages)
+    assert resp.json()["status"] == "ok", resp.text
 
 
-async def test_submit_packages_concurrent_submissions_keep_one_row(api_client, sct_run_id, monkeypatch):
-    java_driver = {"name": "java-driver", "version": "3.11.5.7", "date": None, "revision_id": None, "build_id": None}
-    scylla_bench = {"name": "scylla-bench", "version": "0.1.0", "date": None, "revision_id": None, "build_id": None}
-    original_get = SCTTestRun.get
-    interleaved = False
+async def test_submit_packages(api_client, sct_run_id):
+    _submit_packages(api_client, sct_run_id, [
+        {"name": "scylla-server", "version": "6.0.0", "commit_id": "deadbeef", "origin": "scylla"},
+    ])
 
-    async def get_then_submit_in_parallel(*args, **kwargs):
-        nonlocal interleaved
-        run = await original_get(*args, **kwargs)
-        if not interleaved:
-            interleaved = True
-            await SCTService.submit_packages(UUID(sct_run_id), [java_driver, scylla_bench])
+    assert _run_packages(api_client, sct_run_id) == [("scylla-server", "6.0.0")]
+
+
+async def test_submit_packages_keeps_one_row_per_name(api_client, sct_run_id):
+    kernel = {"name": "kernel", "version": "5.15.0"}
+    _submit_packages(api_client, sct_run_id, [kernel, {"name": "scylla-server", "version": "6.0.0"}])
+    _submit_packages(api_client, sct_run_id, [kernel, {"name": "scylla-server", "version": "6.0.1"}])
+
+    assert _run_packages(api_client, sct_run_id) == [("kernel", "5.15.0"), ("scylla-server", "6.0.1")]
+
+
+async def test_submit_packages_concurrent_submissions_keep_every_package(api_client, sct_run_id):
+    java_driver = {"name": "java-driver", "version": "3.11.5.7"}
+    scylla_bench = {"name": "scylla-bench", "version": "0.1.0"}
+
+    await asyncio.gather(
+        SCTService.submit_packages(UUID(sct_run_id), [java_driver]),
+        SCTService.submit_packages(UUID(sct_run_id), [scylla_bench]),
+    )
+
+    assert _run_packages(api_client, sct_run_id) == [("java-driver", "3.11.5.7"), ("scylla-bench", "0.1.0")]
+
+
+async def test_heartbeat_saved_after_a_submission_keeps_the_packages(api_client, sct_run_id, monkeypatch):
+    original_load = SCTTestRun.load_test_run.__func__
+
+    async def load_then_submit(cls, run_id):
+        run = await original_load(cls, run_id)
+        await SCTService.submit_packages(UUID(sct_run_id), [{"name": "scylla-server", "version": "6.0.0"}])
         return run
 
-    monkeypatch.setattr(SCTTestRun, "get", get_then_submit_in_parallel)
-    resp = api_client.post(
-        f"{API_PREFIX}/{sct_run_id}/packages/submit",
-        json={"packages": [java_driver], "schema_version": "v8"},
-    )
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "ok"
+    monkeypatch.setattr(SCTTestRun, "load_test_run", classmethod(load_then_submit))
+    resp = api_client.post(f"/api/v1/client/testrun/scylla-cluster-tests/{sct_run_id}/heartbeat")
+    assert resp.json()["status"] == "ok", resp.text
+    monkeypatch.undo()
 
-    run = await original_get(id=UUID(sct_run_id))
-    assert [(p.name, p.version) for p in run.packages] == [("java-driver", "3.11.5.7"), ("scylla-bench", "0.1.0")]
+    assert _run_packages(api_client, sct_run_id) == [("scylla-server", "6.0.0")]
+
+
+async def test_submit_target_package_sets_the_run_version(api_client, sct_run_id):
+    _submit_packages(api_client, sct_run_id, [{"name": "scylla-server-target", "version": "2026.2.0"}])
+
+    run = _run_response(api_client, sct_run_id)
+    assert run["scylla_version"] == "2026.2.0"
+    assert run["version_source"] == "scylla-server-target"
 
 
 async def test_kernel_report_counts_kernels_per_scylla_version(api_client, release_manager_service):

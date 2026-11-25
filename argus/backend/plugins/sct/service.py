@@ -15,6 +15,7 @@ from xml.etree import ElementTree
 from cassandra import DriverException
 from cassandra.cluster import NoHostAvailable
 from cassandra.util import uuid_from_time
+from coodie.batch import AsyncBatchQuery
 from coodie.exceptions import DocumentNotFound
 
 from argus.backend.models.github_issue import GithubIssue, IssueLink
@@ -30,6 +31,7 @@ from argus.backend.plugins.sct.testrun import (
     SCTJunitReports,
     SCTNemesis,
     SCTNemesisDescription,
+    SCTPackage,
     SCTResource,
     SCTTestRun,
     SCTUnprocessedEvent,
@@ -40,7 +42,6 @@ from argus.common.sct_types import GeminiResultsRequest, PerformanceResultsReque
 from argus.backend.plugins.sct.udt import (
     CloudInstanceDetails,
     NodeDescription,
-    PackageVersion,
     PerformanceHDRHistogram,
 )
 from argus.backend.service.cost_rollup_service import CostRollupService
@@ -109,39 +110,28 @@ class SCTService:
 
     @staticmethod
     async def submit_packages(run_id: UUID, packages: list[dict]) -> str:
-        submitted = [PackageVersion(**package_dict) for package_dict in packages]
-        for _ in range(CONDITIONAL_WRITE_ATTEMPTS):
-            try:
-                run: SCTTestRun = await SCTTestRun.get(id=run_id)
-            except DocumentNotFound as exception:
-                LOGGER.error("Run %s not found for SCTTestRun", run_id)
-                raise SCTServiceException("Run not found", run_id) from exception
-            stored = list(run.packages)
-            merged = list(stored)
-            updates = {}
-            for package in submitted:
-                if "target" in package.name:
-                    SCTService.process_target_version(run, package)
-                    updates["version_source"] = run.version_source
-                    updates["scylla_version"] = run.scylla_version
-                if package not in merged:
-                    merged.append(package)
-            if merged != stored:
-                updates["packages"] = merged
-            if not updates:
-                return "added"
-            # An empty list reads back as null, so the condition compares against null.
-            result = await run.update(if_conditions={"packages": stored or None}, **updates)
-            if result.applied:
-                if "scylla_version" in updates:
-                    await run.index_version()
-                    await mark_release_summary_stale(run.release_id)
-                return "added"
-            LOGGER.info("Run %s packages changed during the submission, retrying", run_id)
-        raise SCTServiceException("Concurrent package submissions did not settle", run_id)
+        try:
+            run: SCTTestRun = await SCTTestRun.get(id=run_id)
+        except DocumentNotFound as exception:
+            LOGGER.error("Run %s not found for SCTTestRun", run_id)
+            raise SCTServiceException("Run not found", run_id) from exception
+        submitted = [SCTPackage(**package_dict, run_id=run_id) for package_dict in packages]
+        batch = AsyncBatchQuery(logged=False)
+        for package in {package.name: package for package in submitted}.values():
+            await package.save(batch=batch)
+        await batch.execute()
+
+        targets = [package for package in submitted if "target" in package.name]
+        for package in targets:
+            SCTService.process_target_version(run, package)
+        if targets:
+            await run.update(version_source=run.version_source, scylla_version=run.scylla_version)
+            await run.index_version()
+            await mark_release_summary_stale(run.release_id)
+        return "added"
 
     @staticmethod
-    def process_target_version(run: SCTTestRun, package: PackageVersion):
+    def process_target_version(run: SCTTestRun, package: SCTPackage):
         if run.version_source and "upgrade-target" in run.version_source and package.name == "scylla-server-target":
             return
         run.version_source = package.name
@@ -846,6 +836,7 @@ class SCTService:
             for run_id, test_run in zip(runs_with_issues[:MAX_SIMILARS], fetched_runs)
             if test_run is not None
         }
+        packages = await SCTPackage.for_runs(test_runs)
 
         # Step 4: Assign run and issue details to result for runs with issues
         for run_id in runs_with_issues:
@@ -869,7 +860,7 @@ class SCTService:
 
                 for pkg_name in ["scylla-server-upgraded", "scylla-server", "scylla-server-target"]:
                     sut_version = next(
-                        (f"{pkg.version}-{pkg.date}" for pkg in test_run.packages if pkg.name == pkg_name), None)
+                        (f"{pkg.version}-{pkg.date}" for pkg in packages.get(run_id, []) if pkg.name == pkg_name), None)
                     if sut_version:
                         break
 
@@ -918,6 +909,7 @@ class SCTService:
                     )))
                     if test_run is not None
                 }
+                packages = await SCTPackage.for_runs(additional_test_runs)
 
                 for run_id in additional_run_ids:
                     try:
@@ -936,7 +928,7 @@ class SCTService:
 
                         for pkg_name in ["scylla-server-upgraded", "scylla-server", "scylla-server-target"]:
                             sut_version = next(
-                                (f"{pkg.version}-{pkg.date}" for pkg in test_run.packages if pkg.name == pkg_name), None)
+                                (f"{pkg.version}-{pkg.date}" for pkg in packages.get(run_id, []) if pkg.name == pkg_name), None)
                             if sut_version:
                                 break
 

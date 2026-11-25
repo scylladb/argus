@@ -3,7 +3,7 @@ from uuid import uuid4
 import pytest
 from datetime import datetime
 
-from argus.backend.plugins.sct.udt import PackageVersion
+from argus.backend.plugins.sct.testrun import SCTPackage
 from argus.backend.service.results_service import (
     get_sorted_data_for_column_and_row,
     get_min_max_y,
@@ -22,15 +22,15 @@ from argus.backend.models.result import ArgusGenericResultMetadata, ArgusGeneric
 @pytest.fixture
 def package_data():
     return [
-        PackageVersion(name='scylla-server', version='2024.3.0~dev',
+        SCTPackage.model_construct(name='scylla-server', version='2024.3.0~dev',
                        date='20241018', revision_id='c3e2bc', build_id='b974e8'),
-        PackageVersion(name='scylla-manager-server', version='3.2.8', date='20240517', revision_id='', build_id='')
+        SCTPackage.model_construct(name='scylla-manager-server', version='3.2.8', date='20240517', revision_id='', build_id='')
     ]
 
 
 def test_identify_main_package_should_return_most_frequent_package(package_data):
     packages_list = package_data * 5 + \
-        [PackageVersion(name='java-driver', version='3.11.5.3', date='null', revision_id='', build_id='')]
+        [SCTPackage.model_construct(name='java-driver', version='3.11.5.3', date='null', revision_id='', build_id='')]
     main_package = _identify_most_changed_package(packages_list)
     assert main_package == 'scylla-server'
 
@@ -39,8 +39,8 @@ def test_split_results_by_versions_should_group_correctly(package_data):
     packages = {
         str(uuid4()): package_data,
         str(uuid4()): [
-            PackageVersion(name='scylla-server', version='2024.2.0~dev', date='20241018', revision_id='c3e2bc', build_id='b974e8')],
-        str(uuid4()): [PackageVersion(name='scylla-server', version='2024.2.0', date='20241018', revision_id='', build_id='')]
+            SCTPackage.model_construct(name='scylla-server', version='2024.2.0~dev', date='20241018', revision_id='c3e2bc', build_id='b974e8')],
+        str(uuid4()): [SCTPackage.model_construct(name='scylla-server', version='2024.2.0', date='20241018', revision_id='', build_id='')]
     }
     main_package = 'scylla-server'
     versions_map = _split_results_by_release(packages, main_package)
@@ -64,11 +64,11 @@ def test_get_sorted_data_for_column_and_row():
                                sut_timestamp=datetime(2023, 10, 22)),
     ]
     packages = {
-        run_id1: [PackageVersion(name='pkg1', version='1.0', date='', revision_id='', build_id='')],
-        run_id2: [PackageVersion(name='pkg1', version='1.1', date='', revision_id='', build_id=''),
-                  PackageVersion(name='pkg2', version='1.0', date='', revision_id='', build_id='')],
-        run_id3: [PackageVersion(name='pkg1', version='1.1', date='', revision_id='', build_id=''),
-                  PackageVersion(name='pkg2', version='1.1', date='20241111', revision_id='', build_id='')],
+        run_id1: [SCTPackage.model_construct(name='pkg1', version='1.0', date='', revision_id='', build_id='')],
+        run_id2: [SCTPackage.model_construct(name='pkg1', version='1.1', date='', revision_id='', build_id=''),
+                  SCTPackage.model_construct(name='pkg2', version='1.0', date='', revision_id='', build_id='')],
+        run_id3: [SCTPackage.model_construct(name='pkg1', version='1.1', date='', revision_id='', build_id=''),
+                  SCTPackage.model_construct(name='pkg2', version='1.1', date='20241111', revision_id='', build_id='')],
     }
     runs_details = RunsDetails(ignored=[], packages=packages)
     result = get_sorted_data_for_column_and_row(data, "col1", "row1", runs_details, main_package="pkg1")

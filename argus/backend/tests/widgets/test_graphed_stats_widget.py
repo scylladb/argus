@@ -61,7 +61,7 @@ def test_runs_details_unknown_run_ids(api_client):
 
 def test_runs_details_reports_a_run_that_fails_to_load_under_its_id(api_client):
     run_id = str(uuid.uuid4())
-    run_without_start_time = SimpleNamespace(build_id="job", build_number=1, packages=[], status="failed",
+    run_without_start_time = SimpleNamespace(build_id="job", build_number=1, status="failed",
                                              start_time=None, assignee=None, investigation_status="in_progress")
     query = MagicMock()
     query.only.return_value.first = AsyncMock(return_value=run_without_start_time)

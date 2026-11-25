@@ -73,6 +73,7 @@ class Main(Partial):
     async def create_context(self, options: dict[str, Any]) -> dict[str, Any]:
         return {
             **self.default_options(),
+            "packages": [p.model_dump() for p in await self.test_run.get_packages()],
         }
 
     def default_options(self) -> dict[str, Any]:
@@ -84,7 +85,6 @@ class Main(Partial):
             "duration": humanize.naturaldelta(self.test_run.end_time - self.test_run.start_time),
             "build_job_url": self.test_run.build_job_url,
             "run_id": self.test_run.id,
-            "packages": [dict(p) for p in self.test_run.packages],
             "status": self.test_run.status,
             "commit": self.test_run.scm_revision_id,
             "branch": self.test_run.branch_name,
@@ -96,16 +96,17 @@ class Main(Partial):
 class Packages(Partial):
     TEMPLATE_PATH = "email/partials/packages.html.j2"
     async def create_context(self, options: dict[str, Any]):
+        packages = [p.model_dump() for p in await self.test_run.get_packages()]
         return {
             **self.default_options(),
-            "has_data": len(self.test_run.packages) > 0,
+            "has_data": len(packages) > 0,
+            "packages": packages,
         }
 
     def default_options(self):
         return {
             **self._service_fields,
             "run_id": self.test_run.id,
-            "packages": [dict(p) for p in self.test_run.packages],
         }
 
 
