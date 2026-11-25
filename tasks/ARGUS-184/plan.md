@@ -315,3 +315,29 @@ Replay:
     summary and pytest widgets, and a results graph tooltip.
 - [ ] Run `argus run get --build-id <job> --build-number <n>` against the dev
   server.
+
+## Task 7 — Look up a build through a local index
+
+**Files:**
+- Modify: `argus/backend/plugins/core.py`, adding `_sync_additional_rules` to `PluginModelBase`
+- Modify: `argus/backend/db.py:159-164`, where `sync_additional_schema` takes the plugin models
+- Modify: `argus/backend/cli.py:56`, passing `all_plugin_models(True)`
+- Modify: `argus/backend/service/testrun.py:97`, dropping `allow_filtering()`
+- Test: `argus/backend/tests/testrun_api/test_run_by_build.py`
+
+**Internals:**
+- `PluginModelBase._sync_additional_rules(cls, session)` runs
+  `CREATE INDEX IF NOT EXISTS {table}_build_number_local_idx ON {table} ((build_id), build_number)`.
+  The table name comes from `cls.table_name()`.
+- `ScyllaCluster.sync_additional_schema(self, plugin_models=())` runs the rules of
+  `USED_MODELS` and then of `plugin_models`.
+- The test fixture builds the schema through `sync_models`, so the suite gets the index.
+
+- [x] Drop `allow_filtering()` and run `test_run_by_build.py`. Without the index,
+  ScyllaDB rejects the filter, so the tests fail.
+- [x] Add the index rule and pass the plugin models through `sync_models`.
+- [x] Run `test_run_by_build.py` and the chat reference tests.
+- [x] Run `uv run python -m argus.backend.cli sync-models` against the dev cluster, and
+  check that the lookup on the dev server still answers.
+- [x] Run the verify sequence.
+- [x] Commit `perf(testrun): look up a build through a local index`.

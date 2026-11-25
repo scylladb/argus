@@ -94,7 +94,7 @@ class TestRunService:
         plugin = self.get_plugin(plugin_name=test.plugin_name)
         if not plugin:
             return []
-        return await plugin.model.find(build_id=build_id, build_number=build_number).allow_filtering().all()
+        return await plugin.model.find(build_id=build_id, build_number=build_number).all()
 
     async def get_test_type_for_run(self, run_id: UUID) -> str:
         runs = await asyncio.gather(*(plugin.model.find_one(id=run_id) for plugin in AVAILABLE_PLUGINS.values()))

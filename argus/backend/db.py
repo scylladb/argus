@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Iterable
 from functools import cached_property
 import logging
 from typing import Optional
@@ -7,6 +8,7 @@ from cassandra import ConsistencyLevel
 from cassandra.cluster import ExecutionProfile, EXEC_PROFILE_DEFAULT, Cluster
 from cassandra.cqlengine import connection
 from cassandra.auth import PlainTextAuthProvider
+from coodie.aio import Document
 from coodie.drivers import register_driver
 from coodie.drivers.cassandra import CassandraDriver
 from argus.backend.util.config import Config
@@ -156,9 +158,9 @@ class ScyllaCluster:
 
         LOGGER.info("Core Models synchronized.")
 
-    def sync_additional_schema(self):
+    def sync_additional_schema(self, plugin_models: Iterable[type[Document]] = ()):
         LOGGER.info("Syncing additional rules...")
-        for model in USED_MODELS:
+        for model in [*USED_MODELS, *plugin_models]:
             if rule_func := getattr(model, "_sync_additional_rules", None):
                 rule_func(self.session)
         LOGGER.info("Syncing additional rules done.")

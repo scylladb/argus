@@ -17,8 +17,9 @@ build route, `main.get_run_by_build`.
 
 ## Constraints
 
-- No schema change. `build_id` is the partition key of every plugin run
-  table, so the lookup filters `build_number` inside one partition.
+- The schema change is one additive local index per plugin run table, which
+  `sync-models` creates. `build_id` is the partition key, so the index stays
+  inside one partition, and the lookup needs no `ALLOW FILTERING`.
 - No fallback link. A run's `build_id` is its test's `build_system_id`, and a
   run row without `build_number` is broken data.
 - The `/tests/<plugin>/<run_id>` route stays registered. Links already shared
@@ -58,7 +59,7 @@ sequenceDiagram
     B->>M: GET /test/scylla-master/longevity/longevity-100gb-4h/412
     M->>S: get_runs_by_build_number(build_id, 412)
     S->>D: argus_test_v2 WHERE build_system_id = ?
-    S->>D: <plugin run table> WHERE build_id = ? AND build_number = 412 ALLOW FILTERING
+    S->>D: <plugin run table> WHERE build_id = ? AND build_number = 412 (local index)
     S-->>M: [run_a, run_b]
     M-->>B: run view, gRun = [run_a.id, run_b.id]
     B->>B: one run panel per id
@@ -156,6 +157,13 @@ The report email partials receive `run_path`,
 `/test/<build_id>/<build_number>`, and link
 `http://argus.scylladb.com{{ options['run_path'] }}[/<tab>]`.
 
+The schema change, applied by `sync-models` to `sct_test_run`, `generic_run`,
+`driver_test_run` and `sirenada_run`:
+
+```sql
+CREATE INDEX IF NOT EXISTS <table>_build_number_local_idx ON <table> ((build_id), build_number);
+```
+
 ### Module API
 
 ```python
@@ -197,3 +205,7 @@ func RunURL(base, buildID string, number int) string
   need. (spec)
 - The report email keeps its hard-coded host. Moving it to `BASE_URL` is a
   separate change. (spec)
+- Each plugin run table gets a local index on `(build_id), build_number`. A
+  filter on `build_number` reads every full row of the build partition, about
+  44 KB per SCT run: 44 ms at 3000 runs, against 0.2 ms through the index, for
+  about 22% more cost on a heartbeat write. (build)
