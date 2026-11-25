@@ -146,3 +146,14 @@ export const createScreenshotUrl = function (plugin, id, link) {
     const name = link.split("/").reverse()[0];
     return `/api/v1/tests/${plugin}/${id}/screenshot/${name}`;
 };
+
+/**
+ * Argus page of a run, by its build
+ * @param {string} buildId
+ * @param {number} buildNumber
+ * @param {string} [tab]
+ * @returns {string}
+ */
+export const runUrl = function (buildId, buildNumber, tab) {
+    return `/test/${buildId}/${buildNumber}${tab ? `/${tab}` : ""}`;
+};

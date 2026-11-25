@@ -49,6 +49,7 @@
             pretty_name: string,
             name: string,
             plugin_name: string,
+            build_system_id: string,
             test_metadata?: Record<string, string>,
         },
         group: {
@@ -112,6 +113,7 @@
 
 <script lang="ts">
     import { onMount, createEventDispatcher, tick } from "svelte";
+    import { runUrl } from "../Common/RunUtils";
     import Fa from "svelte-fa";
     import {
         faBox,
@@ -236,8 +238,7 @@
             activeTab = tabName;
             visitedTabs[tabName] = true;
             if (updateUrl && !window.location.pathname.startsWith("/workspace")) {
-                const newUrl = `/tests/${testInfo.test.plugin_name}/${runId}/${tabName}`;
-                history.replaceState({}, "", newUrl);
+                history.replaceState({}, "", runUrl(testInfo.test.build_system_id, buildNumber, tabName));
             }
         }
     };
@@ -264,7 +265,7 @@
     <div class="d-flex px-2 py-2 mb-1 border-bottom bg-white">
         <div class="p-1 min-width-0 text-truncate">
             {#if testRun}
-                <a class="link-dark" href="/tests/{testInfo.test.plugin_name}/{testRun.id}">
+                <a class="link-dark" href={runUrl(testRun.build_id, buildNumber)}>
                     {testRun.build_id}#{buildNumber}
                 </a>
                 {#if testRun.minicloud}

@@ -7,6 +7,7 @@
     import { timestampToISODate } from "../../../Common/DateUtils";
     import { createEventDispatcher } from "svelte";
     import { sanitizeHtml } from "../../../Common/safeHtml";
+    import { runUrl } from "../../../Common/RunUtils";
 
     interface Props {
         test: PytestResult;
@@ -59,7 +60,7 @@
             {test.test_type}
         </div>
         <div class="ms-2">
-            <a class="bg-primary px-2 d-inline-block rounded text-light" href="/tests/generic/{test.run_id}"><Fa icon={faClipboard}/> Run</a>
+            <a class="bg-primary px-2 d-inline-block rounded text-light" href={runUrl(test.build_id, test.build_number)}><Fa icon={faClipboard}/> Run</a>
         </div>
         <div class="ms-2 rounded text-light px-2 {PytestTextStyles[test.status]} {PytestBgStyles[test.status]}">
             {test.status}

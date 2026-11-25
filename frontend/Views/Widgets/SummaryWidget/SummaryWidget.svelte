@@ -23,6 +23,7 @@
     } from '@fortawesome/free-solid-svg-icons';
     import ResultTable from "../../../TestRun/Components/ResultTable.svelte";
     import RunIssues from "./RunIssues.svelte";
+    import { runUrl } from "../../../Common/RunUtils";
 
     let { dashboardObject } = $props();
 
@@ -351,7 +352,7 @@
                                         {#each Object.entries(methodData) as [runId, results]}
                                             {#key runId}
                                                 <h5 class="mt-3">
-                                                    <a href="/tests/scylla-cluster-tests/{runId}" target="_blank"
+                                                    <a href={runUrl(selectedVersionTestInfo[testId]?.build_id, currentVersionRuns[testId]?.[methodName]?.build_number)} target="_blank"
                                                        class="text-decoration-none">
                                                         {methodName}
                                                     </a>

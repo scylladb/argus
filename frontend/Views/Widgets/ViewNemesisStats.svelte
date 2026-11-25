@@ -3,6 +3,7 @@
 
     import { onMount } from "svelte";
     import { compareVersions } from "../../Common/versionSort";
+    import { runUrl } from "../../Common/RunUtils";
     import Chart from "chart.js/auto";
 
     let { viewId, dashboardObject } = $props();
@@ -567,7 +568,7 @@
                                                     </td>
                                                     <td class="run-id-column">
                                                         <a
-                                                            href={`/tests/scylla-cluster-tests/${run.run_id}`}
+                                                            href={runUrl(run.build_id, run.build_number)}
                                                             target="_blank"
                                                         >
                                                             {formatTimestamp(run.start_time)}

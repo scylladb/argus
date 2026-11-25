@@ -11,6 +11,7 @@ import {
     filterInvestigated,
     filterNotInvestigated,
     createScreenshotUrl,
+    runUrl,
     buildCleanResourcesCommand,
     buildMonitorCommands,
     buildSshCommands,
@@ -269,5 +270,16 @@ describe("isMonitorResource", () => {
         expect(isMonitorResource({ name: "x", resource_type: "monitor" })).toBe(true);
         expect(isMonitorResource({ name: "sct-monitor-node-a-0-1" })).toBe(true);
         expect(isMonitorResource({ name: "sct-db-node-a-0-1", resource_type: "db-node" })).toBe(false);
+    });
+});
+
+describe("runUrl", () => {
+    it("links a run by its build id and build number", () => {
+        expect(runUrl("scylla-master/longevity/longevity-100gb-4h", 412))
+            .toBe("/test/scylla-master/longevity/longevity-100gb-4h/412");
+    });
+
+    it("appends the tab", () => {
+        expect(runUrl("job", 7, "events")).toBe("/test/job/7/events");
     });
 });

@@ -524,7 +524,6 @@
                                 <ResultsGraphs
                                     test_id={testInfo.test.id}
                                     bind:clickedTestRuns
-                                    on:runClick={handleTestRunClick}
                                 />
                             </div>
                         </div>

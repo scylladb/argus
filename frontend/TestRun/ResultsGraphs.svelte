@@ -1,7 +1,6 @@
 <script lang="ts">
     import { ResultsRoutes } from "../Common/ResultsRoutes";
     import { overlayFocus } from "../Common/overlayFocus";
-    import {createEventDispatcher} from "svelte";
     import queryString from "query-string";
     import {sendMessage} from "../Stores/AlertStore";
     import ResultsGraph from "./ResultsGraph.svelte";
@@ -42,11 +41,6 @@
     let selectedView = $state("");
 
     let allTabs = $derived(["All Graphs", ...graphViews.map((v) => v.name), "+ View"]);
-    const dispatch = createEventDispatcher();
-
-    const dispatchRunClick = (e) => {
-        dispatch("runClick", {runId: e.detail.runId});
-    };
 
     const generateRandomHash = () => {
         return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -252,7 +246,6 @@
                     test_id={test_id}
                     index={graph.id}
                     releasesFilters={releasesFilters}
-                    on:runClick={dispatchRunClick}
             />
         </div>
     {/each}

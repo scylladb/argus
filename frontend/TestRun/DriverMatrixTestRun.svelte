@@ -15,7 +15,7 @@
     import CostsTab from "./CostsTab.svelte";
     import TestRunComments from "./TestRunComments.svelte";
     import { sendMessage } from "../Stores/AlertStore";
-    import { fetchRun } from "../Common/RunUtils";
+    import { fetchRun, runUrl } from "../Common/RunUtils";
     import RunStatusButton from "./RunStatusButton.svelte";
     import RunInvestigationStatusButton from "./RunInvestigationStatusButton.svelte";
     import RunAssigneeSelector from "./RunAssigneeSelector.svelte";
@@ -56,8 +56,7 @@
             activeTab = tabName;
             visitedTabs[tabName] = true;
             if (updateUrl && !window.location.pathname.startsWith("/workspace")) {
-                const newUrl = `/tests/${testInfo.test.plugin_name}/${runId}/${tabName}`;
-                history.replaceState({}, "", newUrl);
+                history.replaceState({}, "", runUrl(testInfo.test.build_system_id, buildNumber, tabName));
             }
         }
     };
@@ -111,7 +110,7 @@
     <div class="d-flex px-2 py-2 mb-1 border-bottom bg-white ">
         <div class="p-1 min-width-0 text-truncate">
             {#if testRun}
-                <a class="link-dark" href="/tests/{testInfo.test.plugin_name}/{testRun.id}">
+                <a class="link-dark" href={runUrl(testRun.build_id, buildNumber)}>
                     {testRun.build_id}#{buildNumber}
                 </a>
             {/if}
