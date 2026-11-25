@@ -29,6 +29,9 @@ TOOL_RULES = """- Use the tools to look things up before you answer. Prefer one 
   one of them confirms it. Tell the user to confirm the card.
 - To change the parameters of a start that waits for confirmation, call
   adjust_run_params; do not propose the start again.
+- A release plan's labels select its tests. Before starting the next batch
+  of a plan, check how it did with get_plan_progress; to start only what
+  still needs a run, pass only to execute_plan_tests.
 - Use write_memory when a user asks you to remember a convention, or to add
   a finding to the release summary (kind "finding").
 - Tools named mcp_... come from servers outside Argus. Those whose

@@ -2,17 +2,29 @@
 (cli/internal/services/planner.go: BuildUpdateRequest, applyOptionsDiff, the participants and the empty-plan
 checks)."""
 import json
+from collections import defaultdict
 from dataclasses import dataclass, field
 from uuid import UUID
 
 from argus.backend.models.plan import ArgusReleasePlan
 from argus.backend.models.web import ArgusGroup, ArgusTest, User
+from argus.backend.service.chat.entity import ChatEntity
 from argus.backend.service.chat.history import as_utc
-from argus.backend.service.chat.resolve import Scope, TestReferenceError
+from argus.backend.service.chat.resolve import Scope, TestReferenceError, load_scope
 from argus.backend.service.planner_service import PlanDiffPayload
+from argus.backend.service.release_summary import ReleaseSummaryService
 from argus.backend.util.common import select_rows
+from argus.common.versions import parse_version
 
 OWNER_REFERENCES = {"$owner", "owner"}
+STATUS_GROUPS = {
+    "failed": {"failed", "test_error", "error"},
+    "passed": {"passed"},
+    "aborted": {"aborted"},
+    "in_progress": {"created", "running"},
+}
+NOT_RUN = "not_run"
+STATES = ("passed", "failed", "aborted", "in_progress", NOT_RUN)
 
 
 @dataclass(slots=True)
@@ -55,6 +67,77 @@ def plan_labels(plan: ArgusReleasePlan, scope: Scope) -> dict:
             labels.setdefault(label, []).append(entity)
     return {"plan": plan.name, "key": plan.key,
             "labels": [{"label": label, "entities": entities} for label, entities in sorted(labels.items())]}
+
+
+def state_of(status: str | None) -> str:
+    return next((state for state, statuses in STATUS_GROUPS.items() if status in statuses), NOT_RUN)
+
+
+def plan_tests(scope: Scope, plan: ArgusReleasePlan, labels: list[str] | None = None,
+               match_all: bool = False) -> list[ArgusTest]:
+    """The enabled tests of the plan, a group standing for its enabled tests. With labels, only those whose
+    plan entity carries them; matching ignores case."""
+    tests_by_id = {test.id: test for test in scope.tests}
+    if labels:
+        wanted = {label.lower() for label in labels}
+        available: set[str] = set()
+        entities = []
+        for entity_id, option in plan_options(plan).items():
+            entity_labels = option.get("labels", [])
+            available.update(entity_labels)
+            lowered = {label.lower() for label in entity_labels}
+            if wanted <= lowered if match_all else wanted & lowered:
+                entities.append(UUID(entity_id))
+    else:
+        entities = [*plan.tests, *plan.groups]
+    selected: dict[UUID, ArgusTest] = {}
+    for entity_id in entities:
+        if (test := tests_by_id.get(entity_id)) and test.enabled:
+            if (group := scope.groups.get(test.group_id)) is None or group.enabled:
+                selected[test.id] = test
+        elif (group := scope.groups.get(entity_id)) and group.enabled:
+            selected.update({test.id: test for test in scope.tests if test.group_id == group.id and test.enabled})
+    if labels and not selected:
+        listed = ", ".join(sorted(available)) or "none"
+        raise TestReferenceError(f"No test of the plan {plan.name} carries {', '.join(labels)}; "
+                                 f"its labels are: {listed}")
+    return sorted(selected.values(), key=scope.label)
+
+
+def plan_version(plan: ArgusReleasePlan, version: str | None) -> str:
+    if version := version or plan.target_version:
+        parsed = parse_version(version)
+        return str(parsed) if parsed else version
+    raise TestReferenceError(f"Name a version: the plan {plan.name} has no target version")
+
+
+async def entity_summaries(entity: ChatEntity, scope: Scope | None = None, wait: bool = False,
+                           only: set[UUID] | None = None) -> list[dict]:
+    """The release summaries of the chat, narrowed to the tests of only when given."""
+    service = ReleaseSummaryService()
+    if entity.test_ids is None and only is None:
+        return [await service.get(release_id, wait=wait) for release_id in entity.release_ids]
+    scope = scope or await load_scope(entity)
+    by_release: dict[UUID, set[UUID]] = defaultdict(set)
+    for test in scope.tests:
+        if only is None or test.id in only:
+            by_release[test.release_id].add(test.id)
+    return [await service.get(release_id, test_ids, wait=wait) for release_id, test_ids in by_release.items()]
+
+
+async def plan_states(entity: ChatEntity, scope: Scope, tests: list[ArgusTest],
+                      version: str) -> tuple[dict[UUID, dict | None], bool]:
+    """Each test's entry in the release summary of the version, None when the version has none, and whether a
+    summary came back stale."""
+    entries: dict[str, dict] = {}
+    stale = False
+    for summary in await entity_summaries(entity, scope, wait=True, only={test.id for test in tests}):
+        stale = stale or bool(summary.get("stale"))
+        for family in summary["families"]:
+            for summary_version in family["versions"]:
+                if summary_version["version"] == version:
+                    entries.update({entry["test_id"]: entry for entry in summary_version["tests"]})
+    return {test.id: entries.get(str(test.id)) for test in tests}, stale
 
 
 def entity_reference(scope: Scope, reference: str) -> ArgusTest | ArgusGroup:

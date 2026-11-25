@@ -49,6 +49,34 @@ describe("ChatModal", () => {
         vi.mocked(fetchJson).mockReset();
     });
 
+    it("shows examples in an empty chat and puts a picked one in the question box", async () => {
+        vi.mocked(fetchJson).mockImplementation(async (url: string) =>
+            url.endsWith("/memories") ? [] : conversation([]));
+        render(ChatModal, { props: { entityType: "release", entityId: "r1", entityName: "scylla-2025.1",
+                                     onClose: vi.fn() } });
+
+        const example = await screen.findByRole("button", { name: "Rerun the tests that failed on <version>, on gce." });
+        await fireEvent.click(example);
+
+        const question = screen.getByRole("textbox", { name: "Question" }) as HTMLTextAreaElement;
+        await waitFor(() => expect(question.value).toBe("Rerun the tests that failed on <version>, on gce."));
+        expect(document.activeElement).toBe(question);
+        expect(vi.mocked(fetchJson).mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+    });
+
+    it("opens the examples from the header", async () => {
+        vi.mocked(fetchJson).mockImplementation(async (url: string) =>
+            url.endsWith("/memories") ? [] : conversation());
+        render(ChatModal, { props: { entityType: "release", entityId: "r1", entityName: "scylla-2025.1",
+                                     onClose: vi.fn() } });
+        expect(await screen.findByText("what failed?")).toBeTruthy();
+
+        await fireEvent.click(screen.getByRole("button", { name: "What can I ask?" }));
+
+        expect(screen.getByRole("tab", { name: "Examples" }).getAttribute("aria-selected")).toBe("true");
+        expect(screen.getByRole("region", { name: "Plans and labels" })).toBeTruthy();
+    });
+
     it("lets an admin clear the chat after a confirmation", async () => {
         vi.mocked(fetchJson).mockImplementation(async (url: string, init?: RequestInit) =>
             init?.method === "DELETE" ? conversation([]) : url.endsWith("/memories") ? [] : conversation());

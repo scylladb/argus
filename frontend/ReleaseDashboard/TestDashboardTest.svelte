@@ -14,7 +14,8 @@
         groupStats,
         assigneeList,
         clickedTests,
-        doFilters
+        doFilters,
+        planLabelsOf = () => []
     } = $props();
 
     let lastRun = testStats?.last_runs?.[0];
@@ -53,6 +54,13 @@
         {/if}
         </div>
     </div>
+    {#if planLabelsOf(testStats).length > 0}
+        <div class="px-2 d-flex flex-wrap gap-1">
+            {#each planLabelsOf(testStats) as label (label)}
+                <span class="badge rounded-pill text-bg-info">{label}</span>
+            {/each}
+        </div>
+    {/if}
     <div class="d-flex flex-fill align-items-end justify-content-end p-1">
         <div class="p-1 me-auto text-small">
             {#if ((lastRun?.nemesis_stats ?? {})?.total ?? false)}

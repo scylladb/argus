@@ -137,6 +137,8 @@ Located in `docs/`. Single-topic notes, outside the standards.
 - `generic_results.md` — the generic results submission format.
 - `release_summary.md` — the release summary per version: what each number counts, the
   family rollup, findings, and when it refreshes.
+- `release_plans.md` — release plan labels: adding, removing and filtering them in the planner,
+  the plan-label filter on the dashboards, the command line flags, and running a plan from the chat.
 - `release_chat.md` — the shared chat of a release or a view: asking, running tests through
   confirmation cards and adjusting them, plan edits, Auto mode, memories and findings, context
   compaction, and setting up the model, MCP servers, the prompt and skills.

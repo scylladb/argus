@@ -7,6 +7,7 @@
     import TestMetadata from "../Common/TestMetadata.svelte";
     import { faArrowDown, faArrowUp } from "@fortawesome/free-solid-svg-icons";
     import { faTimesCircle } from "@fortawesome/free-regular-svg-icons";
+    import { labelsOf, type PlanOptions } from "./planLabels";
 
     interface Props {
         release?: any;
@@ -15,6 +16,7 @@
         groupOnly?: boolean;
         existingPlans?: any;
         selectingFor: any;
+        options?: PlanOptions;
     }
 
     let {
@@ -23,7 +25,8 @@
         format = "list",
         groupOnly = false,
         existingPlans = [],
-        selectingFor
+        selectingFor,
+        options = {}
     }: Props = $props();
     let filterToParent = $state(!!(selectingFor?.created_from));
     let filterExecuted = $state(false);
@@ -344,6 +347,9 @@
                                             </div>
                                             <div class="px-1 pb-1">
                                                 <TestMetadata metadata={test.test_metadata} compact={true} />
+                                                {#each labelsOf(options, test.id, test.group_id) as label (label)}
+                                                    <span class="badge rounded-pill text-bg-info me-1">{label}</span>
+                                                {/each}
                                             </div>
                                         </div>
                                         {#if test.comment}

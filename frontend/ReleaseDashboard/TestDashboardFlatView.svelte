@@ -5,7 +5,8 @@
         groupStats,
         assigneeList,
         clickedTests = $bindable(),
-        doFilters = (test) => false
+        doFilters = (test) => false,
+        planLabelsOf = (test) => []
     } = $props();
 
 
@@ -33,6 +34,6 @@
 
 {#if !groupStats.disabled}
     {#each Object.entries(sortTestStats(groupStats.tests)) as [testId, testStats] (testId)}
-        <TestDashboardTest {assigneeList} bind:clickedTests={clickedTests} {groupStats} {testStats} {doFilters} on:testClick/>
+        <TestDashboardTest {assigneeList} bind:clickedTests={clickedTests} {groupStats} {testStats} {doFilters} {planLabelsOf} on:testClick/>
     {/each}
 {/if}

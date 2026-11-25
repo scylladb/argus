@@ -14,6 +14,18 @@
     import { filterUser } from "../Common/SelectUtils";
     import ViewSelect from "../Views/ViewSelect.svelte";
     import TestMetadata from "../Common/TestMetadata.svelte";
+    import PlanLabelEditor from "./PlanLabelEditor.svelte";
+    import PlanLabelFilter from "./PlanLabelFilter.svelte";
+    import {
+        addLabel,
+        dropEntity,
+        labelCounts,
+        matchesLabels,
+        optionsDiff,
+        parseOptions,
+        removeLabel,
+        type PlanOptions,
+    } from "./planLabels";
 
 
     let gridViewOpen = $state(false);
@@ -24,6 +36,11 @@
     let items = $state([]);
     let views = $state([]);
     let originalSnapshot = $state(null);
+    let options: PlanOptions = $state({});
+    let originalOptions: PlanOptions = {};
+    let labelFilter: string[] = $state([]);
+    let counts = $derived(labelCounts(options));
+    let shownItems = $derived(items.filter(item => matchesLabels(options[item.id]?.labels ?? [], labelFilter)));
     const dispatch = createEventDispatcher();
 
     const TYPE_MARKER = {
@@ -117,6 +134,7 @@
                 tests: plan.tests,
                 groups: plan.groups,
                 assignments: plan.assignments,
+                options: $state.snapshot(options),
                 created_from: plan.id,
             };
 
@@ -204,6 +222,8 @@
             }
         }
 
+        Object.assign(diff, optionsDiff(originalOptions, $state.snapshot(options)));
+
         return diff;
     };
 
@@ -258,6 +278,7 @@
             participants: participants ? participants.map(v => v.id) : [],
             assignments: Object.assign({}, plan.assignments),
         };
+        originalOptions = $state.snapshot(options);
     };
 
     const handleCreatePlan = function() {
@@ -368,6 +389,11 @@
                 json.response.forEach(v => plan.assignments[v.id] = plan.assignments[groupId]);
                 delete plan.assignments[groupId];
             }
+            const groupLabels = options[groupId]?.labels ?? [];
+            if (groupLabels.length) {
+                json.response.forEach(v => options[v.id] = { labels: [...groupLabels] });
+                options = dropEntity(options, groupId);
+            }
 
         } catch (error) {
             console.log(error);
@@ -408,12 +434,25 @@
 
     const removeSelectedItem = function(id) {
         items = items.filter(v => v.id != id);
+        options = dropEntity(options, id);
     };
 
 
     const handleClearAll = function() {
         items = [];
         plan.assignments = {};
+        options = {};
+        labelFilter = [];
+    };
+
+    const handleAddLabel = function(id: string, label: string): string | undefined {
+        const result = addLabel(options, id, label);
+        if (typeof result === "string") return result;
+        options = result;
+    };
+
+    const toggleLabelFilter = function(label: string) {
+        labelFilter = labelFilter.includes(label) ? labelFilter.filter(v => v != label) : [...labelFilter, label];
     };
 
 
@@ -477,6 +516,7 @@
         await getAllViews();
         if (mode == "edit" || mode == "createFrom") {
             plan.assignments = plan.assignee_mapping;
+            options = parseOptions(plan.options);
             participants = users.filter(u => plan.participants.includes(u.id));
             items = await resolvePlan(plan);
             if (mode == "edit") {
@@ -497,7 +537,7 @@
             {/snippet}
         {#snippet body()}
                 <div >
-                <ReleasePlannerGridView existingPlans={plans} {release} selectingFor={plan} on:gridViewConfirmed={handleGridConfirmation}/>
+                <ReleasePlannerGridView existingPlans={plans} {release} selectingFor={plan} {options} on:gridViewConfirmed={handleGridConfirmation}/>
             </div>
             {/snippet}
     </ModalWindow>
@@ -653,7 +693,15 @@
                 <button onclick={handleClearAll} class="w-100 btn btn-sm btn-danger"><Fa icon={faTrash}/>Remove all</button>
             </div>
         {/if}
-        {#each items as item}
+        <datalist id="plan-label-suggestions">
+            {#each counts as { label } (label)}
+                <option value={label}></option>
+            {/each}
+        </datalist>
+        <div class="mb-2">
+            <PlanLabelFilter {counts} selected={labelFilter} ontoggle={toggleLabelFilter} />
+        </div>
+        {#each shownItems as item}
             <div class="p-2 border rounded bg-white mb-1 d-flex align-items-center">
                 <div
                     class="{TYPE_MARKER[item.type] ?? "bg-danger"} rounded p-2 fw-bold text-white"
@@ -672,6 +720,13 @@
                     {#if item.type == "test"}
                         <TestMetadata metadata={item.test_metadata} />
                     {/if}
+                    <PlanLabelEditor
+                        labels={options[item.id]?.labels ?? []}
+                        listId="plan-label-suggestions"
+                        itemName={item.pretty_name || item.display_name || item.name}
+                        onadd={(label) => handleAddLabel(item.id, label)}
+                        onremove={(label) => (options = removeLabel(options, item.id, label))}
+                    />
                 </div>
                 <div class="ms-auto" style="min-width: 192px">
                     <Select
@@ -700,7 +755,7 @@
                 <button title="Remove" aria-label="Remove" class="ms-2 btn btn-sm btn-warning" onclick={() => removeSelectedItem(item.id)}><Fa icon={faTrash}/></button>
             </div>
         {:else}
-            <option value="!!">No tests selected.</option>
+            <div class="text-muted">{items.length > 0 ? "No item carries the selected labels." : "No tests selected."}</div>
         {/each}
     </div>
     <div>
