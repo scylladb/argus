@@ -111,6 +111,7 @@ def test_graphed_stats_with_seeded_view(api_client, seeded_view_with_run, sct_ru
     run = body["test_runs"][0]
     assert run["run_id"] == sct_run.run_id
     assert run["version"] == sct_run.package_version
+    assert run["build_number"] == 42
 
 
 def test_graphed_stats_with_nemesis(api_client, seeded_view_with_run, sct_run_with_nemesis):
@@ -123,6 +124,7 @@ def test_graphed_stats_with_nemesis(api_client, seeded_view_with_run, sct_run_wi
     assert len(nemeses) == 1
     assert nemeses[0]["status"] == "succeeded"
     assert nemeses[0]["run_id"] == sct_run_with_nemesis.run_id
+    assert nemeses[0]["build_number"] == 42
 
 
 def test_runs_details_with_linked_issue(api_client, linked_github_issue, sct_run):

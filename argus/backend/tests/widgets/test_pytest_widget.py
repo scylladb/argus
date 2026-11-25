@@ -85,3 +85,15 @@ def test_pytest_user_fields_for_seeded_row(api_client, seeded_pytest_row):
     ).json()
     assert res["status"] == "ok"
     assert res["response"] == {"SCYLLA_MODE": "release"}
+
+
+def test_pytest_results_carry_the_build_of_their_run(api_client, generic_run_pytest_row):
+    res = api_client.get(
+        f"/api/v1/views/widgets/pytest/view/{uuid.uuid4()}/results?{_bracket_params()}&status[]=passed"
+        f"&test={generic_run_pytest_row['name']}"
+    ).json()
+
+    assert res["status"] == "ok"
+    [hit] = res["response"]["hits"]
+    assert hit["build_id"] == generic_run_pytest_row["build_id"]
+    assert hit["build_number"] == 7

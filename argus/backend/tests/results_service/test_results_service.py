@@ -173,13 +173,16 @@ async def test_get_tests_by_version_groups_runs_correctly(argus_db):
                                                      'name': None}},
                        'versions': {'4.0-2021-01-01-': {
                            str(test_id1): {'test_method1': {'run_id': str(run_id1),
+                                                            'build_number': None,
                                                             'started_by': None,
                                                             'status': 'created'}},
                            str(test_id2): {'test_method1': {'run_id': str(run_id3),
+                                                            'build_number': None,
                                                             'started_by': None,
                                                             'status': 'created'}}},
                            '4.1-2021-02-01-': {str(test_id2): {
                                'test_method1': {'run_id': str(run_id4),
+                                                'build_number': None,
                                                 'started_by': None,
                                                 'status': 'created'}}}}}
     assert result == expected_result

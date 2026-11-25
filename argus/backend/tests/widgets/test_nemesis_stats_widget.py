@@ -46,3 +46,5 @@ def test_nemesis_data_with_seeded_run(api_client, seeded_view_with_run, sct_run_
     assert entry["status"] == "succeeded"
     assert entry["version"] == sct_run_with_nemesis.package_version
     assert str(entry["run_id"]) == sct_run_with_nemesis.run_id
+    assert entry["build_id"]
+    assert entry["build_number"] == 42

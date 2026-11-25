@@ -939,7 +939,7 @@ def test_similar_events_realtime_finds_the_same_error_in_another_run(api_client,
     assert sct_run_id not in similar_run_ids
 
 
-def test_similar_runs_info_for_run_without_issues(api_client, sct_run_id):
+def test_similar_runs_info_for_run_without_issues(api_client, sct_run_id, fake_test):
     """Without any IssueLink rows the endpoint still returns a populated entry
     (build_id, start_time, version) for every requested run id."""
     payload = {"run_ids": [sct_run_id]}
@@ -953,6 +953,8 @@ def test_similar_runs_info_for_run_without_issues(api_client, sct_run_id):
     assert sct_run_id in body["response"]
     info = body["response"][sct_run_id]
     assert "build_id" in info
+    assert info["build_job"] == fake_test.build_system_id
+    assert info["build_number"] == 1
     assert "start_time" in info
     assert info["issues"] == []
 

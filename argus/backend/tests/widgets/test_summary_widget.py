@@ -66,6 +66,7 @@ def test_summary_versioned_runs_with_seeded_view(api_client, seeded_view_with_ru
     method_name = sct_run.test_method.rsplit(".", 1)[-1]
     assert sct_run.test_id in body["versions"][expected_version]
     assert body["versions"][expected_version][sct_run.test_id][method_name]["run_id"] == sct_run.run_id
+    assert body["versions"][expected_version][sct_run.test_id][method_name]["build_number"] == 42
     assert sct_run.test_id in body["test_info"]
 
 

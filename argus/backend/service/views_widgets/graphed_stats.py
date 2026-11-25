@@ -17,6 +17,7 @@ class GraphedStatsService:
     async def get_graphed_stats(self, test_id: UUID, filters=None):
         rows = await SCTTestRun.find(test_id=test_id).only(
             "build_id",
+            "build_number",
             "start_time",
             "end_time",
             "id",
@@ -57,6 +58,7 @@ class GraphedStatsService:
             duration = (run.end_time - run.start_time).total_seconds() if run.end_time else 0
             release_data["test_runs"].append({
                 "build_id": run.build_id,
+                "build_number": run.build_number,
                 "start_time": run.start_time.timestamp(),
                 "duration": duration if duration > 0 else 0,
                 "status": run.status,
@@ -75,7 +77,8 @@ class GraphedStatsService:
                         "status": nemesis.status,
                         "run_id": str(run.id),
                         "stack_trace": nemesis.stack_trace,
-                        "build_id": run.build_id
+                        "build_id": run.build_id,
+                        "build_number": run.build_number,
                     })
 
         return release_data

@@ -875,6 +875,8 @@ class SCTService:
 
                 result[str(run_id)] = {
                     "build_id": f"{test_run.build_id}#{build_number}",
+                    "build_job": test_run.build_id,
+                    "build_number": test_run.build_number,
                     "start_time": test_run.start_time.isoformat(),
                     "version": sut_version or "unknown",
                     "issues": [
@@ -942,6 +944,8 @@ class SCTService:
 
                         result[str(run_id)] = {
                             "build_id": f"{test_run.build_id}#{build_number}",
+                            "build_job": test_run.build_id,
+                            "build_number": test_run.build_number,
                             "start_time": test_run.start_time.isoformat(),
                             "version": sut_version or "unknown",
                             "issues": [],
