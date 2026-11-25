@@ -188,6 +188,7 @@ func RunURL(base, buildID string, number int) string
 | A consumer outside this repository reads `run_id` from the JSON build lookup | None is known. The route shipped with the CLI work, and the new CLI call is its only reader. The PR names the shape change |
 | A run whose `build_id` differs from its test's `build_system_id` gets a link that resolves to nothing | Accepted, as in ARGUS-209. Such a row is broken data |
 | The Pytest widget of a large release reads many run rows | One indexed read per distinct run, run concurrently. Rows of the same run share it |
+| Code without `allow_filtering()` reaches a database before `sync-models` has built the local index: the lookup errors, or returns partial results while the index builds | The PR says to run `sync-models` and wait for the index build before the new code serves traffic |
 | A build page with several runs is slower to open | Each panel loads as a workspace panel does today. Parallel builds have a handful of runs |
 
 ## Decisions

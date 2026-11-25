@@ -81,8 +81,8 @@ class TestRunService:
     async def get_runs_by_build_number(self, build_id: str, build_number: int) -> list[PluginModelBase]:
         """Resolve the runs of a build from its build_system_id and Jenkins build number, newest first.
 
-        build_id is the partition key of the plugin run table, so filtering by
-        build_number stays within a single small partition (ALLOW FILTERING).
+        build_id is the partition key of the plugin run table, and a local index on
+        (build_id), build_number serves the lookup inside that partition.
         Returns an empty list when the test, its plugin, or a matching run is not
         found (e.g. during the brief window after a build starts but before its
         run has been reported to Argus).
