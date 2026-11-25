@@ -10,7 +10,7 @@ from argus.backend.util.nemesis_map import get_nemesis_name
 class NemesisStatsService:
     async def get_nemesis_data(self, test_id: UUID):
         rows = await SCTTestRun.find(test_id=test_id).only(
-            "id", "investigation_status", "packages").all()
+            "id", "investigation_status", "packages", "build_id", "build_number").all()
         nemesis_data = []
 
         nemesis_chunks = await asyncio.gather(
@@ -38,6 +38,8 @@ class NemesisStatsService:
                         "duration": nemesis.end_time - nemesis.start_time,
                         "status": nemesis.status,
                         "run_id": run.id,
+                        "build_id": run.build_id,
+                        "build_number": run.build_number,
                         "stack_trace": nemesis.stack_trace,
                     }
                 )

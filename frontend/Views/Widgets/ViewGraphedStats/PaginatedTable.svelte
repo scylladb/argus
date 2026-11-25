@@ -1,6 +1,7 @@
 <script lang="ts">
     import humanizeDuration from "humanize-duration";
     import { timestampToISODate } from "../../../Common/DateUtils.js";
+    import { runUrl } from "../../../Common/RunUtils";
     import type { NemesisData, TestRun } from "./Interfaces";
 
     interface Props {
@@ -139,7 +140,7 @@
                                             ? "unknown"
                                             : humanizeDuration(item[column.key] * 1000, { largest: 2, round: true })}
                                     {:else if column.key === "start_time"}
-                                        <a href={`/tests/scylla-cluster-tests/${item.run_id}`} target="_blank"
+                                        <a href={runUrl(item.build_id, item.build_number)} target="_blank"
                                             >{timestampToISODate(item[column.key] * 1000)}</a
                                         >
                                     {:else}

@@ -3,6 +3,7 @@
     import { faArrowUpRightFromSquare, faBug, faComment } from "@fortawesome/free-solid-svg-icons";
     import { byGroupAndName, matchesFilter, statusBadge, type StatusFilter } from "./summaryUtils";
     import type { SummaryTest } from "./types";
+    import { runUrl } from "../../../Common/RunUtils";
 
     interface Props {
         tests: SummaryTest[];
@@ -69,7 +70,7 @@
                         <td class="text-end text-nowrap">
                             {#if test.build_id && test.build_number !== null}
                                 <a
-                                    href="/test/{test.build_id}/{test.build_number}"
+                                    href={runUrl(test.build_id, test.build_number)}
                                     class="small"
                                     aria-label="Open run #{test.build_number} of {test.test_name}"
                                     title="Open run #{test.build_number}"

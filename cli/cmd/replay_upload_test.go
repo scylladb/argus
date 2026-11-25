@@ -80,6 +80,7 @@ func TestUploadReplay_EarlySuccessIsAnError(t *testing.T) {
 // The text report prints the full Argus link of every replayed run.
 func TestRenderReplaySummary_PrintsRunLinks(t *testing.T) {
 	t.Parallel()
+	build := 412
 	var buf strings.Builder
 	cmd := &cobra.Command{}
 	cmd.SetOut(&buf)
@@ -88,14 +89,15 @@ func TestRenderReplaySummary_PrintsRunLinks(t *testing.T) {
 	report := replayReport{
 		ReplayIngestSummary: &models.ReplayIngestSummary{Total: 2, Succeeded: 2},
 		Runs: runLinks("https://argus.example.com/", []models.ReplayRun{
-			{Type: "scylla-cluster-tests", ID: "550e8400-e29b-41d4-a716-446655440000"},
+			{Type: "scylla-cluster-tests", ID: "550e8400-e29b-41d4-a716-446655440000",
+				BuildID: "scylla-master/longevity/longevity-100gb-4h", BuildNumber: &build},
 		}, false),
 	}
 	require.NoError(t, renderReplaySummary(cmd, "text", report))
 
 	assert.Contains(t, buf.String(),
-		"Run 550e8400-e29b-41d4-a716-446655440000: "+
-			"https://argus.example.com/tests/scylla-cluster-tests/550e8400-e29b-41d4-a716-446655440000\n")
+		"Run 550e8400-e29b-41d4-a716-446655440000 (scylla-master/longevity/longevity-100gb-4h#412): "+
+			"https://argus.example.com/test/scylla-master/longevity/longevity-100gb-4h/412\n")
 }
 
 // recordingServer reads the whole upload, keeps the request URL and answers
@@ -166,7 +168,7 @@ func TestRenderReplaySummary_PrintsTheBuild(t *testing.T) {
 	require.NoError(t, renderReplaySummary(cmd, "text", report))
 
 	assert.Contains(t, buf.String(),
-		"Run run-1 (rel/jdoe/job#3): https://argus.example.com/tests/scylla-cluster-tests/run-1\n")
+		"Run run-1 (rel/jdoe/job#3): https://argus.example.com/test/rel/jdoe/job/3\n")
 }
 
 // A dry run names the build each run would become, links nothing, and keeps

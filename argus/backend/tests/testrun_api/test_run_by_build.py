@@ -5,6 +5,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from argus.backend.models.web import ArgusTest
+from argus.backend.tests.util import script_value
 
 API_PREFIX = "/api/v1"
 
@@ -42,10 +43,21 @@ def test_get_run_by_build_resolves_run(api_client, fake_test: ArgusTest) -> None
     assert resp.status_code == 200, resp.text
     assert resp.json()["status"] == "ok"
     body = resp.json()["response"]
-    assert body["run_id"] == run_id
-    assert body["plugin_name"] == "scylla-cluster-tests"
-    # The Argus URL points at the canonical run view for this plugin/run.
-    assert body["url"].endswith(f"/tests/scylla-cluster-tests/{run_id}")
+    assert body["runs"] == [{"run_id": run_id, "plugin_name": "scylla-cluster-tests"}]
+    assert body["url"].endswith(f"/test/{fake_test.build_system_id}/77")
+
+
+@pytest.mark.docker_required
+def test_get_run_by_build_returns_parallel_runs(api_client, fake_test: ArgusTest) -> None:
+    first = _submit_run(api_client, fake_test, build_number=78)
+    second = _submit_run(api_client, fake_test, build_number=78)
+
+    resp = api_client.get(f"{API_PREFIX}/test/{fake_test.build_system_id}/78")
+    page = api_client.get(f"/test/{fake_test.build_system_id}/78", follow_redirects=False)
+
+    assert {run["run_id"] for run in resp.json()["response"]["runs"]} == {first, second}
+    assert page.status_code == 200, page.text
+    assert set(script_value(page.text, "gRun")) == {first, second}
 
 
 @pytest.mark.docker_required

@@ -57,3 +57,12 @@ def test_graph_views_with_seeded_graph_view(api_client, seeded_view_with_run, gr
     assert test_id in res["tests_details"]
     assert "name" in res["tests_details"][test_id]
     assert test_id in res["response"]
+
+
+def test_test_graphs_carry_the_build_of_each_point(api_client, fake_test, generic_results_for_run):
+    res = api_client.get(f"/api/v1/results/test?testId={generic_results_for_run.test_id}").json()
+
+    assert res["status"] == "ok"
+    graph = res["response"]["graphs"][0]
+    assert graph["build_id"] == fake_test.build_system_id
+    assert graph["data"]["datasets"][0]["data"][0]["build_number"] == 42

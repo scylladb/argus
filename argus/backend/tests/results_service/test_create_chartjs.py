@@ -218,3 +218,22 @@ def test_create_chartjs_multiple_columns_and_rows():
     assert len(graphs) == 2
     assert len(graphs[0]['data']['datasets']) == 2  # should have also limits dataset
     assert len(graphs[1]['data']['datasets']) == 1  # no limits series
+
+
+def test_create_chartjs_carries_the_build_of_each_point():
+    table = ArgusGenericResultMetadata(
+        test_id=uuid4(),
+        name='Test Table',
+        columns_meta=[ColumnMetadata(name='col1', unit='ms', type='FLOAT')],
+        rows_meta=['row1'],
+        validation_rules={}
+    )
+    run_id = uuid4()
+    data = [ArgusGenericResultData(test_id=table.test_id, name=table.name, run_id=run_id, column='col1', row='row1',
+                                   sut_timestamp=datetime(2021, 1, 1), value=100.0, status='UNSET')]
+    runs_details = RunsDetails(ignored=[], packages={}, build_id="scylla-master/perf/job", build_numbers={run_id: 12})
+
+    graphs = create_chartjs(table, data, {}, {"1.0": [run_id]}, runs_details, main_package="pkg1")
+
+    assert graphs[0]["build_id"] == "scylla-master/perf/job"
+    assert graphs[0]["data"]["datasets"][0]["data"][0]["build_number"] == 12

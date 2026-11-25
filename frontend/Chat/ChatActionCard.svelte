@@ -14,6 +14,7 @@
     import { renderMarkdown } from "./markdown";
     import StartParamsEditor from "./StartParamsEditor.svelte";
     import type { ActionResult, ChatAction, ChatNode } from "./types";
+    import { runUrl } from "../Common/RunUtils";
 
     interface Props {
         node: ChatNode;
@@ -81,7 +82,7 @@
     });
 
     const runLink = (result: ActionResult) =>
-        result.build_system_id && result.build_number ? `/test/${result.build_system_id}/${result.build_number}` : null;
+        result.build_system_id && result.build_number ? runUrl(result.build_system_id, result.build_number) : null;
 </script>
 
 {#if action.kind === "zeus_report"}

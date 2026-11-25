@@ -76,18 +76,17 @@ async def app_version():
 @router.get("/test/{build_id:path}/{build_number:int}", name="api.get_run_by_build")
 async def get_run_by_build(asgi_request: Request, build_id: str, build_number: int,
                      user: User = Depends(api_current_user)):
-    # JSON sibling of main.get_run_by_build: resolve a run from its
-    # build_system_id + Jenkins build number and return its id and Argus URL.
-    run = await TestRunService().get_run_by_build_number(build_id, build_number)
-    if not run:
+    # JSON sibling of main.get_run_by_build: resolve the runs of a build from
+    # its build_system_id + Jenkins build number and return them with the
+    # Argus URL of the build.
+    runs = await TestRunService().get_runs_by_build_number(build_id, build_number)
+    if not runs:
         raise Exception(f"Run not found for {build_id} #{build_number}")
-    run_path = url_for(asgi_request, "main.get_run_by_plugin",
-                       plugin_name=run._plugin_name, run_id=run.id)
+    run_path = url_for(asgi_request, "main.get_run_by_build", build_id=build_id, build_number=build_number)
     return APIResponse({
         "status": "ok",
         "response": {
-            "run_id": str(run.id),
-            "plugin_name": run._plugin_name,
+            "runs": [{"run_id": str(run.id), "plugin_name": run._plugin_name} for run in runs],
             "url": str(asgi_request.base_url).rstrip("/") + run_path,
         }
     })

@@ -12,6 +12,7 @@
     } from "@fortawesome/free-solid-svg-icons";
     import { gridRows, statusBadge, type StatusFilter } from "./summaryUtils";
     import type { SummaryFamily, SummaryTest } from "./types";
+    import { runUrl } from "../../../Common/RunUtils";
 
     interface Props {
         family: SummaryFamily;
@@ -84,7 +85,7 @@
                                     <span class="text-body-tertiary" {title}>·</span>
                                 {:else if cell.build_id && cell.build_number !== null}
                                     <a
-                                        href="/test/{cell.build_id}/{cell.build_number}"
+                                        href={runUrl(cell.build_id, cell.build_number)}
                                         class="badge cell {statusBadge(cell.status)}"
                                         {title}
                                         aria-label={title}

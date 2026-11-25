@@ -9,6 +9,7 @@
     import {sendMessage} from "../Stores/AlertStore";
     import { sanitizeHtml } from "../Common/safeHtml";
     import { tooltipAnchor } from "./chartTooltip";
+    import { runUrl } from "../Common/RunUtils";
 
     interface Props {
         graph?: any;
@@ -234,9 +235,9 @@
                             innerHtml += `<div class="tooltip-body">${line}</div>`;
                         });
 
-                        const runId = context.chart.data.datasets[dataPoint.datasetIndex].data[dataPoint.dataIndex].id;
+                        const point = context.chart.data.datasets[dataPoint.datasetIndex].data[dataPoint.dataIndex];
                         innerHtml += `<div class="d-flex justify-content-end mt-2">`;
-                        innerHtml += `<a href="/tests/scylla-cluster-tests/${runId}" class="btn btn-success btn-sm" target="_blank">Open <i class="fas fa-external-link-alt"></i></a>`;
+                        innerHtml += `<a href="${encodeURI(runUrl(graph.build_id, point.build_number))}" class="btn btn-success btn-sm" target="_blank">Open <i class="fas fa-external-link-alt"></i></a>`;
                         innerHtml += `</div>`;
 
                         // Add separator between points if not the last one

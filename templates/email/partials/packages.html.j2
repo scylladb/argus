@@ -1,6 +1,6 @@
 {% macro render_partial(options) %}
 <div>
-    <h2><a class="btn-link-dark" href="http://argus.scylladb.com/tests/scylla-cluster-tests/{{ options['run_id' ]}}/packages">Packages</a></h2>
+    <h2><a class="btn-link-dark" href="http://argus.scylladb.com{{ options['run_path'] }}/packages">Packages</a></h2>
     <table class="table table-responsive table-bordered">
         <thead>
             <tr style="text-align: center">

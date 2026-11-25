@@ -78,24 +78,23 @@ class TestRunService:
             except DocumentNotFound:
                 return None
 
-    async def get_run_by_build_number(self, build_id: str, build_number: int) -> PluginModelBase | None:
-        """Resolve a run from its build_system_id and Jenkins build number.
+    async def get_runs_by_build_number(self, build_id: str, build_number: int) -> list[PluginModelBase]:
+        """Resolve the runs of a build from its build_system_id and Jenkins build number, newest first.
 
-        build_id is the partition key of the plugin run table, so filtering by
-        build_number stays within a single small partition (ALLOW FILTERING).
-        Returns None when the test, its plugin, or a matching run is not found
-        (e.g. during the brief window after a build starts but before its run
-        has been reported to Argus).
+        build_id is the partition key of the plugin run table, and a local index on
+        (build_id), build_number serves the lookup inside that partition.
+        Returns an empty list when the test, its plugin, or a matching run is not
+        found (e.g. during the brief window after a build starts but before its
+        run has been reported to Argus).
         """
         try:
             test: ArgusTest = await ArgusTest.get(build_system_id=build_id)
         except DocumentNotFound:
-            return None
+            return []
         plugin = self.get_plugin(plugin_name=test.plugin_name)
         if not plugin:
-            return None
-        runs = await plugin.model.find(build_id=build_id, build_number=build_number).allow_filtering().all()
-        return runs[0] if runs else None
+            return []
+        return await plugin.model.find(build_id=build_id, build_number=build_number).all()
 
     async def get_test_type_for_run(self, run_id: UUID) -> str:
         runs = await asyncio.gather(*(plugin.model.find_one(id=run_id) for plugin in AVAILABLE_PLUGINS.values()))

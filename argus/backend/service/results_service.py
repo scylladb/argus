@@ -9,7 +9,7 @@ from functools import partial
 from typing import List, Dict, Any
 from uuid import UUID, uuid4
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from coodie.aio import execute_raw
 from coodie.exceptions import DocumentNotFound
 
@@ -80,6 +80,8 @@ class Cell:
 class RunsDetails:
     ignored: list[RunId]
     packages: dict[RunId, list[PackageVersion]]
+    build_id: str = ""
+    build_numbers: dict[RunId, int | None] = field(default_factory=dict)
 
 
 default_options = {
@@ -156,6 +158,7 @@ def get_sorted_data_for_column_and_row(data: List[ArgusGenericResultData], colum
     points = sorted([{"x": entry.sut_timestamp.strftime('%Y-%m-%dT%H:%M:%SZ'),
                       "y": entry.value,
                       "id": entry.run_id,
+                      "build_number": runs_details.build_numbers.get(entry.run_id),
                       }
                      for entry in data if entry.column == column and entry.row == row],
                     key=lambda point: point["x"])
@@ -397,7 +400,7 @@ def create_chartjs(table: ArgusGenericResultMetadata, data: list[ArgusGenericRes
             min_y, max_y = get_min_max_y(datasets)
             datasets = coerce_values_to_axis_boundaries(datasets, min_y, max_y)
             options = create_chart_options(table, column, min_y, max_y)
-            graphs.append({"options": options, "data": {"datasets": datasets}})
+            graphs.append({"options": options, "data": {"datasets": datasets}, "build_id": runs_details.build_id})
 
     return graphs
 
@@ -426,13 +429,15 @@ class ResultsService:
         return await pending
 
     async def _load_runs_details(self, test_id: UUID) -> RunsDetails:
-        plugin_name = (await select_rows(ArgusTest.find(id=test_id), "plugin_name"))[0]["plugin_name"]
-        plugin = TestRunService().get_plugin(plugin_name)
-        rows = await select_rows(plugin.model.find(test_id=test_id), "id", "investigation_status", "packages")
+        test = (await select_rows(ArgusTest.find(id=test_id), "plugin_name", "build_system_id"))[0]
+        plugin = TestRunService().get_plugin(test["plugin_name"])
+        rows = await select_rows(plugin.model.find(test_id=test_id), "id", "investigation_status", "packages",
+                                 "build_number")
         ignored_runs = [row["id"] for row in rows if row["investigation_status"].lower() == "ignored"]
         packages = {row["id"]: self._remove_duplicate_packages(
             row["packages"]) for row in rows if row["packages"] and row["id"] not in ignored_runs}
-        return RunsDetails(ignored=ignored_runs, packages=packages)
+        return RunsDetails(ignored=ignored_runs, packages=packages, build_id=test["build_system_id"],
+                           build_numbers={row["id"]: row["build_number"] for row in rows})
 
     async def _get_tables_metadata(self, test_id: UUID) -> list[ArgusGenericResultMetadata]:
         tables_meta = await select_rows(ArgusGenericResultMetadata.find(test_id=test_id), "name", "description",
@@ -623,7 +628,7 @@ class ResultsService:
         test_ids = await self._exclude_disabled_tests(test_ids)
         rows_per_test = await gather_limited(
             select_rows(plugin.model.find(test_id=test_id), "id", "status", "investigation_status",
-                        "test_name", "build_id", "packages", "test_method", "started_by")
+                        "test_name", "build_id", "build_number", "packages", "test_method", "started_by")
             for test_id in test_ids)
         for test_id, rows in zip(test_ids, rows_per_test):
             for row in rows:
@@ -649,6 +654,8 @@ class ResultsService:
                 if method_name not in result[sut_version][str(test_id)]:
                     result[sut_version][str(test_id)][method_name] = {
                         'run_id': str(row['id']),
+                        'build_id': row['build_id'],
+                        'build_number': row['build_number'],
                         'status': row['status'],
                         'started_by': row['started_by']
                     }

@@ -8,7 +8,7 @@ Test Run
 {{ super() }}
 <script>
     const gTestId = "{{ run.test_id or undefined }}";
-    const gRun = {{ [run.id] | tojson | safe }}
+    const gRun = {{ run_ids | tojson | safe }};
     const gTab = {{ tab | tojson }};
 </script>
 <script defer type="module" src="/s/dist/runByPlugin.bundle.js"></script>

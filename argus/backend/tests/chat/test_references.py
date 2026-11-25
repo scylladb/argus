@@ -117,6 +117,17 @@ async def test_a_run_is_found_every_way(world, scope, client_service):
         assert (await resolve_run_reference(entity, scope, reference)).id == run_id, reference
 
 
+async def test_a_build_with_parallel_runs_names_them(world, scope, client_service):
+    first = await submit_build(client_service, world.cdc, 8)
+    second = await submit_build(client_service, world.cdc, 8)
+    entity = await resolve_entity("release", world.release.id)
+
+    with pytest.raises(TestReferenceError) as error:
+        await resolve_run_reference(entity, scope, "CDC 100GB 4h#8")
+
+    assert str(first) in str(error.value) and str(second) in str(error.value)
+
+
 async def test_a_test_without_a_build_number_lists_its_builds(world, scope, client_service):
     await submit_build(client_service, world.cdc, 7)
     entity = await resolve_entity("release", world.release.id)

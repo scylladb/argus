@@ -7,6 +7,8 @@
         name: string;
         release_id: string;
         run_id: string;
+        build_id: string | null;
+        build_number: number | null;
         session_timestamp: string;
         status: typeof PytestStatus[keyof typeof PytestStatus];
         test_id: string;

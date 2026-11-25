@@ -5,6 +5,7 @@
     import { duration, usd } from "./format";
     import { createSort } from "./sort.svelte";
     import type { TopRun } from "./types";
+    import { runUrl } from "../Common/RunUtils";
 
     interface Props {
         runs: TopRun[];
@@ -32,7 +33,7 @@
     const COVERAGE_LABEL: Record<string, string> = { complete: "Complete", partial: "Partial", none: "No data" };
 
     const runLink = (run: TopRun): string | null =>
-        run.build_number === null ? null : `/test/${run.build_id}/${run.build_number}`;
+        run.build_number === null ? null : runUrl(run.build_id, run.build_number);
     const statusClass = (status: string): string =>
         (StatusBadgeCSSClassMap as Record<string, string>)[status] ?? "text-bg-secondary";
 </script>

@@ -75,14 +75,14 @@ describe("sanitizeHtml", () => {
             + '<span style="display: inline-block; width: 10px; height: 10px; background-color: rgb(1, 2, 3);"></span>'
             + "2026-11-19: 12.00 (error threshold: N/A)</div>"
             + '<div class="tooltip-body">scylla: 2025.1.0 -&gt; 2025.1.1</div>'
-            + '<div class="d-flex justify-content-end mt-2"><a href="/tests/scylla-cluster-tests/r1" class="btn btn-success btn-sm" '
+            + '<div class="d-flex justify-content-end mt-2"><a href="/test/scylla-master/perf/job/12" class="btn btn-success btn-sm" '
             + 'target="_blank">Open <i class="fas fa-external-link-alt"></i></a></div><hr class="tooltip-separator"></div>',
         ));
         const open = node.querySelector("a");
 
         expect(node.querySelector(".custom-tooltip .tooltip-title span")?.getAttribute("style")).toContain("background-color");
         expect(node.querySelector(".tooltip-body")?.textContent).toBe("scylla: 2025.1.0 -> 2025.1.1");
-        expect(open?.getAttribute("href")).toBe("/tests/scylla-cluster-tests/r1");
+        expect(open?.getAttribute("href")).toBe("/test/scylla-master/perf/job/12");
         expect(open?.getAttribute("class")).toBe("btn btn-success btn-sm");
         expect(open?.getAttribute("target")).toBe("_blank");
         expect(open?.querySelector("i.fas.fa-external-link-alt")).not.toBeNull();

@@ -161,6 +161,7 @@ type LogEntry struct {
 // Datetime fields use ISO-8601 with milliseconds.
 type RunBase struct {
 	BuildID             string                  `json:"build_id"`
+	BuildNumber         *int                    `json:"build_number"`
 	StartTime           string                  `json:"start_time"`
 	ID                  string                  `json:"id"`
 	ReleaseID           string                  `json:"release_id"`
@@ -402,6 +403,7 @@ type SirenadaRun struct {
 // GenericRunDetails is the basic view of a GenericRun.
 type GenericRunDetails struct {
 	RunBase
+	ArgusURL string `json:"argus_url"`
 
 	StartedBy     string `json:"started_by"`
 	SubType       string `json:"sub_type"`
@@ -411,6 +413,7 @@ type GenericRunDetails struct {
 // DriverRunDetails is the basic view of a DriverTestRun.
 type DriverRunDetails struct {
 	RunBase
+	ArgusURL string `json:"argus_url"`
 
 	ScyllaVersion string `json:"scylla_version"`
 }
@@ -418,6 +421,7 @@ type DriverRunDetails struct {
 // SirenadaRunDetails is the basic view of a SirenadaRun.
 type SirenadaRunDetails struct {
 	RunBase
+	ArgusURL string `json:"argus_url"`
 
 	ScyllaVersion string `json:"scylla_version"`
 	Region        string `json:"region"`
@@ -435,10 +439,49 @@ type RunMeta struct {
 	StartTime           string                  `json:"start_time"`
 	BuildJobURL         string                  `json:"build_job_url"`
 	BuildID             string                  `json:"build_id"`
+	BuildNumber         *int                    `json:"build_number"`
 	Assignee            string                  `json:"assignee"`
 	EndTime             string                  `json:"end_time"`
 	InvestigationStatus TestInvestigationStatus `json:"investigation_status"`
 	Heartbeat           int64                   `json:"heartbeat"`
+}
+
+// RunsByBuild is the response of the build lookup: every run of one build,
+// newest first, and the Argus link of the build.
+type RunsByBuild struct {
+	Runs []struct {
+		RunID      string `json:"run_id"`
+		PluginName string `json:"plugin_name"`
+	} `json:"runs"`
+	URL string `json:"url"`
+}
+
+// BuildRunDetail is the details view of one run of a build.
+type BuildRunDetail struct {
+	ID      string
+	Details output.Tabular
+}
+
+// BuildRunDetails prints the runs of one build: a table per run as text, and
+// an array of the run details as JSON.
+type BuildRunDetails []BuildRunDetail
+
+// Tables implements output.MultiTabular.
+func (b BuildRunDetails) Tables() []output.NamedTable {
+	tables := make([]output.NamedTable, 0, len(b))
+	for _, run := range b {
+		tables = append(tables, output.NamedTable{Name: "Run " + run.ID, Tab: run.Details})
+	}
+	return tables
+}
+
+// MarshalJSON implements json.Marshaler.
+func (b BuildRunDetails) MarshalJSON() ([]byte, error) {
+	details := make([]output.Tabular, 0, len(b))
+	for _, run := range b {
+		details = append(details, run.Details)
+	}
+	return json.Marshal(details)
 }
 
 type RunType struct {
@@ -941,7 +984,8 @@ func (n NemesisResponse) MarshalJSON() ([]byte, error) {
 // the right.  Events and nemesis data are excluded — use the dedicated
 // `run events` and `run nemesis` sub-commands instead.
 type RunDetails struct {
-	Run SCTTestRun
+	Run      SCTTestRun
+	ArgusURL string
 }
 
 // Headers implements output.Tabular.
@@ -1009,6 +1053,7 @@ func (d RunDetails) Rows() [][]string {
 		{"Custom Stress Duration", fmt.Sprint(r.StressDuration)},
 		{"Started By", r.StartedBy},
 		{"Build Job", r.BuildJobURL},
+		{"Argus URL", d.ArgusURL},
 		{"Scylla Version", r.ScyllaVersion},
 		{"Product Version", r.ProductVersion},
 		{"--- System Information ---", ""},
@@ -1058,6 +1103,7 @@ type runDetailsJSON struct {
 	StressDuration      float32                 `json:"stress_duration,omitempty"`
 	StartedBy           string                  `json:"started_by,omitempty"`
 	BuildJobURL         string                  `json:"build_job_url,omitempty"`
+	ArgusURL            string                  `json:"argus_url,omitempty"`
 	ScyllaVersion       string                  `json:"scylla_version,omitempty"`
 	ProductVersion      string                  `json:"product_version,omitempty"`
 	// System Information section
@@ -1127,6 +1173,7 @@ func (d RunDetails) MarshalJSON() ([]byte, error) {
 		StressDuration:      r.StressDuration,
 		StartedBy:           r.StartedBy,
 		BuildJobURL:         r.BuildJobURL,
+		ArgusURL:            d.ArgusURL,
 		ScyllaVersion:       r.ScyllaVersion,
 		ProductVersion:      r.ProductVersion,
 		Backend:             backend,

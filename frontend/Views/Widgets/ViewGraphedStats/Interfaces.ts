@@ -4,6 +4,7 @@ export type { Issue } from "../../../Common/IssueTypes";
 
 export interface TestRun {
     build_id: string;
+    build_number: number | null;
     version: string;
     status: string;
     duration: number;
@@ -27,6 +28,7 @@ export interface RunDetails {
 
 export interface NemesisData {
     build_id: string;
+    build_number: number | null;
     run_id: string;
     version: string;
     name: string;

@@ -37,11 +37,6 @@
         "table-secondary": "gray",
     };
 
-    const dispatchRunClick = (e) => {
-        const runId = e.detail.runId;
-        window.open(`/tests/scylla-cluster-tests/${runId}`, "_blank", "popup");
-    };
-
     function styleToColor(classList) {
         const classes = classList.split(" ");
         for (let className of classes) {
@@ -261,7 +256,6 @@
                                 height={700}
                                 {releasesFilters}
                                 responsive={true}
-                                on:runClick={dispatchRunClick}
                         />
                     {/key}
                 {/if}

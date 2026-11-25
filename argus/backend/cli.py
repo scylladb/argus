@@ -53,7 +53,7 @@ async def sync_models(main_ks: str):
         await model.sync_table()
 
     LOGGER.info("Plugins ready.")
-    cluster.sync_additional_schema()
+    cluster.sync_additional_schema(all_plugin_models(True))
     click.echo("All models synchronized.")
 
 

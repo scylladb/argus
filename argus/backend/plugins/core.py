@@ -5,6 +5,7 @@ from datetime import datetime, UTC
 from typing import Annotated, ClassVar, Optional
 from uuid import UUID
 from time import time
+from cassandra.cluster import Session
 from fastapi import APIRouter
 from pydantic import Field
 from coodie import ClusteringKey, Indexed, PrimaryKey
@@ -62,6 +63,12 @@ class PluginModelBase(Document):
 
     # Test Logs Collection
     logs: list[tuple[str, str]] = Field(default_factory=list)
+
+    @classmethod
+    def _sync_additional_rules(cls, session: Session):
+        table = cls.table_name()
+        session.execute(
+            f"CREATE INDEX IF NOT EXISTS {table}_build_number_local_idx ON {table} ((build_id), build_number)")
 
     @classmethod
     def _stats_columns(cls) -> tuple[str, ...]:

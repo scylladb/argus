@@ -4,6 +4,8 @@
 
     export interface SimilarEventExtended extends SCTEvent {
         build_id?: string;
+        build_job?: string;
+        build_number?: number | null;
         start_time?: string;
         version?: string;
         issues?: Issue[];
@@ -18,6 +20,7 @@
     import { timestampToISODate } from "../../Common/DateUtils";
     import IssueBadge from "../../Common/IssueBadge.svelte";
     import { getUrl } from "../../Common/IssueTypes";
+    import { runUrl } from "../../Common/RunUtils";
 
     interface Props {
         event: SCTEvent;
@@ -94,6 +97,8 @@
                         .map(event => ({
                             ...event,
                             build_id: runsInfo[event.run_id]?.build_id,
+                            build_job: runsInfo[event.run_id]?.build_job,
+                            build_number: runsInfo[event.run_id]?.build_number,
                             start_time: runsInfo[event.run_id]?.start_time,
                             version: runsInfo[event.run_id]?.version,
                             issues: runsInfo[event.run_id]?.issues || [],
@@ -184,7 +189,7 @@
                                 <tr>
                                     <td>
                                         <a
-                                            href="/tests/scylla-cluster-tests/{similarEvent.run_id}"
+                                            href={runUrl(similarEvent.build_job, similarEvent.build_number)}
                                             target="_blank"
                                             title={similarEvent.run_id}
                                         >

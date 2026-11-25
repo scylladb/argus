@@ -14,8 +14,9 @@ from humanize import naturaltime
 from cassandra.util import uuid_from_time, unix_time_from_uuid1
 from argus.backend.models.pytest import PytestResultTable, PytestUserField
 from argus.backend.models.web import ArgusTest, ArgusUserView
+from argus.backend.plugins.generic.model import GenericRun
 from argus.backend.plugins.generic.plugin import PluginInfo as GenericPluginInfo
-from argus.backend.util.common import chunk
+from argus.backend.util.common import chunk, gather_limited
 from argus.common.enums import PytestStatus
 
 LOGGER = logging.getLogger(__name__)
@@ -190,5 +191,14 @@ class PytestViewService:
             "total": len(results),
             "barChart": self.prepare_bar_chart(results, before, after),
             "pieChart": self.prepare_pie_chart(results),
-            "hits": results[:limit]
+            "hits": await self.attach_run_builds(results[:limit])
         }
+
+    @staticmethod
+    async def attach_run_builds(hits: list[dict]) -> list[dict]:
+        run_ids = list({hit["run_id"] for hit in hits})
+        runs = await gather_limited(
+            GenericRun.find(id=run_id).only("build_id", "build_number").first() for run_id in run_ids)
+        builds = {run_id: {"build_id": run.build_id if run else None, "build_number": run.build_number if run else None}
+                  for run_id, run in zip(run_ids, runs)}
+        return [{**hit, **builds[hit["run_id"]]} for hit in hits]

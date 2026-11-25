@@ -15,6 +15,7 @@ import (
 	"github.com/scylladb/argus/cli/internal/cache"
 	"github.com/scylladb/argus/cli/internal/logging"
 	"github.com/scylladb/argus/cli/internal/models"
+	"github.com/scylladb/argus/cli/internal/output"
 	"github.com/scylladb/argus/cli/internal/services"
 	"github.com/spf13/cobra"
 )
@@ -118,7 +119,7 @@ var RunTypeDetailsHandlers = map[string]runTypeHandler{
 		if err != nil {
 			return nil, err
 		}
-		return models.RunDetails{Run: full}, nil
+		return models.RunDetails{Run: full, ArgusURL: runPageURL(c, full.RunBase)}, nil
 	},
 	"generic": func(c *api.Client, r *http.Request) (any, error) {
 		full, err := api.DoJSON[models.GenericRun](c, r)
@@ -127,6 +128,7 @@ var RunTypeDetailsHandlers = map[string]runTypeHandler{
 		}
 		return models.NewKVTabular(models.GenericRunDetails{
 			RunBase:       full.RunBase,
+			ArgusURL:      runPageURL(c, full.RunBase),
 			StartedBy:     full.StartedBy,
 			SubType:       full.SubType,
 			ScyllaVersion: full.ScyllaVersion,
@@ -139,6 +141,7 @@ var RunTypeDetailsHandlers = map[string]runTypeHandler{
 		}
 		return models.NewKVTabular(models.DriverRunDetails{
 			RunBase:       full.RunBase,
+			ArgusURL:      runPageURL(c, full.RunBase),
 			ScyllaVersion: full.ScyllaVersion,
 		}), nil
 	},
@@ -149,11 +152,20 @@ var RunTypeDetailsHandlers = map[string]runTypeHandler{
 		}
 		return models.NewKVTabular(models.SirenadaRunDetails{
 			RunBase:       full.RunBase,
+			ArgusURL:      runPageURL(c, full.RunBase),
 			ScyllaVersion: full.ScyllaVersion,
 			Region:        full.Region,
 			SCTTestID:     full.SCTTestID,
 		}), nil
 	},
+}
+
+// runPageURL is the Argus link of a run, empty when the run has no build number.
+func runPageURL(c *api.Client, run models.RunBase) string {
+	if run.BuildNumber == nil {
+		return ""
+	}
+	return api.RunURL(c.BaseURL(), run.BuildID, *run.BuildNumber)
 }
 
 // DispatchDetails fetches a run of the given type and returns the
@@ -394,6 +406,10 @@ var getRunCmd = &cobra.Command{
 on the Argus Details tab — without heavy fields such as logs, screenshots,
 events, nemeses, or cloud resources.
 
+Name the run by --run-id, or by its Jenkins job path and build number with
+--build-id and --build-number. A build that ran parallel stages has several
+runs, and all of them are shown.
+
 With --full, show the complete run object with every field.
 
 For additional information use the dedicated subcommands:
@@ -407,64 +423,105 @@ For additional information use the dedicated subcommands:
 		ctx := cmd.Context()
 		client := APIClientFrom(ctx)
 		out := OutputterFrom(ctx)
-		c := CacheFrom(ctx)
 		log := logging.For(LoggerFrom(ctx), "run-get")
 
 		runType, _ := cmd.Flags().GetString("type")
 		runID, _ := cmd.Flags().GetString("run-id")
+		buildID, _ := cmd.Flags().GetString("build-id")
+		buildNumber, _ := cmd.Flags().GetInt("build-number")
 		full, _ := cmd.Flags().GetBool("full")
 
-		log.Debug().Str("run_id", runID).Str("type_flag", runType).Bool("full", full).Msg("fetching run")
-
-		// Auto-resolve run type when --type is not provided.
-		if runType == "" {
-			// Check cache first (long TTL — run type is immutable).
-			typeKey := cache.RunTypeKey(runID)
-			if cached, _, err := cache.Get[models.RunType](c, typeKey); isCacheable(err) {
-				runType = cached.RunType
-				log.Debug().Str("run_id", runID).Str("run_type", runType).Msg("run type resolved from cache")
-			} else {
-				log.Debug().Str("run_id", runID).Msg("resolving run type from API")
-				var resolveErr error
-				runType, resolveErr = ResolveRunType(ctx, client, runID)
-				if resolveErr != nil {
-					log.Error().Err(resolveErr).Str("run_id", runID).Msg("failed to resolve run type")
-					return resolveErr
-				}
-				log.Debug().Str("run_id", runID).Str("run_type", runType).Msg("run type resolved from API")
-				// Cache the resolved type with the long TTL.
-				if cacheErr := cache.Set(c, typeKey, models.RunType{RunType: runType}, fmt.Sprintf(api.TestRunGetType, runID), cache.TTLRunType); cacheErr != nil {
-					log.Warn().Err(cacheErr).Str("run_id", runID).Msg("failed to cache run type")
-				}
-			}
-		}
-
-		if full {
-			result, err := fetchFullRun(ctx, client, c, runType, runID)
+		if buildID == "" {
+			result, err := getRunDetails(cmd, runType, runID, full)
 			if err != nil {
-				log.Error().Err(err).Str("run_id", runID).Str("run_type", runType).Msg("failed to fetch full run")
 				return err
 			}
-			log.Info().Str("run_id", runID).Str("run_type", runType).Msg("full run fetched successfully")
-			return out.Write(models.NewKVTabular(result))
+			return out.Write(result)
 		}
 
-		route := fmt.Sprintf(api.TestRunGet, runType, runID)
-		log.Debug().Str("run_id", runID).Str("run_type", runType).Str("route", route).Msg("fetching run from API")
-		req, err := client.NewRequest(ctx, "GET", route, nil)
+		log.Debug().Str("build_id", buildID).Int("build_number", buildNumber).Msg("resolving the runs of a build")
+		req, err := client.NewRequest(ctx, "GET", fmt.Sprintf(api.TestRunsByBuild, buildID, buildNumber), nil)
 		if err != nil {
-			log.Error().Err(err).Str("run_id", runID).Str("route", route).Msg("failed to build request")
 			return err
 		}
-
-		result, err := DispatchDetails(runType, client, req)
+		build, err := api.DoJSON[models.RunsByBuild](client, req)
 		if err != nil {
-			log.Error().Err(err).Str("run_id", runID).Str("run_type", runType).Msg("failed to fetch run")
-			return err
+			return fmt.Errorf("resolving build %s #%d: %w", buildID, buildNumber, err)
 		}
-		log.Info().Str("run_id", runID).Str("run_type", runType).Msg("run fetched successfully")
-		return out.Write(result)
+		details := make(models.BuildRunDetails, 0, len(build.Runs))
+		for _, run := range build.Runs {
+			result, err := getRunDetails(cmd, run.PluginName, run.RunID, full)
+			if err != nil {
+				return err
+			}
+			tab, ok := result.(output.Tabular)
+			if !ok {
+				return fmt.Errorf("run %s of type %q has no table view", run.RunID, run.PluginName)
+			}
+			details = append(details, models.BuildRunDetail{ID: run.RunID, Details: tab})
+		}
+		return out.Write(details)
 	},
+}
+
+// getRunDetails returns the output-ready view of one run: its details, or the
+// whole run with full. It resolves the run type when runType is empty.
+func getRunDetails(cmd *cobra.Command, runType, runID string, full bool) (any, error) {
+	ctx := cmd.Context()
+	client := APIClientFrom(ctx)
+	c := CacheFrom(ctx)
+	log := logging.For(LoggerFrom(ctx), "run-get")
+
+	log.Debug().Str("run_id", runID).Str("type_flag", runType).Bool("full", full).Msg("fetching run")
+
+	// Auto-resolve run type when --type is not provided.
+	if runType == "" {
+		// Check cache first (long TTL — run type is immutable).
+		typeKey := cache.RunTypeKey(runID)
+		if cached, _, err := cache.Get[models.RunType](c, typeKey); isCacheable(err) {
+			runType = cached.RunType
+			log.Debug().Str("run_id", runID).Str("run_type", runType).Msg("run type resolved from cache")
+		} else {
+			log.Debug().Str("run_id", runID).Msg("resolving run type from API")
+			var resolveErr error
+			runType, resolveErr = ResolveRunType(ctx, client, runID)
+			if resolveErr != nil {
+				log.Error().Err(resolveErr).Str("run_id", runID).Msg("failed to resolve run type")
+				return nil, resolveErr
+			}
+			log.Debug().Str("run_id", runID).Str("run_type", runType).Msg("run type resolved from API")
+			// Cache the resolved type with the long TTL.
+			if cacheErr := cache.Set(c, typeKey, models.RunType{RunType: runType}, fmt.Sprintf(api.TestRunGetType, runID), cache.TTLRunType); cacheErr != nil {
+				log.Warn().Err(cacheErr).Str("run_id", runID).Msg("failed to cache run type")
+			}
+		}
+	}
+
+	if full {
+		result, err := fetchFullRun(ctx, client, c, runType, runID)
+		if err != nil {
+			log.Error().Err(err).Str("run_id", runID).Str("run_type", runType).Msg("failed to fetch full run")
+			return nil, err
+		}
+		log.Info().Str("run_id", runID).Str("run_type", runType).Msg("full run fetched successfully")
+		return models.NewKVTabular(result), nil
+	}
+
+	route := fmt.Sprintf(api.TestRunGet, runType, runID)
+	log.Debug().Str("run_id", runID).Str("run_type", runType).Str("route", route).Msg("fetching run from API")
+	req, err := client.NewRequest(ctx, "GET", route, nil)
+	if err != nil {
+		log.Error().Err(err).Str("run_id", runID).Str("route", route).Msg("failed to build request")
+		return nil, err
+	}
+
+	result, err := DispatchDetails(runType, client, req)
+	if err != nil {
+		log.Error().Err(err).Str("run_id", runID).Str("run_type", runType).Msg("failed to fetch run")
+		return nil, err
+	}
+	log.Info().Str("run_id", runID).Str("run_type", runType).Msg("run fetched successfully")
+	return result, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -787,9 +844,13 @@ func init() {
 
 	// run get
 	getRunCmd.Flags().String("type", "", "Plugin type (optional, auto-resolved when omitted): "+ValidRunTypes())
-	getRunCmd.Flags().String("run-id", "", "Run UUID (required)")
+	getRunCmd.Flags().String("run-id", "", "Run UUID")
+	getRunCmd.Flags().String("build-id", "", "Jenkins job path of the build, e.g. scylla-master/longevity/longevity-100gb-4h")
+	getRunCmd.Flags().Int("build-number", 0, "Jenkins build number, used with --build-id")
 	getRunCmd.Flags().Bool("full", false, "Return the complete run object, including logs, screenshots, nemeses and cloud resources")
-	_ = getRunCmd.MarkFlagRequired("run-id")
+	getRunCmd.MarkFlagsOneRequired("run-id", "build-id")
+	getRunCmd.MarkFlagsMutuallyExclusive("run-id", "build-id")
+	getRunCmd.MarkFlagsRequiredTogether("build-id", "build-number")
 
 	// run get-type
 	getRunTypeCmd.Flags().String("run-id", "", "Run UUID (required)")

@@ -27,6 +27,7 @@ from argus.backend.models.result import (
 )
 from argus.backend.models.pytest import PytestResultTable, PytestUserField
 from argus.backend.models.web import ArgusTest, ArgusUserView
+from argus.backend.plugins.generic.model import GenericRun
 from argus.backend.plugins.sct.testrun import SCTTestRun
 
 
@@ -340,4 +341,46 @@ async def linked_github_issue(sct_run: SctRun):
     try:
         await issue.delete()
     except Exception:
+        pass
+
+
+@pytest.fixture
+async def generic_run_pytest_row(api_client, client_service, release_manager_service, group, release):
+    """Submit a generic run as build #7 of a generic test, and a pytest result that belongs to it."""
+    name = f"generic_widget_{uuid.uuid4().hex[:8]}"
+    test = await release_manager_service.create_test(name, name, name, f"http://ci.example.com/job/{name}/",
+                                                     group_id=group.id, release_id=release.id, plugin_name="generic")
+    run_id = str(uuid.uuid4())
+    resp = api_client.post("/api/v1/client/testrun/generic/submit", json={
+        "run_id": run_id,
+        "build_id": test.build_system_id,
+        "build_url": f"{test.build_system_url}7/",
+        "started_by": "widget_test_user",
+        "scylla_version": None,
+        "sub_type": "pytest",
+    })
+    assert resp.json()["status"] == "ok", resp.text
+    timestamp = _time.time()
+    inserted = await client_service.submit_pytest_result({
+        "run_id": uuid.UUID(run_id),
+        "name": f"pytest.widget_{uuid.uuid4().hex[:8]}",
+        "status": "passed",
+        "test_type": "unit",
+        "timestamp": timestamp,
+        "session_timestamp": timestamp,
+        "markers": [],
+        "user_fields": {},
+        "message": "",
+        "duration": 1.5,
+    })
+
+    yield {"name": inserted["name"], "build_id": test.build_system_id, "run_id": run_id}
+
+    try:
+        await PytestResultTable.find(name=inserted["name"]).delete()
+    except Exception:
+        pass
+    try:
+        await (await GenericRun.get(id=uuid.UUID(run_id))).delete()
+    except DocumentNotFound:
         pass
