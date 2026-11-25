@@ -11,6 +11,12 @@ view, add the **Chat** widget; it shows the same bar.
 
 ## Asking
 
+An empty chat lists example questions, grouped by what they do: asking,
+running tests, plans and labels, memories and Zeus. **Examples** in the
+chat's header opens the same list at any time, with a link to this page. A
+click on an example puts it in the question box without sending it; replace
+the parts in angle brackets, such as `<version>`, before you send it.
+
 Type a question and press Enter; Shift+Enter adds a line. The answer streams
 in, and anyone with the chat open sees it arrive. Older answers are
 collapsed to a short preview; **Show answer** opens one.
@@ -64,9 +70,26 @@ Argus shows each proposal as a card in the chat, and nothing runs until a
 user presses **Run** on it. Any user may confirm a card or dismiss it, and
 the card names who did.
 
-- "Rerun the rolling upgrade tests that failed on 2025.1.0~rc4, on gce."
+A start goes like this:
+
+1. Ask for it: "Rerun the rolling upgrade tests that failed on
+   2025.1.0~rc4, on gce."
+2. Read the card. It lists each test with the parameters that change, and
+   under **Left out** the tests that cannot start, with the reason.
+   **All parameters** shows every value a test starts with.
+3. Change what is wrong: ask ("use us-west1 instead"), or press **Edit
+   parameters** on the card.
+4. Press **Run**. The card links each started run.
+5. Follow the batch: "How are the week1 tests doing on rc4?" Then start
+   what still needs a run: "Rerun the week1 tests that failed or did not run
+   on rc4."
+
+More requests:
+
 - "Run the week1 tests on gce." The assistant takes the tests of the release
   plan that carry the `week1` label. A labelled group stands for its tests.
+- "Run the tests of the week plan that did not run on rc4." Without a label,
+  the whole plan.
 - "Run sanity-test with scylla_version 2025.1.1."
 - "Rerun the Rolling Upgrades group on gce." A group or a release stands for its
   enabled tests, up to 50.
@@ -111,6 +134,12 @@ The assistant reads the release plans and edits them:
 - "Which labels does the week plan have?" lists each label with the tests
   and groups that carry it.
 - "Which tests would week1 start?" lists them without proposing anything.
+- "How is week1 doing on rc4?" counts the tests of the label that passed,
+  failed, were aborted, still run, or did not run on the version, and names
+  each one. Without a version, the plan's target version. The counts come
+  from the release summary, as they are on the release dashboard.
+- A label narrows other questions too: "Who is assigned to the week1 tests
+  of the week plan?", "Which week1 tests failed on rc4?"
 - "Add the label week1 to the upgrade tests of the week plan, and assign them
   to Alice." proposes the edit as a card.
 
@@ -120,8 +149,9 @@ version or completion. Assigning a test that is not in the plan adds it, and
 a new assignee becomes a participant. The card lists every change, and
 **Apply** saves them, unless someone changed the plan since the proposal; then
 the card fails and nothing changes. Creating, copying and deleting plans stay
-in the planner. When plans of two releases in a view share a name, name the plan by its key
-or id.
+in the planner, where labels can be edited and filtered too; see
+[Release plans](release_plans.md). When plans of two releases in a view
+share a name, name the plan by its key or id.
 
 ## Auto mode
 

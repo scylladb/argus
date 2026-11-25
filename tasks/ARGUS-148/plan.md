@@ -34,7 +34,7 @@ stays in every plan built from a spec.
   `STATUS_GROUPS` and the import of the moved helpers)
 - Modify: `argus/backend/service/chat/agent.py` (import `entity_summaries`
   from `plans`)
-- Test: `argus/backend/tests/chat/test_tools.py`
+- Test: `argus/backend/tests/chat/test_plan_progress.py`
 
 **Internals:**
 - `plans.entity_summaries(entity, scope=None, wait=False)` is moved from
@@ -57,22 +57,22 @@ stays in every plan built from a spec.
   plan <name> has no target version")` when neither is set.
 
 Steps:
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - `plan_tests` without labels returns the tests of a plan group plus a
     direct test.
   - `plan_states` gives the seeded failed run's test as `failed` and the
     other test as `None`.
 - [ ] Run them and confirm the failure.
-- [ ] Move the helpers and write `plan_tests`, `plan_states`, `state_of` and
+- [x] Move the helpers and write `plan_tests`, `plan_states`, `state_of` and
   `plan_version`. Point `execute_plan_tests` and `agent.py` at them.
-- [ ] Run `uv run pytest argus/backend/tests/chat`.
+- [x] Run `uv run pytest argus/backend/tests/chat`.
 
 ## Task 2 — `get_plan_progress` and the state filter on plan starts
 
 **Files:**
 - Modify: `argus/backend/service/chat/tools.py`
 - Modify: `argus/backend/service/chat/prompt.py` (`TOOL_RULES`)
-- Test: `argus/backend/tests/chat/test_tools.py`, `argus/backend/tests/chat/test_actions.py`
+- Test: `argus/backend/tests/chat/test_plan_progress.py`
 
 **Internals:**
 - `PlanProgressArgs(plan, labels, match_all, version)`.
@@ -94,7 +94,7 @@ Steps:
     `execute_plan_tests`.
 
 Steps:
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - Progress on `2037.1.0~rc1` counts one failed and one not run.
   - Progress takes the plan's target version when none is named.
   - Progress without any version asks for one.
@@ -104,14 +104,14 @@ Steps:
   - `only=["passed"]` proposes nothing and names the counts.
   - The tool spec test still passes with the new tool.
 - [ ] Run them and confirm the failure.
-- [ ] Write the tool, the arguments and the rule.
-- [ ] Run `uv run pytest argus/backend/tests/chat`.
+- [x] Write the tool, the arguments and the rule.
+- [x] Run `uv run pytest argus/backend/tests/chat`.
 
 ## Task 3 — Plan filter on the read tools
 
 **Files:**
 - Modify: `argus/backend/service/chat/tools.py`
-- Test: `argus/backend/tests/chat/test_tools.py`
+- Test: `argus/backend/tests/chat/test_plan_progress.py`
 
 **Internals:**
 - `PlanFilterArgs(BaseModel)` with `plan`, `labels` and `match_all`. It is
@@ -126,16 +126,16 @@ Steps:
   the plan's selection, and with neither it raises an error.
 
 Steps:
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - `read_release` with a plan and a label lists only the labelled test.
   - `get_summary` with a version and a plan lists only the plan's tests.
   - `get_assignees` with only a plan lists the plan's tests.
   - Labels without a plan give an error.
 - [ ] Run them and confirm the failure.
-- [ ] Write the filter.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md` for
+- [x] Write the filter.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md` for
   the backend (`uv run pre-commit run --all-files`, `uv run pytest`).
-- [ ] Commit Tasks 1–3, with their boxes checked:
+- [x] Commit Tasks 1–3, with their boxes checked:
   `feature(chat-mode): follow a plan's progress and rerun what it still needs`.
 
 ## Task 4 — Plan label helpers
@@ -161,14 +161,14 @@ Steps:
   ignoring case. An empty selection matches everything.
 
 Steps:
-- [ ] Write the failing tests for each function:
+- [x] Write the failing tests for each function:
   - the diff for an added, a changed and an emptied entity
   - an inherited group label
   - a duplicate refused when it differs only in case
   - a string parsed from the API
 - [ ] Run them and confirm the failure.
-- [ ] Write the module.
-- [ ] Run the tests.
+- [x] Write the module.
+- [x] Run the tests.
 
 ## Task 5 — Labels in the planner
 
@@ -200,15 +200,15 @@ Steps:
   on each planned test and group.
 
 Steps:
-- [ ] Write the failing tests, which mock `fetch` and render the creator in
+- [x] Write the failing tests, which mock `fetch` and render the creator in
   edit mode with a plan whose `options` is a JSON string:
   - a label added through the editor appears in the update body's
     `options_set`
   - in createFrom mode, the create body carries `options`
   - the filter hides an unlabelled item
 - [ ] Run them and confirm the failure.
-- [ ] Write the components.
-- [ ] Run the tests and `yarn build`.
+- [x] Write the components.
+- [x] Run the tests and `yarn build`.
 
 ## Task 6 — Plan-label filter on the dashboards
 
@@ -216,8 +216,8 @@ Steps:
 - Modify: `frontend/ReleaseDashboard/TestDashboard.svelte`
 - Modify: `frontend/ReleaseDashboard/TestDashboardTest.svelte` (plan label
   badges)
-- Test: `frontend/ReleaseDashboard/planLabelFilter.test.ts` (the filter
-  function)
+- Test: `frontend/ReleasePlanner/planLabels.test.ts` (`planLabelMatches`,
+  `planLabelsOfTest`, `planLabelOptions`)
 
 **Internals:**
 - Fetch the plans once, on mount:
@@ -238,12 +238,12 @@ Steps:
   as badges when the filter is active.
 
 Steps:
-- [ ] Write the failing tests for `planLabelOptions` and for the filter
+- [x] Write the failing tests for `planLabelOptions` and for the filter
   function over tests from a group label and from a test label.
 - [ ] Run them and confirm the failure.
-- [ ] Write the filter and the select.
-- [ ] Run the tests and `yarn build`.
-- [ ] Commit Tasks 4–6, with their boxes checked:
+- [x] Write the filter and the select.
+- [x] Run the tests and `yarn build`.
+- [x] Commit Tasks 4–6, with their boxes checked:
   `feature(frontend): show, edit and filter plan labels`.
 
 ## Task 7 — Chat examples and help panel
@@ -278,17 +278,17 @@ Steps:
 - `ChatComposer` exports `focus()`, and `text = $bindable("")`.
 
 Steps:
-- [ ] Write the failing tests:
+- [x] Write the failing tests:
   - `ChatHints` renders the four groups and the docs link.
   - A click calls `onpick` with the example text.
   - In `ChatModal`, an empty conversation shows the groups.
   - In `ChatModal`, clicking an example fills the textarea and makes no POST.
   - The header button opens the examples tab.
 - [ ] Run them and confirm the failure.
-- [ ] Write the components.
-- [ ] Run `npx -y node@22 node_modules/vitest/vitest.mjs run frontend/Chat` and
+- [x] Write the components.
+- [x] Run `npx -y node@22 node_modules/vitest/vitest.mjs run frontend/Chat` and
   `yarn build`.
-- [ ] Commit: `feature(frontend): show what the chat can do`.
+- [x] Commit: `feature(frontend): show what the chat can do`.
 
 ## Task 8 — Documentation
 
@@ -320,14 +320,14 @@ Content:
   - how the chat uses labels
 
 Steps:
-- [ ] Write the documents.
-- [ ] Run the full verify sequence: `uv run pre-commit run --all-files`,
+- [x] Write the documents.
+- [x] Run the full verify sequence: `uv run pre-commit run --all-files`,
   `uv run pytest`, `yarn test` (under Node 22), `yarn build`.
-- [ ] Check in the running dev server, at two widths:
+- [x] Check in the running dev server, at two widths:
   - planner labels save and reload
   - createFrom and split keep labels
   - the dashboard filter survives a reload
   - an example fills the chat box
   - progress and an `only` start card on a real plan, dismissed without
     running
-- [ ] Commit: `docs(chat-mode): describe plan labels and running planned tests`.
+- [x] Commit: `docs(chat-mode): describe plan labels and running planned tests`.
