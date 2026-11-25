@@ -25,6 +25,7 @@ from argus.backend.service.chat.llm import (
     Usage,
 )
 from argus.backend.service.chat.memory import ChatMemoryService
+from argus.backend.service.chat.plans import entity_summaries
 from argus.backend.service.chat.prompt import (
     COMPACT_INSTRUCTION,
     build_system_prompt,
@@ -38,7 +39,6 @@ from argus.backend.service.chat.skills import PromptSetup, SkillService
 from argus.backend.service.chat.tools import (
     ToolContext,
     Toolbox,
-    entity_summaries,
     mcp_tools,
     run_tool,
     to_json,

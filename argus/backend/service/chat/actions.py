@@ -186,32 +186,6 @@ async def plans_in_scope(scope: Scope) -> list[ArgusReleasePlan]:
     return [plan for release_id in scope.releases for plan in await service.get_plans_for_release(release_id)]
 
 
-def resolve_labeled_tests(scope: Scope, plan: ArgusReleasePlan, labels: list[str], match_all: bool) -> list[ArgusTest]:
-    """The plan's tests whose plan entity carries the labels; a labelled group
-    stands for its enabled tests. Matching ignores case."""
-    wanted = {label.lower() for label in labels}
-    options = json.loads(plan.options) if plan.options else {}
-    available: set[str] = set()
-    tests_by_id = {test.id: test for test in scope.tests}
-    selected: dict[UUID, ArgusTest] = {}
-    for entity_id, option in options.items():
-        entity_labels = option.get("labels", [])
-        available.update(entity_labels)
-        lowered = {label.lower() for label in entity_labels}
-        if not (wanted <= lowered if match_all else wanted & lowered):
-            continue
-        entity_uuid = UUID(entity_id)
-        if (test := tests_by_id.get(entity_uuid)) and test.enabled:
-            selected[test.id] = test
-        elif (group := scope.groups.get(entity_uuid)) and group.enabled:
-            selected.update({test.id: test for test in scope.tests if test.group_id == group.id and test.enabled})
-    if not selected:
-        listed = ", ".join(sorted(available)) or "none"
-        raise TestReferenceError(f"No test of the plan {plan.name} carries {', '.join(labels)}; "
-                                 f"its labels are: {listed}")
-    return sorted(selected.values(), key=scope.label)
-
-
 def _field(issue, *names: str):
     data = issue.model_dump() if hasattr(issue, "model_dump") else dict(issue)
     return next((data[name] for name in names if data.get(name) is not None), None)

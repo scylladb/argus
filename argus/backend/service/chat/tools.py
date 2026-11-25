@@ -28,7 +28,6 @@ from argus.backend.service.chat.actions import (
     propose_start,
     propose_unlink,
     refresh_zeus,
-    resolve_labeled_tests,
     resolve_plan,
     zeus_cards,
 )
@@ -38,7 +37,19 @@ from argus.backend.service.chat.llm import ToolCall, ToolSpec
 from argus.backend.service.chat.mcp import McpConfirmationNeeded, McpServerService, chat_tool_name
 from argus.backend.service.chat.memory import ChatMemoryService
 from argus.backend.service.chat.people import load_people, person
-from argus.backend.service.chat.plans import PlanChanges, build_plan_diff, plan_labels, plan_stamp
+from argus.backend.service.chat.plans import (
+    STATES,
+    STATUS_GROUPS,
+    PlanChanges,
+    build_plan_diff,
+    entity_summaries,
+    plan_labels,
+    plan_stamp,
+    plan_states,
+    plan_tests,
+    plan_version,
+    state_of,
+)
 from argus.backend.service.chat.prompt import truncate
 from argus.backend.service.chat.resolve import (
     EXPANSION_LIMIT,
@@ -55,7 +66,6 @@ from argus.backend.service.chat.resolve import (
 from argus.backend.service.chat.skills import SkillService
 from argus.backend.service.issue_service import IssueService
 from argus.backend.service.jenkins_service import JenkinsService
-from argus.backend.service.release_summary import ReleaseSummaryService
 from argus.backend.service.testrun import TestRunService
 from argus.backend.service.zeus_client import ZeusClient
 from argus.backend.util.common import select_rows
@@ -67,12 +77,6 @@ SUMMARY_TEST_LIMIT = 60
 RELEASE_TEST_LIMIT = 300
 VIEW_TEST_LIMIT = 100
 COMMENT_LIMIT = 3
-STATUS_GROUPS = {
-    "failed": {"failed", "test_error", "error"},
-    "passed": {"passed"},
-    "aborted": {"aborted"},
-    "in_progress": {"created", "running"},
-}
 
 
 @dataclass(slots=True)
@@ -214,18 +218,25 @@ def _status_matches(status: str, wanted: set[str] | None) -> bool:
     return any(status in STATUS_GROUPS.get(group, {group}) for group in wanted)
 
 
-async def entity_summaries(entity: ChatEntity, scope: Scope | None = None) -> list[dict]:
-    service = ReleaseSummaryService()
-    if entity.test_ids is None:
-        return [await service.get(release_id) for release_id in entity.release_ids]
-    scope = scope or await load_scope(entity)
-    by_release: dict[UUID, set[UUID]] = defaultdict(set)
-    for test in scope.tests:
-        by_release[test.release_id].add(test.id)
-    return [await service.get(release_id, test_ids) for release_id, test_ids in by_release.items()]
+PLAN_REFERENCE = "Plan id, key (release#n) or name"
 
 
-class SummaryArgs(BaseModel):
+class PlanFilterArgs(BaseModel):
+    plan: str | None = Field(None, description=f"Only the tests of this release plan; {PLAN_REFERENCE}")
+    labels: StringList | None = Field(None, description="With plan: only the plan tests that carry these labels")
+    match_all: bool = Field(False, description="With labels: only tests that carry every label")
+
+
+async def plan_filter(scope: Scope, args: PlanFilterArgs) -> set[UUID] | None:
+    if not args.plan:
+        if args.labels:
+            raise TestReferenceError("Name the plan whose labels to use")
+        return None
+    plan = resolve_plan(await plans_in_scope(scope), args.plan)
+    return {test.id for test in plan_tests(scope, plan, args.labels, args.match_all)}
+
+
+class SummaryArgs(PlanFilterArgs):
     version: str | None = Field(None, description="A version such as 2025.1.0~rc2; its tests are listed")
     family: str | None = Field(None, description="A final version such as 2025.1.0, with its rcs")
     statuses: StringList | None = Field(None, description="Only list tests in these states: failed, passed, "
@@ -236,9 +247,11 @@ class SummaryArgs(BaseModel):
                      "statuses, the tests of each version with their latest status.", SummaryArgs)
 async def get_summary(ctx: ToolContext, args: SummaryArgs) -> dict:
     wanted = set(args.statuses or []) or None
-    list_tests = bool(args.version or wanted)
+    scope = await load_scope(ctx.entity) if args.plan or args.labels else None
+    selected = await plan_filter(scope, args) if scope else None
+    list_tests = bool(args.version or wanted or selected is not None)
     releases = []
-    for summary in await entity_summaries(ctx.entity):
+    for summary in await entity_summaries(ctx.entity, scope, only=selected):
         families = []
         for family in summary["families"]:
             if args.family and family["family"] != args.family:
@@ -267,7 +280,7 @@ async def get_summary(ctx: ToolContext, args: SummaryArgs) -> dict:
     return {"releases": releases}
 
 
-class ReleaseArgs(BaseModel):
+class ReleaseArgs(PlanFilterArgs):
     release: str | None = Field(None, description="A release id, name or pretty name; defaults to every release "
                                                   "of this chat")
 
@@ -278,8 +291,10 @@ async def read_release(ctx: ToolContext, args: ReleaseArgs) -> dict:
     scope = await load_scope(ctx.entity)
     releases = [resolve_release(scope, args.release)] if args.release else list(scope.releases.values())
     release_ids = {release.id for release in releases}
+    selected = await plan_filter(scope, args)
     tests = [test for test in scope.tests if test.release_id in release_ids and test.enabled
-             and scope.groups.get(test.group_id) and scope.groups[test.group_id].enabled]
+             and scope.groups.get(test.group_id) and scope.groups[test.group_id].enabled
+             and (selected is None or test.id in selected)]
     result = {
         "name": releases[0].name if len(releases) == 1 else None,
         "releases": [release.name for release in releases],
@@ -602,22 +617,79 @@ async def execute_tests(ctx: ToolContext, args: ExecuteTestsArgs) -> ToolOutcome
     return proposal_outcome(action)
 
 
-class ExecutePlanArgs(StartArgs):
-    plan: str = Field(description="Plan id, key (release#n) or name")
-    labels: StringList = Field(min_length=1, description="Plan labels, such as week1")
+State = Literal["passed", "failed", "aborted", "in_progress", "not_run"]
+VERSION_DESCRIPTION = "A version such as 2025.1.0~rc4; defaults to the plan's target version"
+
+
+class PlanSelectionArgs(BaseModel):
+    plan: str = Field(description=PLAN_REFERENCE)
+    labels: StringList | None = Field(None, description="Plan labels, such as week1; none takes the whole plan")
     match_all: bool = Field(False, description="Only tests that carry every label")
-    dry_run: bool = Field(False, description="Only list the tests the labels select; propose nothing")
+    version: str | None = Field(None, description=VERSION_DESCRIPTION)
 
 
-@tool("execute_plan_tests", "Propose starting the tests of a release plan that carry the labels. A labelled "
-                            "group stands for its tests. With dry_run, only list them.", ExecutePlanArgs)
+def state_counts(states: dict[UUID, str]) -> dict[str, int]:
+    return {state: sum(1 for value in states.values() if value == state) for state in STATES}
+
+
+def state_entry(scope: Scope, test: ArgusTest, entry: dict | None) -> dict:
+    return {"test": scope.label(test), "state": state_of(entry["status"] if entry else None),
+            "status": entry["status"] if entry else None, "run_id": entry["run_id"] if entry else None,
+            "build_number": entry["build_number"] if entry else None}
+
+
+@tool("get_plan_progress", "How the tests of a release plan, or of its labels, did on a version: the count per "
+                           "state (passed, failed, aborted, in_progress, not_run) and each test's state, from "
+                           "the release summary. Check it before starting the next batch of a plan.",
+      PlanSelectionArgs)
+async def get_plan_progress(ctx: ToolContext, args: PlanSelectionArgs) -> dict:
+    scope = await load_scope(ctx.entity)
+    plan = resolve_plan(await plans_in_scope(scope), args.plan)
+    version = plan_version(plan, args.version)
+    tests = plan_tests(scope, plan, args.labels, args.match_all)
+    entries, stale = await plan_states(ctx.entity, scope, tests, version)
+    listed = [state_entry(scope, test, entries[test.id]) for test in tests]
+    result = {"plan": plan.name, "key": plan.key, "version": version, "labels": args.labels or [], "stale": stale,
+              "counts": state_counts({test.id: entry["state"] for test, entry in zip(tests, listed)}),
+              "tests": listed[:SUMMARY_TEST_LIMIT]}
+    if len(listed) > SUMMARY_TEST_LIMIT:
+        result["truncated"] = f"{len(listed) - SUMMARY_TEST_LIMIT} more tests not shown"
+    return result
+
+
+class ExecutePlanArgs(PlanSelectionArgs, StartArgs):
+    only: list[State] | None = Field(None, description="Only the tests in these states on the version, e.g. "
+                                                       "[\"failed\", \"not_run\"] to rerun what still needs a run")
+    dry_run: bool = Field(False, description="Only list the tests the plan selects; propose nothing")
+
+
+@tool("execute_plan_tests", "Propose starting the tests of a release plan, or those that carry the labels. A "
+                            "labelled group stands for its tests. With only, just the tests in those states on "
+                            "the version. With dry_run, only list them.", ExecutePlanArgs)
 async def execute_plan_tests(ctx: ToolContext, args: ExecutePlanArgs) -> ToolOutcome | dict:
     scope = await load_scope(ctx.entity)
     plan = resolve_plan(await plans_in_scope(scope), args.plan)
-    tests = resolve_labeled_tests(scope, plan, args.labels, args.match_all)
+    tests = plan_tests(scope, plan, args.labels, args.match_all)
+    if not tests:
+        raise TestReferenceError(f"The plan {plan.name} holds no enabled test")
+    states: dict[UUID, dict] | None = None
+    if args.only or (args.dry_run and args.version):
+        version = plan_version(plan, args.version)
+        entries, _ = await plan_states(ctx.entity, scope, tests, version)
+        states = {test.id: state_entry(scope, test, entries[test.id]) for test in tests}
+    if args.only:
+        wanted = set(args.only)
+        counts = state_counts({test_id: entry["state"] for test_id, entry in states.items()})
+        tests = [test for test in tests if states[test.id]["state"] in wanted]
+        if not tests:
+            listed = ", ".join(f"{state} {count}" for state, count in counts.items())
+            raise TestReferenceError(f"No test of the plan {plan.name} is {' or '.join(args.only)} on {version}; "
+                                     f"its tests are: {listed}")
     if args.dry_run:
-        return {"plan": plan.name, "labels": args.labels, "match_all": args.match_all,
-                "tests": [scope.label(test) for test in tests]}
+        return {"plan": plan.name, "labels": args.labels or [], "match_all": args.match_all,
+                "tests": [states[test.id] if states else scope.label(test) for test in tests]}
+    if len(tests) > EXPANSION_LIMIT:
+        raise TestReferenceError(f"That is more than {EXPANSION_LIMIT} tests; narrow the plan by labels or states")
     seed = Seed.of(args.seed, args.build_number)
     return proposal_outcome(await propose_start(scope, tests, args.params, [],
                                                 per_test_overrides(scope, args.per_test), seed))
@@ -851,10 +923,14 @@ async def get_users(ctx: ToolContext, args: UsersArgs) -> dict:
     return {"users": [person(user_id, people) for user_id in dict.fromkeys(args.user_ids)]}
 
 
-class AssigneesArgs(BaseModel):
-    tests: StringList = Field(min_length=1, max_length=30,
-                              description="Tests by id, name, pretty name, group/test, release/group/test, Jenkins "
-                                          "job path or URL; a group stands for its enabled tests")
+ASSIGNEE_TEST_LIMIT = 30
+
+
+class AssigneesArgs(PlanFilterArgs):
+    tests: StringList | None = Field(None, max_length=ASSIGNEE_TEST_LIMIT,
+                                     description="Tests by id, name, pretty name, group/test, release/group/test, "
+                                                 "Jenkins job path or URL; a group stands for its enabled tests. "
+                                                 "Without tests, the tests of the plan")
     version: str | None = Field(None, description="Only the plans that target this version")
 
 
@@ -863,7 +939,15 @@ class AssigneesArgs(BaseModel):
                        "assigned to.", AssigneesArgs)
 async def get_assignees(ctx: ToolContext, args: AssigneesArgs) -> dict:
     scope = await load_scope(ctx.entity)
-    tests = resolve_tests(scope, args.tests)
+    selected = await plan_filter(scope, args)
+    if args.tests:
+        tests = [test for test in resolve_tests(scope, args.tests) if selected is None or test.id in selected]
+    elif selected is not None:
+        tests = sorted((test for test in scope.tests if test.id in selected), key=scope.label)
+    else:
+        raise TestReferenceError("Name the tests or a plan")
+    left_out = len(tests) - ASSIGNEE_TEST_LIMIT
+    tests = tests[:ASSIGNEE_TEST_LIMIT]
     plans = [plan for plan in await plans_in_scope(scope) if PluginModelBase._is_plan_active(plan)
              and (not args.version or plan.target_version == args.version)]
     service = TestRunService()
@@ -897,7 +981,10 @@ async def get_assignees(ctx: ToolContext, args: AssigneesArgs) -> dict:
             "last_run": {"id": run["id"], "status": run["status"], "build_number": run["build_number"],
                          "assignee": person(run.get("assignee"), people)} if run else None,
         })
-    return {"tests": entries}
+    result = {"tests": entries}
+    if left_out > 0:
+        result["truncated"] = f"{left_out} more tests not shown; narrow the plan by labels"
+    return result
 
 
 SCT_PLUGIN_NAME = "scylla-cluster-tests"
