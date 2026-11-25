@@ -55,11 +55,12 @@
 
     let { views }: Props = $props();
 
-    enum Tab {
-        Automatic,
-        User,
-        Favorite,
-    }
+    const Tab = {
+        Automatic: 0,
+        User: 1,
+        Favorite: 2,
+    } as const;
+    type Tab = (typeof Tab)[keyof typeof Tab];
 
     let userFavoriteStore = $state(loadUserPref<UserFavorites>(FAVORITES_KEY) || []);
     let currentTab = $state(loadUserPref<Tab>(CURRENT_TAB_KEY) ?? Tab.Automatic);
