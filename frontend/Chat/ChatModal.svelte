@@ -4,6 +4,7 @@
     import Fa from "svelte-fa";
     import {
         faCircle,
+        faCircleQuestion,
         faCodeBranch,
         faComments,
         faCompress,
@@ -18,6 +19,7 @@
     import ChatContextStats from "./ChatContextStats.svelte";
     import ChatMemories from "./ChatMemories.svelte";
     import ChatForks from "./ChatForks.svelte";
+    import ChatHints from "./ChatHints.svelte";
     import ChatMessage from "./ChatMessage.svelte";
     import { chatBase, postJson } from "./chatApi";
     import { connectChat } from "./chatEvents";
@@ -43,7 +45,15 @@
     let presence = $state<string[]>([]);
     let live = $state(false);
     let loadError = $state("");
-    let side = $state<"memories" | "history" | "context" | "forks">("memories");
+    let side = $state<"memories" | "history" | "context" | "forks" | "examples">("memories");
+    let draft = $state("");
+    let composer = $state<ReturnType<typeof ChatComposer> | undefined>();
+
+    const pick = async (text: string) => {
+        draft = text;
+        await tick();
+        composer?.focus();
+    };
     const RECENT_MS = 3 * 24 * 60 * 60 * 1000;
 
     let thread = $state<HTMLElement | undefined>();
@@ -268,6 +278,10 @@
                          alt={displayName(userId, users)} title="{displayName(userId, users)} has this chat open" />
                 {/each}
             </div>
+            <button type="button" class="btn btn-sm btn-link text-body-secondary text-decoration-none"
+                    aria-label="What can I ask?" title="What can I ask?" onclick={() => (side = "examples")}>
+                <Fa icon={faCircleQuestion} /> Examples
+            </button>
             {#if isAdmin}
                 {#if confirmingClear}
                     <span class="small">Clear the whole conversation for everyone? Memories stay.</span>
@@ -295,9 +309,8 @@
                         <div class="text-body-secondary"><span class="spinner-border spinner-border-sm"></span> Loading…</div>
                     {:else if turns.length === 0}
                         <div class="text-body-secondary text-center my-auto">
-                            <p class="mb-1">No questions yet.</p>
-                            <p class="small mb-0">Try "what failed on the latest release candidate?" or "rerun the
-                                failed upgrade tests on gce".</p>
+                            <p class="mb-2">No questions yet. Ask about this {entityType}, or start with an example:</p>
+                            <ChatHints onpick={pick} />
                         </div>
                     {:else}
                         {#if olderCount}
@@ -350,6 +363,8 @@
                     </div>
                 {/if}
                 <ChatComposer
+                    bind:this={composer}
+                    bind:text={draft}
                     {entityType}
                     {disabledReason}
                     {busy}
@@ -388,11 +403,20 @@
                             Context
                         </button>
                     </li>
+                    <li class="nav-item">
+                        <button type="button" class="nav-link" class:active={side === "examples"} role="tab"
+                                aria-label="Examples" title="Examples"
+                                aria-selected={side === "examples"} onclick={() => (side = "examples")}>
+                            <Fa icon={faCircleQuestion} />
+                        </button>
+                    </li>
                 </ul>
                 <div class="side-scroll flex-grow-1 p-2 d-flex flex-column">
                     <div class="side-inset rounded bg-light-one shadow-sm p-2 d-flex flex-column gap-2 flex-grow-1">
                         {#if side === "forks"}
                             <ChatForks branches={forks} {users} {busy} onSwitch={(leaf) => replace("head", { node: leaf })} />
+                        {:else if side === "examples"}
+                            <ChatHints onpick={pick} compact={true} />
                         {:else if side === "context"}
                             {#if conversation}
                                 <ChatContextStats context={conversation.context} model={conversation.model} {busy}

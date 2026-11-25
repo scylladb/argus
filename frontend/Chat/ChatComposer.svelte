@@ -13,13 +13,25 @@
         onStop: () => void;
         onRetry: (auto: boolean) => void;
         onUndo: () => void;
+        text?: string;
     }
 
-    let { entityType, disabledReason = "", busy, canRetry, canUndo, onSend, onStop, onRetry, onUndo }: Props = $props();
+    let {
+        entityType,
+        disabledReason = "",
+        busy,
+        canRetry,
+        canUndo,
+        onSend,
+        onStop,
+        onRetry,
+        onUndo,
+        text = $bindable(""),
+    }: Props = $props();
 
     const AUTO_KEY = "argus.chat.auto";
 
-    let text = $state("");
+    let textarea = $state<HTMLTextAreaElement | undefined>();
     let sending = $state(false);
     let auto = $state(readAuto());
 
@@ -39,6 +51,10 @@
             return;
         }
     };
+
+    export function focus() {
+        textarea?.focus();
+    }
 
     const blocked = $derived(Boolean(disabledReason) || busy || sending);
 
@@ -66,6 +82,7 @@
         rows="2"
         placeholder={disabledReason || "Type a question..."}
         aria-label="Question"
+        bind:this={textarea}
         bind:value={text}
         use:autosize={text}
         onkeydown={handleKey}
