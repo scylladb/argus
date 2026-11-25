@@ -41,6 +41,7 @@ class Partial():
             "template_path": self.TEMPLATE_PATH,
             "type": self.section_type,
             "has_data": True,
+            "run_path": f"/test/{test_run.build_id}/{test_run.build_number}",
         }
 
     async def create_context(self, options: dict[str, Any]) -> dict[str, Any]:

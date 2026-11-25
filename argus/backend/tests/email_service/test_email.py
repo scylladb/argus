@@ -45,6 +45,8 @@ async def test_send_default_email(api_client: TestClient, fake_test: ArgusTest, 
     assert "default_user" in email_listener.content
     assert "default_commit" in email_listener.content
     assert ["john.smith@scylladb.com"] == email_listener.recipients
+    assert f"/test/{fake_test.build_system_id}/42/details" in email_listener.content
+    assert "/tests/scylla-cluster-tests/" not in email_listener.content
 
 
 async def test_send_default_email_empty_sections_not_rendered(api_client: TestClient, fake_test: ArgusTest, client_service: ClientService, testrun_service: TestRunService, email_listener: EmailListener):

@@ -1,6 +1,6 @@
 {% macro render_partial(options) %}
 <div>
-    <h2><a class="btn-link-dark" href="https://argus.scylladb.com/tests/scylla-cluster-tests/{{ options['run_id' ]}}/results">{{ options["section_name"] }}</a></h2>
+    <h2><a class="btn-link-dark" href="https://argus.scylladb.com{{ options['run_path'] }}/results">{{ options["section_name"] }}</a></h2>
     <div>
         {% for result in options["results"] %}
             {% for table_name, table_data in result.items() %}
