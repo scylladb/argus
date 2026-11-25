@@ -95,6 +95,34 @@ async def test_submit_packages_concurrent_submissions_keep_one_row(api_client, s
     assert [(p.name, p.version) for p in run.packages] == [("java-driver", "3.11.5.7"), ("scylla-bench", "0.1.0")]
 
 
+async def test_kernel_report_counts_kernels_per_scylla_version(api_client, release_manager_service):
+    name = f"kernels_{time.time_ns()}"
+    release = await release_manager_service.create_release(name, name, False)
+    group = await release_manager_service.create_group(name, name, build_system_id=name, release_id=release.id)
+    test = await release_manager_service.create_test(name, name, name, name, group_id=group.id,
+                                                     release_id=release.id, plugin_name="scylla-cluster-tests")
+    scylla = {"name": "scylla-server", "version": "2026.1.0", "date": "20261102", "revision_id": "a1b2c3",
+              "build_id": "b1"}
+    for kernel, status in (("5.15.0", "passed"), ("6.8.0", "failed")):
+        run_id = _submit_sct_run(api_client, test)
+        resp = api_client.post(f"{API_PREFIX}/{run_id}/packages/submit", json={
+            "packages": [scylla, {"name": "kernel", "version": kernel}], "schema_version": "v8"})
+        assert resp.json()["status"] == "ok"
+        resp = api_client.post(f"/api/v1/client/testrun/scylla-cluster-tests/{run_id}/set_status",
+                               json={"new_status": status})
+        assert resp.json()["status"] == "ok"
+
+    resp = api_client.get(f"{API_PREFIX}/release/{name}/kernels")
+
+    assert resp.json()["status"] == "ok", resp.text
+    report = resp.json()["response"]
+    assert sorted(report["versions"]["2026.1.0-20261102.a1b2c3"]) == ["5.15.0", "6.8.0"]
+    assert report["metadata"] == {
+        "5.15.0": {"passed": 1, "failed": 0, "aborted": 0, "test_error": 0},
+        "6.8.0": {"passed": 0, "failed": 1, "aborted": 0, "test_error": 0},
+    }
+
+
 async def test_submit_screenshots(api_client, sct_run_id):
     payload = {
         "screenshot_links": ["https://grafana/snap/1", "https://grafana/snap/2"],

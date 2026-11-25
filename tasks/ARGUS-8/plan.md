@@ -26,7 +26,7 @@ stays in every plan built from a spec.
 - The commitlint header has the form `<type>(<scope>): …`, the scope has at
   least 5 characters, and the header is at most 72 characters.
 - The body has at least 30 characters.
-- The last line is `Task: ARGUS-8`, or `Fixes ARGUS-8` for the fix in Task 1.
+- The last line is `Task: ARGUS-8`.
 - No Co-Authored-By line.
 - `git add` takes explicit paths only.
 - Commit through `uv run git commit`.
@@ -46,14 +46,14 @@ changes only where the packages come from.
 its attributes (`p.name`, `p.version`, `p.date`, `p.revision_id`). The status
 counts key on `kernel_package.version` in both places.
 
-- [ ] Write the failing test: two runs in one release submit `scylla-server`
+- [x] Write the failing test: two runs in one release submit `scylla-server`
   and `kernel` packages through the API, one run passes and one fails.
   `GET /api/v1/client/sct/release/{name}/kernels` returns both kernels under
   the `version-date.revision_id` key, with the status counts.
-- [ ] Run it and confirm the `TypeError`.
-- [ ] Write the smallest change that passes it.
-- [ ] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
-- [ ] Commit `fix(plugins/sct): read the kernel report packages by attribute`.
+- [x] Run it and confirm the `TypeError`.
+- [x] Write the smallest change that passes it.
+- [x] Run the verify sequence from the `Commands` section of `CLAUDE.md`.
+- [x] Commit `fix(plugins/sct): read the kernel report packages by attribute`.
 
 ## Task 2 — Store and read packages in sct_package
 

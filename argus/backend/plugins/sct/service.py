@@ -965,18 +965,17 @@ class SCTService:
             if not packages:
                 continue
             scylla_pkgs = {
-                p["name"]: p for p in packages if "scylla-server" in p["name"]}
+                p.name: p for p in packages if "scylla-server" in p.name}
             scylla_pkg = scylla_pkgs["scylla-server-upgraded"] if scylla_pkgs.get(
                 "scylla-server-upgraded") else scylla_pkgs.get("scylla-server")
-            version = f"{scylla_pkg['version']}-{scylla_pkg['date']
-                                                 }.{scylla_pkg['revision_id']}" if scylla_pkg else "unknown"
-            kernel_packages = [p for p in packages if "kernel" in p["name"]]
+            version = f"{scylla_pkg.version}-{scylla_pkg.date}.{scylla_pkg.revision_id}" if scylla_pkg else "unknown"
+            kernel_packages = [p for p in packages if "kernel" in p.name]
             kernel_package = kernel_packages[0] if len(
                 kernel_packages) > 0 else None
             if not kernel_package:
                 continue
             version_list = set(kernels_by_version.get(version, []))
-            version_list.add(kernel_package["version"])
+            version_list.add(kernel_package.version)
             kernels_by_version[version] = list(version_list)
             metadata = kernel_metadata.get(
                 kernel_package.version,
@@ -989,7 +988,7 @@ class SCTService:
             )
             if run["status"] in ["passed", "failed", "aborted", "test_error"]:
                 metadata[run["status"]] += 1
-            kernel_metadata[kernel_package["version"]] = metadata
+            kernel_metadata[kernel_package.version] = metadata
 
         return {
             "versions": kernels_by_version,
