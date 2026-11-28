@@ -33,7 +33,7 @@
     "lz-string": "^1.4.4",
     "marked": "^16.1.2",
     "prettysize": "^2.0.0",
-    "query-string": "^9.2.2",
+    "query-string": "^10.0.0",
     "string-template": "^1.0.0",
     "svelte": "^5.46.4",
     "svelte-fa": "^4.0.4",
