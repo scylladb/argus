@@ -2085,10 +2085,10 @@ svelte-multiselect@11.8.0:
   resolved "https://registry.yarnpkg.com/svelte-multiselect/-/svelte-multiselect-11.8.0.tgz#be822ab19e56142a17d313cab81d581f139b13ea"
   integrity sha512-B+y6UPZCB9/EWk9a0kxBkN4Z05bMj8g10N2RK6CNLrkRDD2iS1hLs1jJTWuQUDSbUofNChLk6kqx9nSrs8xzwQ==
 
-svelte-select@5.8.3:
-  version "5.8.3"
-  resolved "https://registry.yarnpkg.com/svelte-select/-/svelte-select-5.8.3.tgz#ba25f4982a5e500d2541e8e80d113228cb6f2250"
-  integrity sha512-nQsvflWmTCOZjssdrNptzfD1Ok45hHVMTL5IHay5DINk7dfu5Er+8KsVJnZMJdSircqtR0YlT4YkCFlxOUhVPA==
+svelte-select@6.0.0:
+  version "6.0.0"
+  resolved "https://registry.yarnpkg.com/svelte-select/-/svelte-select-6.0.0.tgz#b1d11e0a811c6f4904b14fb7b2406b7022d52195"
+  integrity sha512-WJ1UDw0a1Z3I7oVFgaCS7G9D2rCSmYAPpufNEj/DNuk5Oyb2a5dju6F36o0urBVw9bTE3WkM9cZkI0x+Sfo8Bg==
   dependencies:
     svelte-floating-ui "1.5.8"
 
